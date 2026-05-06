@@ -390,6 +390,27 @@ export namespace Agent {
             }
           }
 
+          // Validate role_packs references (warn only)
+          if (cfg.role_packs) {
+            const agentNames = new Set(Object.keys(agents))
+            for (const [packName, packDef] of Object.entries(cfg.role_packs)) {
+              if (!packDef?.roles) continue
+              for (const [alias, roleId] of Object.entries(packDef.roles as Record<string, string>)) {
+                if (!agentNames.has(roleId)) {
+                  log.warn(`pack "${packName}" maps alias "${alias}" to unknown agent "${roleId}"`)
+                }
+              }
+              if (packDef.default_flow) {
+                const roleValues = new Set(Object.values(packDef.roles as Record<string, string>))
+                for (const roleId of packDef.default_flow) {
+                  if (!roleValues.has(roleId)) {
+                    log.warn(`pack "${packName}" default_flow role "${roleId}" not covered by its roles`)
+                  }
+                }
+              }
+            }
+          }
+
           const get = Effect.fnUntraced(function* (agent: string) {
             return agents[agent]
           })

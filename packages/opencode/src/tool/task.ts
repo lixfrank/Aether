@@ -13,6 +13,13 @@ import { Config } from "../config/config"
 import { Permission } from "@/permission"
 import { Provider } from "../provider/provider"
 import { Discipline, fromOverride } from "../session/discipline"
+import { SessionPreference } from "../session/preference"
+import path from "path"
+import fs from "fs/promises"
+import { Instance } from "../project/instance"
+import { Filesystem } from "@/util/filesystem"
+import { normalizeOutputDir, PROJECT } from "@/persist/naming"
+import { Global } from "@/global"
 
 interface TaskMetadata {
   sessionId: string
@@ -93,6 +100,81 @@ async function resolveCategoryModel(category: string): Promise<Provider.Model | 
   if (!modelStr) return undefined
   const parsed = Provider.parseModel(modelStr)
   return Provider.getModel(parsed.providerID, parsed.modelID).catch(() => undefined)
+}
+
+export async function resolveArtifactHandoff(
+  target: Agent.Info,
+  cfg: Awaited<ReturnType<typeof Config.get>>,
+  sessionID?: string,
+): Promise<string | undefined> {
+  const passArtifacts = target.contextPolicy?.passArtifacts ?? true
+  if (!passArtifacts) return undefined
+  if (!target.inputs?.length) return undefined
+
+  const packName = sessionID ? (SessionPreference.get(sessionID)?.activePack ?? cfg.active_pack) : cfg.active_pack
+  const pack = packName ? cfg.role_packs?.[packName] : undefined
+
+  if (!pack?.default_flow) return undefined
+
+  const flowIndex = pack.default_flow.indexOf(target.name)
+  if (flowIndex <= 0) return undefined
+
+  const predecessorName = pack.default_flow[flowIndex - 1]
+  const predecessor = await Agent.get(predecessorName)
+  if (!predecessor?.outputDir) return undefined
+
+  const normalizedDir = normalizeOutputDir(predecessor.outputDir)
+  const outDir = Instance.project.vcs
+    ? path.join(PROJECT, normalizedDir)
+    : path.relative(Instance.worktree, path.join(Global.Path.data, normalizedDir))
+
+  const base = Instance.project.vcs ? Instance.worktree : ""
+
+  const artifactParts: string[] = []
+  for (const inputName of target.inputs) {
+    const candidates = [
+      path.join(outDir, `${inputName}.md`),
+      path.join(outDir, "notepads", `${inputName}.md`),
+      path.join(outDir, "notepads", "report.md"),
+    ]
+    for (const relPath of candidates) {
+      const fullPath = base ? path.join(base, relPath) : relPath
+      const exists = await Filesystem.exists(fullPath).catch(() => false)
+      if (!exists) continue
+      const content = await fs.readFile(fullPath, "utf-8").catch(() => "")
+      if (!content) continue
+      artifactParts.push(`### ${inputName}`, content)
+      break
+    }
+  }
+
+  if (!artifactParts.length) return undefined
+
+  return [
+    `## Predecessor Artifacts from ${predecessorName}`,
+    `The previous role (${predecessorName}) has produced the following artifacts.`,
+    "Review them before starting your own work:",
+    "",
+    ...artifactParts,
+  ].join("\n")
+}
+
+export async function resolveUserConstraints(target: Agent.Info): Promise<string | undefined> {
+  const passConstraints = target.contextPolicy?.passUserConstraints ?? true
+  if (!passConstraints) return undefined
+
+  const { InstructionPrompt } = await import("../session/instruction")
+  const paths = await InstructionPrompt.systemPaths()
+  if (!paths.size) return undefined
+
+  const parts: string[] = []
+  for (const p of paths) {
+    const content = await Filesystem.readText(p).catch(() => "")
+    if (content) parts.push(content)
+  }
+  if (!parts.length) return undefined
+
+  return ["## User Constraints", "The user has specified these constraints:", "", ...parts].join("\n")
 }
 
 export const TaskTool = Tool.define("task", async (ctx) => {
@@ -248,6 +330,24 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         promptParts.push({
           type: "text",
           text: "IMPORTANT: Your final output must be in structured format (JSON or well-defined Markdown sections). Provide your answer in a clear, parseable structure.",
+        })
+      }
+
+      // M11: Artifact handoff — attach predecessor outputs for agents with declared inputs
+      const artifactHandoff = await resolveArtifactHandoff(agent, config, ctx.sessionID as string)
+      if (artifactHandoff) {
+        promptParts.push({
+          type: "text",
+          text: artifactHandoff,
+        })
+      }
+
+      // M5: User constraints — inject session-level user constraints when context_policy allows
+      const userConstraints = await resolveUserConstraints(agent)
+      if (userConstraints) {
+        promptParts.push({
+          type: "text",
+          text: userConstraints,
         })
       }
 

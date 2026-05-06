@@ -71,8 +71,57 @@ async function resolveFileUri(input: string): Promise<string> {
   return content
 }
 
-async function buildAgentDeclarations(agent: Agent.Info): Promise<string[]> {
+export async function buildRoleDeclarations(
+  agent: Agent.Info,
+  pack?: Config.RolePack & { name: string },
+): Promise<string[]> {
   const sections: string[] = []
+  if (pack) {
+    const agentMap = new Map<string, Agent.Info>()
+    if (pack.roles) {
+      for (const roleId of Object.values(pack.roles)) {
+        const info = await Agent.get(roleId)
+        if (info) agentMap.set(roleId, info)
+      }
+    }
+    if (pack.default_flow) {
+      for (const roleId of pack.default_flow) {
+        if (!agentMap.has(roleId)) {
+          const info = await Agent.get(roleId)
+          if (info) agentMap.set(roleId, info)
+        }
+      }
+    }
+    const roleLines = pack.roles
+      ? Object.entries(pack.roles)
+          .map(([alias, roleId]) => `- ${alias}: ${roleId}`)
+          .join("\n")
+      : "(none)"
+    const flowLines = pack.default_flow
+      ? pack.default_flow
+          .map((id, i) => {
+            const desc = agentMap.get(id)?.description
+            return `${i + 1}. ${id}${desc ? ` → ${desc}` : ""}`
+          })
+          .join("\n")
+      : "(no prescribed flow)"
+    sections.push(
+      [
+        `## Active Role Pack: ${pack.name}`,
+        pack.purpose ? `Purpose: ${pack.purpose}` : "",
+        "",
+        "Team composition:",
+        roleLines,
+        "",
+        "Recommended flow:",
+        flowLines,
+        "",
+        "After each step, pass the declared outputs to the next role via the Task tool message parameter.",
+      ]
+        .filter((x) => x)
+        .join("\n"),
+    )
+  }
   if (agent.inputs?.length) {
     sections.push(
       `## Expected Inputs\nYou will receive these artifacts: ${agent.inputs.join(", ")}. If any are missing, request them before proceeding.`,
@@ -92,6 +141,16 @@ async function buildAgentDeclarations(agent: Agent.Info): Promise<string[]> {
     sections.push(`## Responsibility Boundary\n${agent.responsibilityBoundary}`)
   }
   return sections
+}
+
+async function resolveActivePack(sessionID: string): Promise<(Config.RolePack & { name: string }) | undefined> {
+  const cfg = await Config.get()
+  const pref = SessionPreference.get(sessionID)
+  const packName = pref?.activePack ?? cfg.active_pack
+  if (!packName) return undefined
+  const pack = cfg.role_packs?.[packName]
+  if (!pack) return undefined
+  return { ...pack, name: packName }
 }
 
 const STRUCTURED_OUTPUT_DESCRIPTION = `Use this tool to return your final response in the requested structured format.
@@ -309,12 +368,12 @@ export namespace SessionPrompt {
     const match = s[sessionID]
     if (!match) {
       await SessionStatus.set(sessionID, { type: "idle" })
-    } else {
-      match.abort.abort()
-      delete s[sessionID]
-      await SessionStatus.set(sessionID, { type: "idle" })
+      return
     }
-    await Session.recoverStuckParts(sessionID)
+    match.abort.abort()
+    delete s[sessionID]
+    await SessionStatus.set(sessionID, { type: "idle" })
+    return
   }
 
   interface SubtaskContext {
@@ -660,16 +719,9 @@ export namespace SessionPrompt {
       }
 
       if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
-      const match = msgs.findLast((msg) => msg.info.role === "assistant" && msg.info.id === lastAssistant?.id)
-      // Skip provider-executed tool parts — those were fully handled within the
-      // provider's stream (e.g. Anthropic web_search, Copilot Responses tools)
-      // and are already in their terminal state when the stream finishes, so
-      // they must not block the outer-loop exit when finish-reason is "stop".
-      const calls = match?.parts.some((part) => part.type === "tool" && !part.providerExecuted) ?? false
       if (
         lastAssistant?.finish &&
         !["tool-calls", "unknown"].includes(lastAssistant.finish) &&
-        !calls &&
         lastUser.id < lastAssistant.id
       ) {
         log.info("exiting loop", { sessionID })
@@ -677,7 +729,7 @@ export namespace SessionPrompt {
       }
 
       step++
-      Log.activity(`${"-".repeat(60)} step ${step} ${"-".repeat(60)}`)
+      console.log(`\n${"-".repeat(60)} step ${step} ${"-".repeat(60)}\n`)
       if (step === 1)
         ensureTitle({
           session,
@@ -819,9 +871,9 @@ export namespace SessionPrompt {
       await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
       const patch = await SkillRefresh.patch(sessionID)
-      Log.activity(`[skill refresh] step=${step} hasPatch=${patch ? 1 : 0}`)
+      console.log(`[skill refresh] step=${step} hasPatch=${patch ? 1 : 0}`)
       if (patch) {
-        Log.activity(`[skill refresh] injecting synthetic user message step=${step} names=${patch.names.join(", ")}`)
+        console.log(`[skill refresh] injecting synthetic user message step=${step} names=${patch.names.join(", ")}`)
         const msg: MessageV2.User = {
           id: MessageID.ascending(),
           sessionID,
@@ -924,13 +976,13 @@ export namespace SessionPrompt {
       // Build system prompt, adding structured output instruction if needed
       const skills = await SystemPrompt.skills(agent, new Set(Object.keys(tools)), new Set())
       const _skillNames = skills ? [...skills.matchAll(/<name>(.*?)<\/name>/g)].map((m) => m[1]) : []
-      Log.activity(`[skills] ${_skillNames.length > 0 ? _skillNames.join(", ") : "(none)"}`)
+      console.log(`[skills] ${_skillNames.length > 0 ? _skillNames.join(", ") : "(none)"}`)
       const system = [
         ...(await SystemPrompt.environment(model)),
         ...(skills ? [skills] : []),
         ...(memory.prompt ? [memory.prompt] : []),
         ...(await InstructionPrompt.system()),
-        ...(await buildAgentDeclarations(agent)),
+        ...(await buildRoleDeclarations(agent, await resolveActivePack(sessionID))),
       ]
       const format = lastUser.format ?? { type: "text" }
       if (format.type === "json_schema") {
@@ -968,9 +1020,9 @@ export namespace SessionPrompt {
       if (!isSkillReviewSession && skillManageAvailable && hadToolCalls) {
         const assistantParts = await MessageV2.parts(processor.message.id)
         const toolNames = assistantParts.filter((p) => p.type === "tool").map((p) => (p as MessageV2.ToolPart).tool)
-        Log.activity(`[tools] step=${step} tools=[${toolNames.join(", ")}]`)
+        console.log(`[tools] step=${step} tools=[${toolNames.join(", ")}]`)
         const calledSkillManage = toolNames.includes("skill_manage")
-        Log.activity(
+        console.log(
           `[skill manage] step=${step} called=${calledSkillManage ? 1 : 0} count_before=${_skillCounters.get(sessionID) ?? 0}`,
         )
         if (calledSkillManage) {
@@ -979,7 +1031,7 @@ export namespace SessionPrompt {
           _skillCounters.set(sessionID, 0)
         }
         _skillCounters.set(sessionID, (_skillCounters.get(sessionID) ?? 0) + 1) // always +1 per step, mirrors Hermes L9110
-        Log.activity(`[skill counter] count=${_skillCounters.get(sessionID)}`)
+        console.log(`[skill counter] count=${_skillCounters.get(sessionID)}`)
       }
 
       const parts = await MessageV2.parts(processor.message.id)
@@ -987,7 +1039,7 @@ export namespace SessionPrompt {
         .filter((p) => p.type === "text")
         .map((p) => (p as MessageV2.TextPart).text.trim())
         .join("\n")
-      Log.activity(
+      console.log(
         `[assistant] step=${step} finish=${processor.message.finish ?? "(none)"} error=${processor.message.error ? 1 : 0} parts=${parts.length} textChars=${text.length}`,
       )
 
@@ -1055,7 +1107,7 @@ export namespace SessionPrompt {
       _finalResponse &&
       !abort.aborted
 
-    Log.activity(
+    console.log(
       `[skill review check] count=${_skillCounters.get(sessionID)} threshold=${skillNudgeInterval} finalResponse=${_finalResponse} aborted=${abort.aborted} isReview=${isSkillReviewSession} should=${_shouldReviewSkills}`,
     )
 
@@ -1083,7 +1135,7 @@ export namespace SessionPrompt {
         .filter((p) => p.type === "text")
         .map((p) => (p as MessageV2.TextPart).text.trim())
         .join("\n")
-      Log.activity(
+      console.log(
         `[final return] role=${item.info.role} id=${item.info.id} parts=${item.parts.length} textChars=${txt.length} finalResponse=${_finalResponse ? 1 : 0}`,
       )
       return item
@@ -1167,7 +1219,7 @@ export namespace SessionPrompt {
       },
     })
 
-    const effectiveRuleset = Permission.intersection(input.session.permission ?? [], input.agent.permission)
+    const effectiveRuleset = Permission.merge(input.agent.permission, input.session.permission ?? [])
     const EDIT_TOOLS = ["edit", "write", "apply_patch", "multiedit"]
 
     for (const item of await ToolRegistry.tools(
@@ -2641,15 +2693,13 @@ NOTE: You may ONLY write to files within ${npDir}/. No other file may be created
           : await MessageV2.toModelMessages(contextMessages, model)),
       ],
     })
-    const text = await Promise.resolve(result.text).catch((err) =>
-      log.error("failed to generate title", { error: err }),
-    )
+    const text = await result.text.catch((err) => log.error("failed to generate title", { error: err }))
     if (text) {
       const cleaned = text
         .replace(/<think>[\s\S]*?<\/think>\s*/g, "")
         .split("\n")
-        .map((line: string) => line.trim())
-        .find((line: string) => line.length > 0)
+        .map((line) => line.trim())
+        .find((line) => line.length > 0)
       if (!cleaned) return
 
       const title = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned

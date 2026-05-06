@@ -142,6 +142,7 @@ export namespace Config {
     result.agent = result.agent || {}
     result.mode = result.mode || {}
     result.plugin = result.plugin || []
+    result.role_packs = result.role_packs || {}
 
     const directories = await ConfigPaths.directories(Instance.directory, Instance.worktree)
 
@@ -174,6 +175,7 @@ export namespace Config {
       result.command = mergeDeep(result.command ?? {}, await loadCommand(dir))
       result.agent = mergeDeep(result.agent, await loadAgent(dir))
       result.agent = mergeDeep(result.agent, await loadMode(dir))
+      result.role_packs = mergeDeep(result.role_packs ?? {}, await loadRolePacks(dir))
       result.plugin.push(...(await loadPlugin(dir)))
     }
 
@@ -622,6 +624,40 @@ export namespace Config {
     return result
   }
 
+  async function loadRolePacks(dir: string) {
+    const result: Record<string, z.infer<typeof RolePack>> = {}
+
+    const files = await Glob.scan("{role-packs,role_packs,packs}/*.yaml", {
+      cwd: dir,
+      absolute: true,
+      dot: true,
+      symlink: true,
+    })
+    if (!files.length) return result
+
+    const yaml = (await import("js-yaml")).default
+
+    for (const item of files) {
+      try {
+        const text = await fs.readFile(item, "utf-8")
+        const doc = yaml.load(text) as Record<string, any> | undefined
+        if (!doc?.packs) continue
+
+        for (const [packName, packDef] of Object.entries(doc.packs as Record<string, any>)) {
+          const parsed = RolePackInner.safeParse(packDef)
+          if (parsed.success) {
+            result[packName] = parsed.data
+          } else {
+            log.warn("failed to parse role pack", { path: item, packName, issues: parsed.error.issues })
+          }
+        }
+      } catch (err) {
+        log.error("failed to load role packs yaml", { path: item, err })
+      }
+    }
+    return result
+  }
+
   async function loadMode(dir: string) {
     const result: Record<string, Agent> = {}
     for (const item of await Glob.scan("{mode,modes}/*.md", {
@@ -928,6 +964,20 @@ export namespace Config {
     .describe("Structured output contract: fields that must appear in the agent's final response.")
 
   export type OutputContract = z.infer<typeof OutputContract>
+
+  export const RolePackInner = z.object({
+    purpose: z.string().optional().describe("Purpose of this role pack composition"),
+    roles: z.record(z.string(), z.string()).optional().describe("Alias → role_id mapping defining team composition"),
+    default_flow: z
+      .array(z.string())
+      .optional()
+      .describe("Ordered list of role_ids defining the recommended execution sequence"),
+    role_source: z.string().optional().describe("YAML file source for this pack's roles"),
+  })
+  export type RolePackInner = z.infer<typeof RolePackInner>
+
+  export const RolePack = RolePackInner.optional().describe("Named role pack composition for team-based workflows.")
+  export type RolePack = z.infer<typeof RolePack>
 
   export const Agent = z
     .object({
@@ -1427,6 +1477,16 @@ export namespace Config {
         })
         .optional()
         .describe("Global defaults applied to all agents before per-agent overrides."),
+      role_packs: z
+        .record(z.string(), RolePack)
+        .optional()
+        .describe("Named role pack compositions for team-based workflows."),
+      active_pack: z
+        .string()
+        .optional()
+        .describe(
+          "Default role pack to activate for all sessions. Can be overridden per-session via SessionPreference.",
+        ),
       category: z
         .record(
           z.string(),

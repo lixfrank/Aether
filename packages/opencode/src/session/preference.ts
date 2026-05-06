@@ -24,6 +24,7 @@ export namespace SessionPreference {
       .optional(),
     variant: z.string().nullable().optional(),
     autoAccept: z.boolean().optional(),
+    activePack: z.string().optional().describe("Active role pack name for team-based workflow composition."),
   })
 
   export type Info = z.output<typeof Info>
@@ -39,6 +40,7 @@ export namespace SessionPreference {
       .optional(),
     variant: z.string().nullable().optional(),
     autoAccept: z.boolean().optional(),
+    activePack: z.string().optional(),
   })
 
   export type Patch = z.output<typeof Patch>
@@ -66,6 +68,7 @@ export namespace SessionPreference {
       model: patch.model ?? prev?.model,
       variant: patch.variant === null ? undefined : modelChanged ? undefined : (patch.variant ?? prev?.variant),
       autoAccept: patch.autoAccept ?? prev?.autoAccept,
+      activePack: patch.activePack ?? prev?.activePack,
     }
     store.set(patch.sessionID, merged)
     log.info("update", { sessionID: patch.sessionID })
