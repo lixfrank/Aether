@@ -420,7 +420,11 @@ export namespace Agent {
             item.exitOptions = value.exit_options ?? item.exitOptions
             item.outputDir = value.output_dir ?? item.outputDir
             item.baseAgent = value.base_agent ?? item.baseAgent
-            item.skillRefs = value.skill_refs ?? item.skillRefs
+            if (value.skill_refs) {
+              const base = item.skillRefs ?? []
+              const extras = value.skill_refs.filter((ref) => !base.includes(ref))
+              item.skillRefs = [...base, ...extras]
+            }
             item.inputs = value.inputs ?? item.inputs
             item.outputs = value.outputs ?? item.outputs
             if (value.output_contract) {
