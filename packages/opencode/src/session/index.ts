@@ -112,7 +112,6 @@ export namespace Session {
       permission: row.permission ?? undefined,
       delegationDepth: row.delegation_depth ?? undefined,
       maxSteps: row.max_steps ?? undefined,
-      fileScope: row.file_scope ?? undefined,
       readingMode: row.reading_mode
         ? {
             ...row.reading_mode,
@@ -152,7 +151,6 @@ export namespace Session {
       permission: info.permission,
       delegation_depth: info.delegationDepth,
       max_steps: info.maxSteps,
-      file_scope: info.fileScope ?? null,
       reading_mode: info.readingMode ?? null,
       time_created: info.time.created,
       time_updated: info.time.updated,
@@ -475,7 +473,6 @@ export namespace Session {
       permission: Permission.Ruleset.optional(),
       delegationDepth: z.number().int().min(0).optional(),
       maxSteps: z.number().int().min(1).optional(),
-      fileScope: z.string().array().optional(),
       revert: z
         .object({
           messageID: MessageID.zod,
@@ -678,7 +675,6 @@ export namespace Session {
         permission: Info.shape.permission,
         delegationDepth: Info.shape.delegationDepth,
         maxSteps: Info.shape.maxSteps,
-        fileScope: Info.shape.fileScope,
         workspaceID: WorkspaceID.zod.optional(),
       })
       .optional(),
@@ -690,7 +686,6 @@ export namespace Session {
         permission: input?.permission,
         delegationDepth: input?.delegationDepth,
         maxSteps: input?.maxSteps,
-        fileScope: input?.fileScope,
         workspaceID: input?.workspaceID,
       })
     },
@@ -815,7 +810,6 @@ export namespace Session {
     permission?: Permission.Ruleset
     delegationDepth?: number
     maxSteps?: number
-    fileScope?: string[]
   }) {
     const treeID = await (async () => {
       if (input.treeID) return input.treeID
@@ -840,7 +834,6 @@ export namespace Session {
       permission: input.permission,
       delegationDepth: input.delegationDepth,
       maxSteps: input.maxSteps,
-      fileScope: input.fileScope,
       time: {
         created: Date.now(),
         updated: Date.now(),

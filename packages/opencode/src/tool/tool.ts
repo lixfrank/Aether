@@ -25,7 +25,6 @@ export namespace Tool {
     messages: MessageV2.WithParts[]
     metadata(input: { title?: string; metadata?: M }): void
     ask(input: Omit<Permission.Request, "id" | "sessionID" | "tool">): Promise<void>
-    fileScope?: string[]
   }
   export interface Info<Parameters extends z.ZodType = z.ZodType, M extends Metadata = Metadata> {
     id: string

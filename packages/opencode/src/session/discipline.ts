@@ -1,6 +1,34 @@
 import z from "zod"
 import { Permission } from "@/permission"
 
+export const EnvScope = z.object({
+  path_prefix: z.string().array().describe("Directories prepended to PATH.").optional(),
+  env_vars: z
+    .record(z.string(), z.string())
+    .describe("Environment variables injected into session process.")
+    .optional(),
+  npm_prefix: z.string().describe("Pin npm global prefix to this directory.").optional(),
+  allowed_commands: z
+    .string()
+    .array()
+    .describe("Command prefixes allowed for bash. Compiled to bash permission rules via compileDiscipline().")
+    .optional(),
+})
+export type EnvScope = z.infer<typeof EnvScope>
+
+export function resolveEnvScope(
+  agentEnvScope: EnvScope | undefined,
+  disciplineEnvScope: EnvScope | undefined,
+): EnvScope | undefined {
+  if (!agentEnvScope && !disciplineEnvScope) return undefined
+  return {
+    path_prefix: disciplineEnvScope?.path_prefix ?? agentEnvScope?.path_prefix,
+    env_vars: { ...agentEnvScope?.env_vars, ...disciplineEnvScope?.env_vars },
+    npm_prefix: disciplineEnvScope?.npm_prefix ?? agentEnvScope?.npm_prefix,
+    allowed_commands: disciplineEnvScope?.allowed_commands ?? agentEnvScope?.allowed_commands,
+  }
+}
+
 export const Discipline = z.object({
   mode: z
     .enum(["serial", "concurrent", "background"])
@@ -37,8 +65,12 @@ export const Discipline = z.object({
   file_scope: z
     .string()
     .array()
-    .describe("Glob patterns restricting file-affecting tools. Example: ['src/auth/**', 'package.json']")
+    .describe("Glob patterns restricting file-affecting tools. Compiled into Permission Rules via compileDiscipline().")
     .optional(),
+
+  env_scope: EnvScope.describe(
+    "Environment isolation for the sub-agent session. Process-level and permission-level constraints.",
+  ).optional(),
 
   return_format: z
     .enum(["text", "structured", "raw"])
@@ -48,19 +80,50 @@ export const Discipline = z.object({
 export type Discipline = z.infer<typeof Discipline>
 
 const VALID_ACTIONS = new Set(["allow", "deny", "ask"])
+const FILE_TOOLS = ["read", "edit", "write", "glob", "grep", "apply_patch", "multiedit"]
 
-export function fromOverride(override: Record<string, string[]>): Permission.Ruleset {
+export function compileDiscipline(discipline: Discipline): Permission.Ruleset {
   const ruleset: Permission.Ruleset = []
-  for (const [permission, values] of Object.entries(override)) {
-    const action = values[0]
-    if (!VALID_ACTIONS.has(action)) continue
-    if (values.length === 1) {
-      ruleset.push({ permission, pattern: "*", action: action as Permission.Action })
-    } else {
-      for (let i = 1; i < values.length; i++) {
-        ruleset.push({ permission, pattern: values[i], action: action as Permission.Action })
+
+  if (discipline.permission_override) {
+    for (const [permission, values] of Object.entries(discipline.permission_override)) {
+      const action = values[0]
+      if (!VALID_ACTIONS.has(action)) continue
+      if (values.length === 1) {
+        ruleset.push({ permission, pattern: "*", action: action as Permission.Action })
+      } else {
+        for (let i = 1; i < values.length; i++) {
+          ruleset.push({ permission, pattern: values[i], action: action as Permission.Action })
+        }
       }
     }
   }
+
+  if (discipline.file_scope?.length) {
+    for (const tool of FILE_TOOLS) {
+      ruleset.push({ permission: tool, pattern: "*", action: "deny" })
+      for (const scopePattern of discipline.file_scope) {
+        ruleset.push({ permission: tool, pattern: scopePattern, action: "allow" })
+      }
+    }
+  }
+
+  if (discipline.env_scope?.allowed_commands?.length) {
+    ruleset.push({ permission: "bash", pattern: "*", action: "deny" })
+    for (const cmd of discipline.env_scope.allowed_commands) {
+      ruleset.push({ permission: "bash", pattern: `${cmd}*`, action: "allow" })
+    }
+  }
+
   return ruleset
+}
+
+export function fromOverride(override: Record<string, string[]>): Permission.Ruleset {
+  return compileDiscipline({
+    mode: "serial",
+    delegation_depth: 0,
+    timeout_seconds: 300,
+    permission_override: override,
+    return_format: "text",
+  })
 }

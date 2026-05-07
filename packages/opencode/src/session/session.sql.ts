@@ -39,7 +39,7 @@ export const SessionTable = sqliteTable(
     permission: text({ mode: "json" }).$type<Permission.Ruleset>(),
     delegation_depth: integer(),
     max_steps: integer(),
-    file_scope: text({ mode: "json" }).$type<string[]>(),
+
     reading_mode: text({ mode: "json" }).$type<ReadingMode.SessionMeta>(),
     ...Timestamps,
     time_compacting: integer(),

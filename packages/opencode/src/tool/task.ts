@@ -1,6 +1,8 @@
 import { Tool } from "./tool"
 import DESCRIPTION from "./task.txt"
 import z from "zod"
+import path from "path"
+import fs from "fs/promises"
 import { Session } from "../session"
 import { SessionID, MessageID } from "../session/schema"
 import { MessageV2 } from "../session/message-v2"
@@ -8,11 +10,13 @@ import { Identifier } from "../id/id"
 import { Agent } from "../agent/agent"
 import { SessionPrompt } from "../session/prompt"
 import { iife } from "@/util/iife"
+import { normalizeOutputDir } from "@/persist/naming"
 import { defer } from "@/util/defer"
+import { Instance } from "../project/instance"
 import { Config } from "../config/config"
 import { Permission } from "@/permission"
 import { Provider } from "../provider/provider"
-import { Discipline, fromOverride } from "../session/discipline"
+import { Discipline, compileDiscipline, resolveEnvScope } from "../session/discipline"
 
 interface TaskMetadata {
   sessionId: string
@@ -76,8 +80,17 @@ const parameters = z.object({
   file_scope: z
     .string()
     .array()
-    .describe("Glob patterns restricting file operations. Example: ['src/auth/**', 'test/**']")
+    .describe("Glob patterns restricting file operations. Compiled into Permission Rules via compileDiscipline().")
     .optional(),
+  env_scope: z
+    .object({
+      path_prefix: z.string().array().optional(),
+      env_vars: z.record(z.string(), z.string()).optional(),
+      npm_prefix: z.string().optional(),
+      allowed_commands: z.string().array().optional().describe("Command prefixes allowed for bash."),
+    })
+    .optional()
+    .describe("Environment isolation for this sub-agent."),
   return_format: z
     .enum(["text", "structured", "raw"])
     .describe("Output format discipline. text=default, structured=JSON/Markdown, raw=full trace.")
@@ -147,11 +160,12 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         max_steps: params.max_steps,
         timeout_seconds: params.timeout_seconds ?? 300,
         file_scope: params.file_scope,
+        env_scope: resolveEnvScope(agent.envScope, params.env_scope),
         return_format: params.return_format ?? "text",
       }
 
       const depth = discipline.delegation_depth
-      const overrideRuleset = discipline.permission_override ? fromOverride(discipline.permission_override) : undefined
+      const overrideRuleset = compileDiscipline(discipline)
       const callerPermission = caller?.permission ?? []
       const effectivePermission = Permission.intersection(callerPermission, agent.permission, overrideRuleset)
       if (depth === 0) {
@@ -173,7 +187,6 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           permission: effectivePermission,
           delegationDepth: depth,
           maxSteps: discipline.max_steps ?? agent.steps,
-          fileScope: discipline.file_scope,
         })
       })
 
@@ -249,6 +262,13 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           type: "text",
           text: "IMPORTANT: Your final output must be in structured format (JSON or well-defined Markdown sections). Provide your answer in a clear, parseable structure.",
         })
+        if (agent.outputDir) {
+          const outputDir = normalizeOutputDir(agent.outputDir)
+          promptParts.push({
+            type: "text",
+            text: `IMPORTANT: Write your primary output to files in ${outputDir}. Your final response must be a concise summary (≤200 words) with: (1) key findings, (2) paths to written artifacts. Do NOT dump full content into your final response — the parent agent will read the files directly.`,
+          })
+        }
       }
 
       const disabledTools = Permission.disabled(
@@ -271,13 +291,31 @@ export const TaskTool = Tool.define("task", async (ctx) => {
 
       const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
 
-      const output = [
-        `task_id: ${session.id} (for resuming to continue this task if needed)`,
-        "",
-        "<task_result>",
-        text,
-        "</task_result>",
-      ].join("\n")
+      let output: string
+      if (discipline.return_format === "structured" && agent.outputDir) {
+        const outputDir = normalizeOutputDir(agent.outputDir)
+        const fullDir = Instance.project.vcs ? path.join(Instance.worktree, outputDir) : outputDir
+        const dirExists = await fs.stat(fullDir).catch(() => undefined)
+        const artifactNote = dirExists
+          ? `\n\nArtifacts written to ${outputDir}. The parent agent can read files from this directory.`
+          : `\n\nWARNING: Output directory ${outputDir} not found on disk.`
+        output = [
+          `task_id: ${session.id} (for resuming to continue this task if needed)`,
+          "",
+          "<task_result>",
+          text,
+          artifactNote,
+          "</task_result>",
+        ].join("\n")
+      } else {
+        output = [
+          `task_id: ${session.id} (for resuming to continue this task if needed)`,
+          "",
+          "<task_result>",
+          text,
+          "</task_result>",
+        ].join("\n")
+      }
 
       return {
         title: params.description,

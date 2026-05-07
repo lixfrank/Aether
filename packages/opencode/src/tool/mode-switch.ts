@@ -11,6 +11,7 @@ import { type SessionID, MessageID, PartID } from "../session/schema"
 import { Config } from "../config/config"
 import { Global } from "@/global"
 import { normalizeOutputDir, PROJECT } from "@/persist/naming"
+import { Permission } from "@/permission"
 import { Filesystem } from "../util/filesystem"
 import { MCP } from "../mcp"
 import { SessionPreference } from "../session/preference"
@@ -121,6 +122,16 @@ export function createModeEnterTool(agentName: string) {
           switchText += `\n  - learnings.md: Accumulated wisdom for forward-pass to subagents`
           switchText += `\n  - report.md: Final research report (write here at Phase 4)`
           switchText += `\n\nUpdate each file as you progress. Final report goes in ${reportPath}.`
+
+          const scopeRules: Permission.Ruleset = [
+            { permission: "edit", pattern: "*", action: "deny" },
+            { permission: "write", pattern: "*", action: "deny" },
+            { permission: "edit", pattern: npDir + "/**", action: "allow" },
+            { permission: "write", pattern: npDir + "/**", action: "allow" },
+          ]
+          const currentPerm = session.permission ?? []
+          const newPerm = Permission.merge(currentPerm, scopeRules)
+          await Session.setPermission({ sessionID: ctx.sessionID, permission: newPerm })
         }
 
         const userMsg: MessageV2.User = {

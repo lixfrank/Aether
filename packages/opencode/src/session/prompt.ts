@@ -60,6 +60,7 @@ import { Skill } from "../skill"
 import { SkillRefresh } from "./skill-refresh"
 import { Global } from "@/global"
 import { normalizeOutputDir, PROJECT } from "@/persist/naming"
+import { compileDiscipline } from "../session/discipline"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -90,6 +91,24 @@ async function buildAgentDeclarations(agent: Agent.Info): Promise<string[]> {
   }
   if (agent.responsibilityBoundary) {
     sections.push(`## Responsibility Boundary\n${agent.responsibilityBoundary}`)
+  }
+  if (agent.scaleDecision) {
+    sections.push(`## Scale Decision Rules`)
+    sections.push(
+      `- Direct mode (no subagents) for topics needing ≤${agent.scaleDecision.direct_threshold ?? 10} tool calls.`,
+    )
+    if (agent.scaleDecision.never_spawn_for?.length) {
+      sections.push(`- NEVER spawn subagents for: ${agent.scaleDecision.never_spawn_for.join(", ")}.`)
+    }
+    if (agent.scaleDecision.rules?.length) {
+      sections.push(`- Subagent allocation rules (first match wins):`)
+      for (const rule of agent.scaleDecision.rules) {
+        sections.push(`  - "${rule.condition}" → ${rule.subagent_count} ${rule.subagent_type} subagents (${rule.mode})`)
+      }
+    }
+    sections.push(
+      `Do not inflate simple questions into multi-agent surveys. If the topic is narrow, handle it directly.`,
+    )
   }
   return sections
 }
@@ -336,7 +355,8 @@ export namespace SessionPrompt {
   ) {
     const { BackgroundTask } = await import("./background")
     const bgAgent = await Agent.get(subtask.agent)
-    const bgPermission = Permission.intersection(session.permission ?? [], bgAgent.permission)
+    const disciplineRules = subtask.discipline ? compileDiscipline(subtask.discipline) : []
+    const bgPermission = Permission.intersection(session.permission ?? [], bgAgent.permission, disciplineRules)
     const bgCategoryModel = subtask.model
       ? await Provider.getModel(subtask.model.providerID, subtask.model.modelID)
       : undefined
@@ -348,7 +368,6 @@ export namespace SessionPrompt {
       permission: bgPermission,
       delegationDepth: subtask.discipline?.delegation_depth ?? 0,
       maxSteps: subtask.discipline?.max_steps ?? bgAgent.steps,
-      fileScope: subtask.discipline?.file_scope,
     })
     await BackgroundTask.spawn({
       session: bgSession,
@@ -460,7 +479,6 @@ export namespace SessionPrompt {
       callID: part.callID,
       extra: { bypassAgentCheck: true },
       messages: msgs,
-      fileScope: session.fileScope,
       async metadata(input) {
         part = (await Session.updatePart({
           ...part,
@@ -472,20 +490,7 @@ export namespace SessionPrompt {
         } satisfies MessageV2.ToolPart)) as MessageV2.ToolPart
       },
       async ask(req) {
-        const scope = session.fileScope
         const effectiveRuleset = Permission.intersection(session.permission ?? [], taskAgent.permission)
-        if (scope) {
-          const FILE_TOOLS = ["read", "edit", "write", "glob", "grep", "apply_patch", "multiedit"]
-          const perm = FILE_TOOLS.includes(req.permission) ? req.permission : undefined
-          if (perm) {
-            for (const pattern of req.patterns ?? []) {
-              const scoped = Permission.evaluateWithScope(perm, pattern, effectiveRuleset, scope)
-              if (!scoped.scopeMatch) {
-                throw new Permission.RejectedError()
-              }
-            }
-          }
-        }
         await Permission.ask({
           ...req,
           sessionID,
@@ -1119,7 +1124,6 @@ export namespace SessionPrompt {
       extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck },
       agent: input.agent.name,
       messages: input.messages,
-      fileScope: input.session.fileScope,
       metadata: async (val: { title?: string; metadata?: any }) => {
         const match = input.processor.partFromToolCall(options.toolCallId)
         if (match && match.state.status === "running") {
@@ -1138,26 +1142,6 @@ export namespace SessionPrompt {
         }
       },
       async ask(req) {
-        const sessionScope = input.session.fileScope
-        const agentScope = input.agent.outputDir ? [`${input.agent.outputDir}/**`] : undefined
-        const scope = sessionScope ?? agentScope
-        if (scope) {
-          const FILE_TOOLS = ["read", "edit", "write", "glob", "grep", "apply_patch", "multiedit"]
-          const perm = FILE_TOOLS.includes(req.permission) ? req.permission : undefined
-          if (perm) {
-            for (const pattern of req.patterns ?? []) {
-              const scoped = Permission.evaluateWithScope(
-                perm,
-                pattern,
-                Permission.merge(input.agent.permission, input.session.permission ?? []),
-                scope,
-              )
-              if (!scoped.scopeMatch) {
-                throw new Permission.RejectedError()
-              }
-            }
-          }
-        }
         await Permission.ask({
           ...req,
           sessionID: input.session.id,
