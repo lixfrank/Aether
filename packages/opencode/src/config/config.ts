@@ -929,6 +929,22 @@ export namespace Config {
 
   export type OutputContract = z.infer<typeof OutputContract>
 
+  export const EnvScopeConfig = z.object({
+    path_prefix: z.string().array().optional().describe("Directories prepended to PATH."),
+    env_vars: z
+      .record(z.string(), z.string())
+      .optional()
+      .describe("Environment variables injected into session process."),
+    npm_prefix: z.string().optional().describe("Pin npm global prefix to this directory."),
+    allowed_commands: z
+      .string()
+      .array()
+      .optional()
+      .describe("Command prefixes allowed for bash. Compiled to bash permission rules via compileDiscipline()."),
+  })
+
+  export type EnvScopeConfig = z.infer<typeof EnvScopeConfig>
+
   export const Agent = z
     .object({
       model: ModelId.optional(),
@@ -1012,6 +1028,24 @@ export namespace Config {
         .array(z.string())
         .optional()
         .describe("Design溯源 labels documenting which archetypes/policies shaped this agent."),
+      env_scope: EnvScopeConfig.optional().describe("Environment isolation for the agent session."),
+      scale_decision: z
+        .object({
+          direct_threshold: z.number().int().min(1).max(20).optional(),
+          rules: z
+            .array(
+              z.object({
+                condition: z.string(),
+                subagent_count: z.number().int().min(0).max(8),
+                subagent_type: z.string(),
+                mode: z.enum(["serial", "concurrent", "background"]),
+              }),
+            )
+            .optional(),
+          never_spawn_for: z.string().array().optional(),
+        })
+        .optional()
+        .describe("Scale decision rules for subagent allocation."),
     })
     .catchall(z.any())
     .transform((agent, ctx) => {
@@ -1049,6 +1083,8 @@ export namespace Config {
         "optional_extension",
         "responsibility_boundary",
         "role_design_basis",
+        "env_scope",
+        "scale_decision",
       ])
 
       // Extract unknown properties into options

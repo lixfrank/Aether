@@ -11,9 +11,12 @@ import { ProviderTransform } from "../provider/transform"
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
+import PROMPT_VERIFIER from "./prompt/verifier.txt"
+import PROMPT_REVIEWER from "./prompt/reviewer.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import { Permission } from "@/permission"
+import { EnvScope as EnvScopeSchema, resolveEnvScope } from "@/session/discipline"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@/global"
 import path from "path"
@@ -77,6 +80,24 @@ export namespace Agent {
       optionalExtension: z.boolean().optional(),
       responsibilityBoundary: z.string().optional(),
       roleDesignBasis: z.array(z.string()).optional(),
+      envScope: EnvScopeSchema.optional(),
+      scaleDecision: z
+        .object({
+          direct_threshold: z.number().int().min(1).max(20).optional().describe("Maximum tool calls for direct mode."),
+          rules: z
+            .array(
+              z.object({
+                condition: z.string().describe("When this rule applies."),
+                subagent_count: z.number().int().min(0).max(8).describe("Number of subagents to spawn."),
+                subagent_type: z.string().describe("Agent type for subagents."),
+                mode: z.enum(["serial", "concurrent", "background"]).describe("Execution mode."),
+              }),
+            )
+            .optional()
+            .describe("Ordered rules for subagent allocation."),
+          never_spawn_for: z.string().array().optional().describe("Intent categories that must never spawn subagents."),
+        })
+        .optional(),
     })
     .meta({
       ref: "Agent",
@@ -219,6 +240,69 @@ export namespace Agent {
               mode: "subagent",
               native: true,
             },
+            verifier: {
+              name: "verifier",
+              description:
+                "Post-process a draft to add inline citations, verify every source URL, remove unsourced claims, and produce a provenance sidecar.",
+              permission: Permission.merge(
+                defaults,
+                Permission.fromConfig({
+                  "*": "deny",
+                  read: "allow",
+                  write: "allow",
+                  edit: "allow",
+                  glob: "allow",
+                  grep: "allow",
+                  bash: { "*": "deny", "curl*": "allow", "wget*": "allow" },
+                  websearch: "allow",
+                  webfetch: "allow",
+                  external_directory: {
+                    "*": "ask",
+                    ...Object.fromEntries(whitelistedDirs.map((dir) => [dir, "allow"])),
+                  },
+                }),
+                user,
+              ),
+              options: {},
+              mode: "subagent",
+              native: true,
+              prompt: PROMPT_VERIFIER,
+            },
+            reviewer: {
+              name: "reviewer",
+              description:
+                "Simulate a skeptical but constructive peer review with severity-graded feedback and inline annotations.",
+              permission: Permission.merge(
+                defaults,
+                Permission.fromConfig({
+                  "*": "deny",
+                  read: "allow",
+                  glob: "allow",
+                  grep: "allow",
+                  bash: {
+                    "*": "deny",
+                    "rg*": "allow",
+                    "grep*": "allow",
+                    "diff*": "allow",
+                    "wc*": "allow",
+                    "stat*": "allow",
+                  },
+                  websearch: "allow",
+                  webfetch: "allow",
+                  write: "allow",
+                  edit: "allow",
+                  external_directory: {
+                    "*": "ask",
+                    ...Object.fromEntries(whitelistedDirs.map((dir) => [dir, "allow"])),
+                  },
+                }),
+                user,
+              ),
+              options: {},
+              mode: "subagent",
+              native: true,
+              prompt: PROMPT_REVIEWER,
+            },
             compaction: {
               name: "compaction",
               mode: "primary",
@@ -360,6 +444,15 @@ export namespace Agent {
             item.optionalExtension = value.optional_extension ?? item.optionalExtension
             item.responsibilityBoundary = value.responsibility_boundary ?? item.responsibilityBoundary
             item.roleDesignBasis = value.role_design_basis ?? item.roleDesignBasis
+            if (value.env_scope) {
+              item.envScope = resolveEnvScope(item.envScope, value.env_scope)
+            }
+            if (value.scale_decision) {
+              item.scaleDecision = {
+                ...(item.scaleDecision ?? {}),
+                ...value.scale_decision,
+              }
+            }
           }
 
           // Ensure Truncate.GLOB is allowed unless explicitly configured

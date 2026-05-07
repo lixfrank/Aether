@@ -716,3 +716,116 @@ test("defaultAgent throws when all primary agents are disabled", async () => {
     },
   })
 })
+
+test("verifier and reviewer agents are registered", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const agents = await Agent.list()
+      const names = agents.map((a) => a.name)
+      expect(names).toContain("verifier")
+      expect(names).toContain("reviewer")
+      const verifier = await Agent.get("verifier")
+      const reviewer = await Agent.get("reviewer")
+      expect(verifier?.mode).toBe("subagent")
+      expect(verifier?.native).toBe(true)
+      expect(verifier?.description).toContain("provenance")
+      expect(reviewer?.mode).toBe("subagent")
+      expect(reviewer?.native).toBe(true)
+      expect(reviewer?.description).toContain("peer review")
+    },
+  })
+})
+
+test("verifier bash permission allows curl and wget, denies others", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const verifier = await Agent.get("verifier")
+      expect(verifier).toBeDefined()
+      const rules = verifier!.permission
+      expect(Permission.evaluateWithCommand("bash", "", "curl https://example.com", rules).action).toBe("allow")
+      expect(Permission.evaluateWithCommand("bash", "", "curl -s -o /dev/null https://arxiv.org", rules).action).toBe(
+        "allow",
+      )
+      expect(Permission.evaluateWithCommand("bash", "", "wget https://example.com/file.tar.gz", rules).action).toBe(
+        "allow",
+      )
+      expect(Permission.evaluateWithCommand("bash", "", "npm install", rules).action).toBe("deny")
+      expect(Permission.evaluateWithCommand("bash", "", "rm -rf /", rules).action).toBe("deny")
+      expect(Permission.evaluateWithCommand("bash", "", "python script.py", rules).action).toBe("deny")
+    },
+  })
+})
+
+test("reviewer bash permission allows rg, grep, diff, wc, stat, denies others", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const reviewer = await Agent.get("reviewer")
+      expect(reviewer).toBeDefined()
+      const rules = reviewer!.permission
+      expect(Permission.evaluateWithCommand("bash", "", "rg 'pattern' src/", rules).action).toBe("allow")
+      expect(Permission.evaluateWithCommand("bash", "", "grep -r 'TODO' .", rules).action).toBe("allow")
+      expect(Permission.evaluateWithCommand("bash", "", "diff file_a.ts file_b.ts", rules).action).toBe("allow")
+      expect(Permission.evaluateWithCommand("bash", "", "wc -l src/main.ts", rules).action).toBe("allow")
+      expect(Permission.evaluateWithCommand("bash", "", "stat package.json", rules).action).toBe("allow")
+      expect(Permission.evaluateWithCommand("bash", "", "npm install", rules).action).toBe("deny")
+      expect(Permission.evaluateWithCommand("bash", "", "curl https://example.com", rules).action).toBe("deny")
+    },
+  })
+})
+
+test("Agent.Info scaleDecision schema accepts valid data", () => {
+  const parsed = Agent.Info.parse({
+    name: "test",
+    mode: "subagent",
+    permission: [],
+    options: {},
+    scaleDecision: {
+      direct_threshold: 5,
+      rules: [
+        {
+          condition: "topic is complex",
+          subagent_count: 3,
+          subagent_type: "general",
+          mode: "concurrent",
+        },
+      ],
+      never_spawn_for: ["trivial"],
+    },
+  })
+  expect(parsed.scaleDecision?.direct_threshold).toBe(5)
+  expect(parsed.scaleDecision?.rules).toHaveLength(1)
+  expect(parsed.scaleDecision?.rules![0].subagent_count).toBe(3)
+  expect(parsed.scaleDecision?.never_spawn_for).toEqual(["trivial"])
+})
+
+test("Agent.Info scaleDecision partial fields are optional", () => {
+  const partial = Agent.Info.parse({
+    name: "test",
+    mode: "primary",
+    permission: [],
+    options: {},
+    scaleDecision: {
+      direct_threshold: 10,
+    },
+  })
+  expect(partial.scaleDecision?.direct_threshold).toBe(10)
+  expect(partial.scaleDecision?.rules).toBeUndefined()
+  expect(partial.scaleDecision?.never_spawn_for).toBeUndefined()
+
+  const empty = Agent.Info.parse({
+    name: "test",
+    mode: "primary",
+    permission: [],
+    options: {},
+    scaleDecision: {},
+  })
+  expect(empty.scaleDecision?.direct_threshold).toBeUndefined()
+  expect(empty.scaleDecision?.rules).toBeUndefined()
+  expect(empty.scaleDecision?.never_spawn_for).toBeUndefined()
+})
