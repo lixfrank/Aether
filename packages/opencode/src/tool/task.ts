@@ -2,7 +2,7 @@ import { Tool } from "./tool"
 import DESCRIPTION from "./task.txt"
 import z from "zod"
 import path from "path"
-import fs from "fs/promises"
+import { Glob } from "@/util/glob"
 import { Session } from "../session"
 import { SessionID, MessageID } from "../session/schema"
 import { MessageV2 } from "../session/message-v2"
@@ -295,10 +295,11 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       if (discipline.return_format === "structured" && agent.outputDir) {
         const outputDir = normalizeOutputDir(agent.outputDir)
         const fullDir = Instance.project.vcs ? path.join(Instance.worktree, outputDir) : outputDir
-        const dirExists = await fs.stat(fullDir).catch(() => undefined)
-        const artifactNote = dirExists
-          ? `\n\nArtifacts written to ${outputDir}. The parent agent can read files from this directory.`
-          : `\n\nWARNING: Output directory ${outputDir} not found on disk.`
+        const artifacts = await Glob.scan("**/*.{md,json,txt}", { cwd: fullDir }).catch(() => [] as string[])
+        const artifactNote =
+          artifacts.length > 0
+            ? `\n\nArtifacts written to ${outputDir}:\n${artifacts.map((f) => `- ${f}`).join("\n")}`
+            : `\n\nWARNING: No artifacts found in output directory ${outputDir}.`
         output = [
           `task_id: ${session.id} (for resuming to continue this task if needed)`,
           "",

@@ -59,35 +59,36 @@ export function compileDiscipline(discipline: Discipline): Permission.Ruleset {
     }
   }
 
-  // 2. Compile file_scope into FILE_TOOLS deny rules
+  // 2. Compile file_scope into FILE_TOOLS rules
   //    file_scope: ["src/auth/**", "package.json"]
-  //    → For each FILE_TOOL, if the path doesn't match any scope glob, deny.
-  //    This is expressed as: { permission: "edit", pattern: "src/auth/**", action: "allow" } for each scope entry,
-  //    with a blanket deny { permission: "edit", pattern: "*", action: "deny" } at the end.
-  //    The evaluateWithScope function already handles this pattern via scopeMatch.
-  //    But we can make it more explicit: compile scope patterns as allow rules + blanket deny.
+  //    → For each FILE_TOOL: blanket deny first, then specific allow rules per scope pattern.
+  //    Rule ordering is CRITICAL: evaluate() uses findLast (last matching rule wins).
+  //    Blanket deny "*" must come BEFORE specific scope allow patterns,
+  //    so that findLast matches the specific allow for scoped paths
+  //    and the blanket deny for everything else.
   if (discipline.file_scope?.length) {
-    const FILE_TOOLS = ["read", "edit", "write", "glob", "grep"]
+    const FILE_TOOLS = ["read", "edit", "write", "glob", "grep", "apply_patch", "multiedit"]
     for (const tool of FILE_TOOLS) {
-      // Add specific allows for each scope pattern
+      // Add blanket deny FIRST — any file not in scope is denied
+      ruleset.push({ permission: tool, pattern: "*", action: "deny" })
+      // Add specific allows AFTER — scoped paths override the blanket deny via findLast
       for (const scopePattern of discipline.file_scope) {
         ruleset.push({ permission: tool, pattern: scopePattern, action: "allow" })
       }
-      // Add blanket deny — any file not in scope is denied
-      ruleset.push({ permission: tool, pattern: "*", action: "deny" })
     }
   }
 
   // 3. Compile env_scope.allowed_commands into bash rules
   //    allowed_commands: ["docker", "curl"]
+  //    → { permission: "bash", pattern: "*", action: "deny" }  (blanket deny, FIRST)
   //    → { permission: "bash", pattern: "docker*", action: "allow" }
   //    → { permission: "bash", pattern: "curl*", action: "allow" }
-  //    → { permission: "bash", pattern: "*", action: "deny" }  (blanket deny)
+  //    Same deny-before-allow ordering: blanket deny first, specific allow overrides via findLast.
   if (discipline.env_scope?.allowed_commands?.length) {
+    ruleset.push({ permission: "bash", pattern: "*", action: "deny" })
     for (const cmd of discipline.env_scope.allowed_commands) {
       ruleset.push({ permission: "bash", pattern: `${cmd}*`, action: "allow" })
     }
-    ruleset.push({ permission: "bash", pattern: "*", action: "deny" })
   }
 
   return ruleset
@@ -96,8 +97,9 @@ export function compileDiscipline(discipline: Discipline): Permission.Ruleset {
 
 Key design decisions:
 
-- `file_scope` compiles to **allow rules for each scope pattern + blanket deny** for each FILE_TOOL. This replaces the separate `evaluateWithScope` path with standard `evaluate` (last-wins). Scope patterns are `allow`, blanket `*` is `deny`, and since `*` appears first while scope patterns appear later, `findLast` will match the specific allow before the blanket deny.
-- `allowed_commands` compiles to **allow rules for each command prefix + blanket deny**. The prefix `docker` becomes pattern `docker*`, matching `docker`, `docker build`, `docker-compose` etc.
+- **Rule ordering is CRITICAL**: `evaluate()` uses `findLast` — the last matching rule wins. Therefore, **blanket deny rules must come BEFORE specific allow rules**. If allow rules came before deny rules, `findLast` would always match the deny `*` pattern (since `*` matches everything), making all allow rules ineffective. The correct ordering is: deny `*` first → then allow specific patterns → `findLast` matches the specific allow for scoped paths and the blanket deny for everything else.
+- `file_scope` compiles to **blanket deny + specific allow rules** per FILE_TOOL. This replaces the separate `evaluateWithScope` path with standard `evaluate` (findLast semantics).
+- `allowed_commands` compiles to **blanket deny + specific allow rules** per command prefix. The prefix `docker` becomes pattern `docker*`, matching `docker`, `docker build`, `docker-compose` etc.
 - **No more separate `evaluateWithScope` function** — scope checking is now just normal rule evaluation via `findLast`.
 
 #### Step 0b: Remove `Session.fileScope` — it's now encoded in `Session.permission`
@@ -285,18 +287,18 @@ envScope: EnvScope.optional(),
 Merge envScope from agent + discipline (discipline overrides agent defaults):
 
 ```ts
-function resolveEnvScope(agent: Agent.Info, discipline: Discipline): EnvScope | undefined {
-  if (!discipline.env_scope && !agent.envScope) return undefined
+function resolveEnvScope(agentEnvScope: EnvScope, disciplineEnvScope: EnvScope): EnvScope | undefined {
+  if (!agentEnvScope && !disciplineEnvScope) return undefined
   return {
-    path_prefix: discipline.env_scope?.path_prefix ?? agent.envScope?.path_prefix,
-    env_vars: { ...agent.envScope?.env_vars, ...discipline.env_scope?.env_vars },
-    npm_prefix: discipline.env_scope?.npm_prefix ?? agent.envScope?.npm_prefix,
-    // allowed_commands handled by compileDiscipline — not needed here
+    path_prefix: disciplineEnvScope?.path_prefix ?? agentEnvScope?.path_prefix,
+    env_vars: { ...agentEnvScope?.env_vars, ...disciplineEnvScope?.env_vars },
+    npm_prefix: disciplineEnvScope?.npm_prefix ?? agentEnvScope?.npm_prefix,
+    allowed_commands: disciplineEnvScope?.allowed_commands ?? agentEnvScope?.allowed_commands,
   }
 }
 ```
 
-Note: `allowed_commands` is NOT in this merge function. It's compiled into permission Rules by `compileDiscipline()`. The `path_prefix` and `env_vars` fields are **process-level** (they modify `PATH` and `process.env`), not permission-level, so they stay in `resolveEnvScope`.
+Note: `allowed_commands` IS included in this merge function. While `compileDiscipline()` handles the compilation of `allowed_commands` into permission Rules, the merge must happen first — `resolveEnvScope` is called to merge agent + discipline env_scope before creating the Discipline object that gets passed to `compileDiscipline`. If `allowed_commands` were excluded from the merge, agent-level `allowed_commands` defaults would never be compiled into Rules, requiring a separate code path to handle agent defaults. Including it keeps the merge logic simple and consistent.
 
 ### Bash Command Evaluation
 
@@ -398,11 +400,12 @@ Then, in the result extraction, when `return_format === "structured"` and agent 
 ```ts
 if (discipline.return_format === "structured" && agent.outputDir) {
   const outputDir = normalizeOutputDir(agent.outputDir)
-  const artifacts = await glob(["*.md", "*.json"], { cwd: outputDir })
+  const fullDir = Instance.project.vcs ? path.join(Instance.worktree, outputDir) : outputDir
+  const artifacts = await Glob.scan("**/*.{md,json,txt}", { cwd: fullDir }).catch(() => [] as string[])
   const artifactNote =
     artifacts.length > 0
       ? `\n\nArtifacts written to ${outputDir}:\n${artifacts.map((f) => `- ${f}`).join("\n")}`
-      : "\n\nWARNING: No artifacts found in output directory."
+      : `\n\nWARNING: No artifacts found in output directory ${outputDir}.`
   output = [`task_id: ${session.id}`, "", "<task_result>", text, artifactNote, "</task_result>"].join("\n")
 }
 ```
@@ -867,7 +870,7 @@ fallback_models:
   - zai-coding-plan/glm-5
 mcp:
   arxiv-search: true
-output_dir: outputs
+output_dir: research
 scale_decision:
   direct_threshold: 10
   never_spawn_for:
@@ -1131,6 +1134,74 @@ Each commit should pass `bun typecheck` in `packages/opencode`.
 | Change 7 | End-to-end research workflow test; plan gate confirmation test; slug naming test                                                                                                                                                                                                                                            |
 
 Test location: `packages/opencode/test/agent/`
+
+---
+
+## Implementation Deviations from Original Plan
+
+During implementation, several deviations from this design plan were found to be necessary or superior. The plan has been updated to reflect these corrections, but they are documented here for traceability.
+
+### 1. Rule ordering in `compileDiscipline` — deny-before-allow (CRITICAL)
+
+**Original plan code**: allow rules first, then blanket deny rules.
+
+```ts
+// WRONG — original plan code
+for (const scopePattern of discipline.file_scope) {
+  ruleset.push({ permission: tool, pattern: scopePattern, action: "allow" })
+}
+ruleset.push({ permission: tool, pattern: "*", action: "deny" })
+```
+
+**Implementation**: deny rules first, then allow rules.
+
+```ts
+// CORRECT — deny-before-allow
+ruleset.push({ permission: tool, pattern: "*", action: "deny" })
+for (const scopePattern of discipline.file_scope) {
+  ruleset.push({ permission: tool, pattern: scopePattern, action: "allow" })
+}
+```
+
+**Why**: `evaluate()` uses `findLast` — the last matching rule wins. If allow rules came before deny rules, `findLast` would always match the deny `*` pattern (since `*` matches everything), making all allow rules ineffective and denying ALL paths. The text explanation in the original plan correctly described "deny-first, allow-second" ordering but the code snippet had the opposite. The same ordering issue applied to `env_scope.allowed_commands` compilation. The plan has been updated to correct the code and explain the ordering requirement explicitly.
+
+### 2. `allowed_commands` in `resolveEnvScope` merge function
+
+**Original plan**: Excluded `allowed_commands` from `resolveEnvScope`, stating "allowed_commands handled by compileDiscipline — not needed here".
+
+**Implementation**: Included `allowed_commands` in the merge function:
+
+```ts
+allowed_commands: disciplineEnvScope?.allowed_commands ?? agentEnvScope?.allowed_commands,
+```
+
+**Why**: `resolveEnvScope` is called to merge agent + discipline env_scope _before_ creating the Discipline object that gets passed to `compileDiscipline`. If `allowed_commands` were excluded from the merge, agent-level `allowed_commands` defaults would never be compiled into Rules, requiring a separate code path to handle agent defaults. Including it keeps the merge logic simple and ensures the compiled Rules reflect both agent and discipline settings.
+
+### 3. Artifact verification — listing specific files vs directory check
+
+**Original plan**: Used `glob(["*.md", "*.json"])` to list individual artifact filenames.
+
+**Initial implementation**: Only checked if the output directory exists (`fs.stat`).
+
+**Current (updated to match plan)**: Uses `Glob.scan("**/*.{md,json,txt}")` to list individual artifact files:
+
+```ts
+const artifacts = await Glob.scan("**/*.{md,json,txt}", { cwd: fullDir }).catch(() => [] as string[])
+const artifactNote =
+  artifacts.length > 0
+    ? `\n\nArtifacts written to ${outputDir}:\n${artifacts.map((f) => `- ${f}`).join("\n")}`
+    : `\n\nWARNING: No artifacts found in output directory ${outputDir}.`
+```
+
+**Why**: Listing specific artifact filenames is more useful for the parent agent — it can immediately see which files are available to read rather than needing to glob the directory itself. The original plan's approach was correct here. The implementation was updated to match.
+
+### 4. `output_dir` value: `research` instead of `outputs`
+
+**Original plan**: `output_dir: outputs`
+
+**Implementation**: `output_dir: research`
+
+**Why**: `research` is more semantically specific — it describes the agent's output type (research artifacts) rather than the generic concept of "outputs". The value is only used as a directory name prefix under `.aether/`, so `research` produces `.aether/research/notepads/...` which is clearer than `.aether/outputs/notepads/...`. The prompt-level path references (`outputs/<slug>-draft.md`) are instructional text in the prompt template, not filesystem paths — the agent receives the actual notepad directory path from `mode-switch.ts` at runtime.
 
 ---
 
