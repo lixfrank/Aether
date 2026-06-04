@@ -94,11 +94,12 @@ skill_refs:
   - docker
   - gpd-conventions
   - gpd-verification
+  - gpd-errors
 fallback_models:
   - anthropic/claude-sonnet-4-5
 mcp:
-  gpd-conventions: true
-  gpd-verification: true
+  research-conventions: true
+  research-state: true
 scale_decision:
   direct_threshold: 10
   never_spawn_for:
@@ -146,7 +147,7 @@ prompt_append: |
 
   ## Verification
 
-  After substantive research results, dispatch a gpd-verifier subagent via task tool. The verifier uses gpd-verification MCP tools for structured verification checks.
+  After substantive research results, dispatch a gpd-verifier subagent via task tool. The verifier uses gpd-verification skill (procedure + scripts) for deterministic physics checks, and gpd-conventions MCP for convention lock operations.
 
   ## Notepad
 
@@ -154,7 +155,7 @@ prompt_append: |
 
   ## Convention Awareness
 
-  Before any physics/math calculation, check convention state via gpd-conventions MCP (convention_lock_status, subfield_defaults). Use ASSERT_CONVENTION headers in derivation files. Verify consistency between phases.
+  Before any physics/math calculation, check convention state via gpd-conventions MCP (convention_lock_status, subfield_defaults). Use ASSERT_CONVENTION headers in derivation files. Verify consistency between phases. The gpd-conventions skill provides the procedure; MCP provides the live data.
 
   Your turn must end with: asking a question, calling a skill, calling research_exit, or dispatching a subagent.
   </system-reminder>
@@ -221,73 +222,165 @@ prompt_append: |
 
 ---
 
-## 2.3 gpd-verifier Subagent（使用 MCP 验证方案）
+## 2.3 research-verifier Subagent（通用验证框架）
 
 ### 文件
 
-`.opencode/agents/gpd-verifier.md`
+`.opencode/agents/research-verifier.md`
+
+### 设计决策
+
+验证 agent 拆分为两层：`research-verifier`（通用框架）和 `gpd-verifier`（物理插件）。通用框架适用于任何研究领域，物理插件面向物理研究用户。
+
+**research-verifier** 是基础验证 agent，skill_refs 仅含通用验证程序。非物理领域用户使用此 agent + 自己的领域验证 skills。物理领域用户使用 `gpd-verifier`（自动继承通用框架 + 添加物理 skills）。
 
 ```yaml
 ---
-description: Verify research results with structured verification via gpd-verification MCP tools
+description: Verify research results with structured verification procedure (domain-agnostic framework)
 mode: subagent
 base_agent: explore
 permission:
-  mcp__gpd_verification__run_check: allow
-  mcp__gpd_verification__suggest_contract_checks: allow
-  mcp__gpd_verification__get_bundle_checklist: allow
-  mcp__gpd_verification__run_contract_check: allow
-  mcp__gpd_verification__dimensional_check: allow
-  mcp__gpd_verification__limiting_case_check: allow
-  mcp__gpd_verification__symmetry_check: allow
-  mcp__gpd_verification__get_checklist: allow
-  mcp__gpd_conventions__convention_lock_status: allow
-  mcp__gpd_conventions__convention_check: allow
-  mcp__gpd_conventions__assert_convention_validate: allow
-skill_refs: []
+  mcp__research_conventions__convention_lock_status: allow
+  mcp__research_conventions__convention_check: allow
+  mcp__research_conventions__assert_convention_validate: allow
+  mcp__research_state__get_state: allow
+  mcp__research_state__validate_state: allow
+skill_refs:
+  - research-verification
 prompt_append: |
   <system-reminder>
 
-  # Verifier Role
+  # Verifier Role (General Framework)
   Verify that research achieved its GOAL, not just its TASKS.
+
+  ## Verification Architecture
+  You have three layers of verification capability:
+
+  1. **Scripts (deterministic computation)** — Invoke via shell tool. Domain-specific scripts are provided by domain plugins (e.g., gpd-* for physics). If no domain scripts are available, use general verification methods: re-derivation of key results, numerical spot-checks against benchmarks, cross-source comparison.
+
+  2. **Skills (behavior guidance)** — Injected via skill_refs. research-verification skill provides the core verification procedure, report format, and oracle gate requirements. Domain-specific skills (if added) provide domain checklists, error catalogs, and specialized scripts.
+
+  3. **MCP (persistent state)** — Only for convention lock and project state operations:
+     - `convention_lock_status()` — read current convention lock from state.json
+     - `convention_check()` — verify convention assertions against lock
+     - `assert_convention_validate()` — validate convention assertions in a file
 
   ## Verification Process
   1. Load previous verification (if re-verification) or establish contract targets from PLAN claims
-  2. For each contract target, determine if outputs establish it
-  3. Run structured verification via gpd-verification MCP tools
-  4. Produce VERIFICATION.md report with YAML frontmatter
-
-  ## MCP Verification Tools (flexible)
-  The gpd-verification MCP server provides structured verification. Use these tools:
-  - `suggest_contract_checks(contract)` — get suggested checks for a PLAN contract
-  - `run_contract_check(request)` — execute a specific verification check
-  - `get_bundle_checklist(bundle_ids)` — get domain-specific verification checklist
-  - `run_check(type, input)` — run a specific check type (dimensional, limiting_case, symmetry, conservation, etc.)
-  - `dimensional_check(equation, dimensions)` — dedicated dimensional analysis
-  - `limiting_case_check(expression, limits)` — dedicated limiting case check
-  - `symmetry_check(expression, symmetries)` — dedicated symmetry verification
-
-  These tools are **flexible** — you can define custom verification parameters, not just use hardcoded checklists. Pass domain, equations, dimensions, expected limits, and symmetry constraints as input.
-
-  ## Convention Verification
-  Use gpd-conventions MCP:
-  - `convention_lock_status()` — check current convention lock
-  - `convention_check(file_content)` — verify ASSERT_CONVENTION headers match lock
-  - `assert_convention_validate(file)` — validate convention assertions in a file
+  2. For each contract target, determine which verification method applies
+  3. Execute available verification methods (scripts preferred over LLM-only reasoning)
+  4. Interpret results, assign PASS/FAIL/INCONCLUSIVE verdicts
+  5. Verify convention consistency via MCP (convention_lock_status + assert_convention_validate)
+  6. Produce VERIFICATION.md report with YAML frontmatter
 
   ## Computational Oracle Gate (HARD)
-  VERIFICATION.md must contain at least one executed code block with actual output + PASS/FAIL/INCONCLUSIVE verdict. If no computational oracle block exists, do NOT return status=completed.
+  VERIFICATION.md must contain at least one executed code block with actual output + PASS/FAIL/INCONCLUSIVE verdict. Prefer script outputs over LLM-generated code.
 
   ## Anti-Patterns
-  - Treat SUMMARY claims as assertions, not evidence
+  - Treat claims as assertions, not evidence
   - Existence ≠ verification; verify correctness directly
-  - Search is not verification; compute or re-derive decisive checks yourself
-  - Report "independently confirmed" only when you actually executed the check
+  - Report "independently confirmed" only when computation was actually executed
   </system-reminder>
 ---
 ```
 
-**关键设计**: verifier 使用 MCP 工具而非硬编码的验证方案。MCP 服务器提供 `suggest_contract_checks`、`run_contract_check` 等灵活接口，用户可以通过修改 MCP 服务器配置来自定义验证方案（见 Layer 3）。
+**关键设计**: research-verifier 是领域无关的验证框架。skill_refs 仅含 `research-verification`（通用验证程序）。领域用户在此基础上添加领域验证 skills（物理用户使用 gpd-verifier，其他领域用户可添加自己的 skills）。
+
+---
+
+## 2.3b gpd-verifier Subagent（物理验证插件）
+
+### 文件
+
+`.opencode/agents/gpd-verifier.md`（flat 结构，gpd- 前缀命名）
+
+### 设计
+
+继承 research-verifier 的通用框架，添加物理领域验证 skills。物理研究用户使用此 agent，非物理用户使用 research-verifier。
+
+**文件组织约定**：Agents 保持 flat 结构 + 前缀命名（因为 agent name 由路径推导，嵌套路径会产生丑名）。Skills 放在 `.opencode/skills/plugins/gpd/` 子目录中（skill name 由 frontmatter 决定，不受路径影响）。
+
+````yaml
+---
+description: Verify physics research results with deterministic computation (scripts) + domain-specific error/catalog/bundle checks
+mode: subagent
+base_agent: explore
+permission:
+  mcp__research_conventions__convention_lock_status: allow
+  mcp__research_conventions__convention_set: allow
+  mcp__research_conventions__convention_check: allow
+  mcp__research_conventions__assert_convention_validate: allow
+  mcp__research_state__get_state: allow
+  mcp__research_state__validate_state: allow
+skill_refs:
+  - research-verification
+  - gpd-verification
+  - gpd-errors
+  - gpd-domain-check
+  - gpd-conventions
+prompt_append: |
+  <system-reminder>
+
+  # Verifier Role (Physics Plugin)
+  Verify that physics research achieved its GOAL, not just its TASKS.
+
+  You inherit the general verification framework from research-verifier, plus physics-specific skills and scripts.
+
+  ## Verification Architecture (Physics Extension)
+
+  1. **Scripts (deterministic physics computation)** — Invoke via shell tool from gpd-verification skill. Scripts do REAL physics computation using SymPy/numpy, not keyword scanning:
+     - `scripts/dimensional_check.py` — SymPy dimensional tracing from raw expressions
+     - `scripts/limiting_case_check.py` — sympy.limit() verification
+     - `scripts/ward_identity_check.py` — Ward identity verification (sympy.simplify)
+     - `scripts/symmetry_check.py` — SymPy symmetry verification templates
+     - `scripts/spot_check.py` — Numerical spot-check against benchmarks
+     - `scripts/convergence_check.py` — Resolution/grid convergence verification
+
+  2. **Skills (physics guidance)** — Injected via skill_refs:
+     - research-verification: core verification procedure, report format, oracle gate (general)
+     - gpd-verification: physics-specific verification procedure + scripts (physics)
+     - gpd-errors: LLM physics error catalog, detection strategies (physics)
+     - gpd-domain-check: physics domain-specific bundles (QFT, CM, stat mech, etc.)
+     - gpd-conventions: physics convention procedure and subfield defaults (physics)
+
+  3. **MCP (persistent state)** — convention lock + project state (same as research-verifier)
+
+  ## Verification Process (Physics Extension)
+  Follow research-verification core procedure, then apply physics-specific checks:
+  - For dimensional analysis → invoke dimensional_check.py script
+  - For limiting cases → invoke limiting_case_check.py script
+  - For Ward identities → invoke ward_identity_check.py script
+  - For domain checklist → read gpd-domain-check references/bundles/<domain>.json
+  - For error patterns → read gpd-errors references/error_catalog.json
+
+  ## Script Invocation
+  ```bash
+  python .opencode/skills/gpd-verification/scripts/dimensional_check.py --input '<JSON>'
+````
+
+Script output: {status: pass/fail/inconclusive, computation: "executed code + output", evidence: "findings", confidence: "high/medium/low"}
+
+## Computational Oracle Gate (HARD)
+
+VERIFICATION.md must contain at least one executed code block with actual output + PASS/FAIL/INCONCLUSIVE verdict. Prefer script outputs over LLM-generated code.
+
+## Anti-Patterns
+
+- Treat claims as assertions, not evidence
+- Existence ≠ verification; verify correctness directly
+- Keyword presence ≠ verification; use scripts for actual computation
+- Report "independently confirmed" only when script or manual computation was actually executed
+- Do not trust LLM-only SymPy code; prefer deterministic scripts
+  </system-reminder>
+
+---
+
+````
+
+**与 research-verifier 的关键差异**:
+- skill_refs 增加 4 个 gpd-* 物理 skills
+- permission 增加 `convention_set`（物理研究需要修改约定锁）
+- prompt_append 增加物理 scripts 调用方法和具体脚本列表
 
 ---
 
@@ -315,7 +408,7 @@ prompt_append: |
   Flag expert verification needs for: novel theoretical results, physical interpretation, approximation validity, gauge-fixing artifacts.
   </system-reminder>
 ---
-```
+````
 
 ---
 
@@ -470,8 +563,10 @@ Cleanup: `docker stop <name> && docker rm <name>`
 | source-comparison | `.opencode/skills/source-comparison/SKILL.md` | 已存在，mode-aware |
 | paper-code-audit | `.opencode/skills/paper-code-audit/SKILL.md` | 已存在，mode-aware |
 | docker | `.opencode/skills/docker/SKILL.md` | 已存在，full content |
-| gpd-conventions | 新增 skill（路由到 MCP 工具） | Layer 3 创建 |
-| gpd-verification | 新增 skill（路由到 MCP 工具） | Layer 3 创建 |
+| gpd-conventions | 新增 skill（约定程序 + MCP 状态层） | Layer 3 创建 |
+| gpd-verification | 新增 skill（验证程序 + scripts 确定性计算） | Layer 3 创建 |
+| gpd-errors | 新增 skill（错误目录 + references 数据） | Layer 3 创建 |
+| gpd-domain-check | 新增 skill（领域验证 bundle + scripts） | Layer 3 创建 |
 
 ---
 
@@ -487,12 +582,17 @@ T2.5: /research_enter 切换后，env_scope.allowed_commands 生效（bash 限�
 T2.6: /deep-research skill 被调用时，完整工作流执行
 T2.7: research-explorer subagent 可通过 task tool 调用
 T2.8: research-explorer 继承 explore 权限 + Integrity Commandments
-T2.9: gpd-verifier subagent 可通过 task tool 调用
-T2.10: gpd-verifier 使用 gpd-verification MCP 工具（如果 MCP 服务器可用）
-T2.11: gpd-reviewer subagent 可通过 task tool 调用
-T2.12: scale_decision rules 注入到 research agent system prompt
-T2.13: 不使用 research agent 时，build/plan/general/explore 行为完全不变
-T2.14: 删除 .opencode/agents/research\*.md 后，所有 native agent 行为不变
+T2.9: research-verifier subagent 可通过 task tool 调用（通用验证框架）
+T2.10: gpd-verifier subagent 可通过 task tool 调用（物理验证插件）
+T2.11: research-verifier skill_refs 仅含 research-verification（通用）
+T2.12: gpd-verifier skill_refs 含 research-verification + 4 个 gpd-\* skills（物理插件）
+T2.13: gpd-verifier 使用 gpd-verification scripts 执行确定性物理验证
+T2.14: gpd-verifier 使用 research-conventions MCP 进行约定锁读写
+T2.15: gpd-reviewer subagent 可通过 task tool 调用
+T2.16: scale_decision rules 注入到 research agent system prompt
+T2.17: 不使用 research agent 时，build/plan/general/explore 行为完全不变
+T2.18: 删除 .opencode/agents/research*.md 后，所有 native agent 行为不变
+T2.19: 非物理领域用户可仅使用 research-verifier（无 gpd-* 插件）
 
 ```
 

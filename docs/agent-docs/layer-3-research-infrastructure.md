@@ -1,319 +1,84 @@
-# Layer 3: Research Infrastructure — MCP Verification Servers & Reference Docs
+# Layer 3: Research Infrastructure — 双层命名架构
 
 > 前置依赖: Layer 0-2（核心安全 + Agent 基础设施 + Research 配置层）
-> 本文档是 5 层重构计划的第四层。提供 MCP 服务器和参考文档，使 verifier 子代理的验证方案**可灵活自定义**。
-> 完成后，gpd-verifier 子代理可以通过 MCP 工具使用结构化验证、约定锁定、错误目录。
+> 本文档是 5 层重构计划的第四层。**零核心源文件改动** — 全部通过 `.opencode/` 和 `.aether/` 目录中的文件实现。
+> 完成后，research-verifier（通用）可通过 skills+scripts 执行验证，gpd-verifier（物理插件）可额外执行确定性物理计算。
 
 ---
 
 ## 上下文
 
-| Layer       | 状态            | 简介                                                |
-| ----------- | --------------- | --------------------------------------------------- |
-| Layer 0     | 已完成          | Permission/Discipline/Info 扩展                     |
-| Layer 1     | 已完成          | mode-switch/fallback/background/MCP per-agent       |
-| Layer 2     | 已完成          | Research agent/skill 配置文件（零核心源改动）       |
-| **Layer 3** | **本文档**      | MCP 服务器 + 参考文档（独立进程，不影响核心运行时） |
-| Layer 4     | 在 Layer 3 之后 | Publication 管线                                    |
+| Layer       | 状态            | 简介                                          |
+| ----------- | --------------- | --------------------------------------------- |
+| Layer 0     | 已完成          | Permission/Discipline/Info 扩展               |
+| Layer 1     | 已完成          | mode-switch/fallback/background/MCP per-agent |
+| Layer 2     | 已完成          | Research agent/skill 配置文件（零核心源改动） |
+| **Layer 3** | **本文档**      | MCP 状态层 + Skills/Scripts 计算层            |
+| Layer 4     | 在 Layer 3 之后 | Publication 管线                              |
 
 ---
 
 ## 设计原则
 
-- **MCP 服务器作为验证方案提供者**: verifier 子代理通过 MCP 工具获取验证清单、运行检查，而非硬编码的 prompt 指令
-- **灵活自定义**: 用户可以修改 MCP 服务器配置（添加新检查类型、修改检查清单内容）或替换整个 MCP 服务器
-- **物理验证作为示例**: GPD 的物理验证体系作为 MCP 服务器的**具体实现示例**，同时作为其他开发者编写自定义验证方案的参考
-- **独立进程**: MCP 服务器以独立 Python 进程运行，不影响 OpenCode 核心运行时
+### 双层命名架构
+
+组件分为两个命名层，确保通用研究基础设施可用于任何领域，物理功能作为可选插件：
+
+| 前缀         | 含义                             | 范围               | 示例                                                                                                           |
+| ------------ | -------------------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------- |
+| `research-*` | 通用研究基础设施                 | 适用于任何研究领域 | research-state MCP、research-conventions MCP（框架）、research-verification skill（通用验证程序）              |
+| `gpd-*`      | 物理领域插件（Get Physics Done） | 仅适用于物理研究   | gpd-verification scripts（SymPy 计算）、gpd-errors catalog（物理错误类）、gpd-domain-check bundles（物理领域） |
+
+**research-verifier**（通用）skill_refs 仅含 `research-verification`。**gpd-verifier**（物理插件）skill_refs 增加 4 个 gpd-\* skills。非物理领域用户使用 research-verifier + 自己的领域验证 skills。
+
+### 分层验证架构（替代 GPD 的全 MCP 方案）
+
+GPD 使用 8 个 MCP 服务器处理所有功能（验证指引、错误目录、约定管理、技能路由、项目状态、模式库、协议、arXiv）。但我们的分析表明 GPD 的 MCP 服务器实际上分为两类：
+
+| 类别                     | GPD 实现                                               | 我们的方案               | 原因                                                                         |
+| ------------------------ | ------------------------------------------------------ | ------------------------ | ---------------------------------------------------------------------------- |
+| **持久状态管理**         | MCP（convention_set 原子写入、advance_plan 推进状态）  | **保留 MCP**             | 需要文件锁、事务性写入、实时数据查询，prompt/skill 无法实现                  |
+| **指引文本与关键词扫描** | MCP（run_check 返回 oracle_hint、关键词扫描 artifact） | **移至 skill + scripts** | SKILL.md 注入比 MCP 返回的一次性文本更可见持久；确定性计算比关键词扫描更可靠 |
+
+核心改进：GPD 的 verification MCP 标注为 `evidence_kind: "computational"` 的检查（维度分析、Ward 恒等式、极限推导）**实际只做关键词扫描和返回指引文本**，物理验证依赖 LLM 自己写 SymPy 并自己判断。我们的 scripts 做**确定性物理计算**——维度追踪用 SymPy 解析表达式、极限推导用 `sympy.limit()`、Ward 恒等式用 `sympy.simplify()`。LLM 只负责解读计算结果。
+
+### 三层验证能力
+
+| 层                        | 提供者                   | 做什么                                                     | 不做什么                      |
+| ------------------------- | ------------------------ | ---------------------------------------------------------- | ----------------------------- |
+| **Scripts（确定性计算）** | skill 附带的 Python 脚本 | SymPy 维度追踪、极限推导、Ward 恒等式验证、数值 spot-check | 不做 LLM 推理、不返回指引文本 |
+| **Skills（行为指引）**    | SKILL.md via skill_refs  | 验证程序、报告格式、oracle gate 要求、错误识别策略         | 不做计算、不写文件            |
+| **MCP（持久状态）**       | MCP 服务器               | 约定锁读写（原子）、项目状态管理、约定验证（结构化）       | 不做物理计算、不返回指引文本  |
 
 ---
 
-## 3.1 MCP 服务器架构
+## 3.1 MCP 服务器（通用状态层）
 
-### 注册方式
+### 3.1.1 research-conventions MCP 服务器
 
-在 `opencode.json` 的 `mcp` 字段中添加（由 research agent 的 `mcp` 配置在 mode enter 时 activate）:
+保留原因：约定锁需要原子性写入和文件锁保护。框架是通用的（任何研究领域都有约定/规范需要锁定），当前数据是物理领域的。
 
-```json
-{
-  "mcp": {
-    "gpd-conventions": {
-      "type": "local",
-      "command": ["python3", "-m", "gpd_conventions_server"],
-      "enabled": true
-    },
-    "gpd-verification": {
-      "type": "local",
-      "command": ["python3", "-m", "gpd_verification_server"],
-      "enabled": true
-    },
-    "gpd-errors": {
-      "type": "local",
-      "command": ["python3", "-m", "gpd_errors_server"],
-      "enabled": true
-    }
-  }
-}
-```
-
-### 灵活自定义方法
-
-用户自定义验证方案有三种方式:
-
-1. **修改 MCP 服务器配置数据**（最简单）: MCP 服务器从 JSON/YAML 数据文件读取检查清单和错误类定义。用户修改数据文件即可改变验证行为，无需改代码。
-
-2. **替换 MCP 服务器实现**（中等）: 用自定义 Python 模块替换 `gpd_verification_server`，保持相同的 tool 名称和 schema（tool interface 不变），但实现不同的检查逻辑。
-
-3. **添加新 MCP 服务器**（最灵活）: 注册新的 MCP 服务器（如 `my-domain-verification`），在 verifier agent 的 permission 中添加对应的 MCP 工具权限，在 prompt_append 中引用新工具。
-
-每个 MCP 服务器遵循 GPD 的 `registry_prefix` 约定（如 `gpd_verification`、`gpd_conventions`），OpenCode 将 MCP tool name 转换为 `mcp__<prefix>__<tool_name>` 格式。
-
----
-
-## 3.2 gpd-verification MCP 服务器（核心验证方案）
-
-### 功能
-
-提供结构化验证检查接口，**不硬编码**具体检查内容。检查内容由数据文件定义，用户可修改。
-
-### Tool Schema
-
-```python
-# gpd_verification_server tools
-
-@mcp_tool("suggest_contract_checks")
-def suggest_contract_checks(contract: dict, project_dir: str) -> dict:
-    """Given a PLAN contract (claims, deliverables, acceptance_tests, forbidden_proxies),
-    suggest which verification checks should be run. Returns list of suggested check
-    requests with templates."""
-    # Reads contract, matches claims to check types from check_registry.json
-    # Returns: [{check_type, request_template, required_fields, subject_id}]
-
-@mcp_tool("run_contract_check")
-def run_contract_check(request: dict, project_dir: str) -> dict:
-    """Execute a specific verification check. Flexible: user defines what to check.
-    Request format: {check_type, subject_id, parameters, expected_result, actual_result_path}"""
-    # Loads check implementation from checks/ directory
-    # Returns: {status: pass/fail/inconclusive, evidence, computation_output}
-
-@mcp_tool("run_check")
-def run_check(check_type: str, input: dict) -> dict:
-    """Run a generic check by type. Types loaded from check_registry.json.
-    Built-in types: dimensional, limiting_case, symmetry, conservation,
-    math_consistency, convergence, literature_agreement, plausibility,
-    statistical_rigor, spot_check, cross_check."""
-    # Dispatches to check implementation module
-
-@mcp_tool("get_bundle_checklist")
-def get_bundle_checklist(bundle_ids: list[str]) -> dict:
-    """Get domain-specific verification checklist. Bundles defined in bundles/ directory.
-    Physics bundles: qft, condensed_matter, stat_mech, numerical, gr, nuclear_particle,
-    quantum_info, optics, astro, fluid, materials, genomics."""
-    # Loads from bundles/<domain>.json
-
-@mcp_tool("get_checklist")
-def get_checklist(domain: str) -> dict:
-    """Get generic verification checklist for a domain."""
-
-@mcp_tool("dimensional_check")
-def dimensional_check(expression: str, symbol_dimensions: dict) -> dict:
-    """Dedicated dimensional analysis. expression: LaTeX-like string.
-    symbol_dimensions: {symbol: dimension_string, e.g. "mass^2"}"""
-    # Parses expression, traces dimensions, verifies consistency
-
-@mcp_tool("limiting_case_check")
-def limiting_case_check(expression: str, limits: list[dict]) -> dict:
-    """Dedicated limiting case verification. limits: [{variable, value, expected_result}]"""
-
-@mcp_tool("symmetry_check")
-def symmetry_check(expression: str, symmetries: list[str]) -> dict:
-    """Dedicated symmetry verification. symmetries: ["parity", "time_reversal", "rotational", ...]"""
-```
-
-### 数据文件结构（用户可修改）
-
-```
-.opencode/get-physics-done/verification/
-├── check_registry.json          # 检查类型注册（用户可添加新类型）
-├── bundles/                     # 领域验证 bundle（用户可添加新领域）
-│   ├── qft.json                 # 量子场论验证清单
-│   ├── condensed_matter.json    # 凝聚态物理验证清单
-│   ├── stat_mech.json           # 统计力学验证清单
-│   ├── numerical.json           # 数值计算验证清单
-│   ├── gr.json                  # 广义相对论验证清单
-│   ├── nuclear_particle.json    # 核与粒子物理验证清单
-│   ├── quantum_info.json        # 量子信息验证清单
-│   ├── optics.json              # 光学验证清单
-│   ├── astro.json               # 天体物理验证清单
-│   ├── fluid.json               # 流体力学验证清单
-│   ├── materials.json           # 材料科学验证清单
-│   └── genomics.json            # 基因组学验证清单
-├── checks/                      # 检查实现模块（用户可添加新检查）
-│   ├── dimensional.py           # 维度分析实现
-│   ├── limiting_case.py         # 极限情况实现
-│   ├── symmetry.py              # 对称性验证实现
-│   ├── conservation.py          # 守恒律验证实现
-│   └── ...                      # 更多检查实现
-└── custom_checks/               # 用户自定义检查目录（空，等待用户填充）
-    └── README.md                # 说明如何添加自定义检查
-```
-
-### 自定义检查的开发者指南
-
-**文件**: `.opencode/get-physics-done/verification/custom_checks/README.md`
-
-```
-# Adding Custom Verification Checks
-
-1. Create a Python file in this directory: my_check.py
-2. Implement a function: def run(input: dict) -> dict
-3. Register in check_registry.json:
-   {
-     "my_check_type": {
-       "module": "custom_checks.my_check",
-       "function": "run",
-       "description": "What this check does",
-       "required_fields": ["field1", "field2"],
-       "output_schema": {"status": "str", "evidence": "str"}
-     }
-   }
-4. The gpd-verification MCP server will auto-discover and expose it as:
-   mcp__gpd_verification__run_check(check_type="my_check_type", input={...})
-
-5. To make your verifier subagent use it, add permission in .opencode/agents/gpd-verifier.md:
-   permission:
-     mcp__gpd_verification__run_check: allow
-   And reference it in prompt_append.
-
-Example: See checks/dimensional.py for a complete implementation.
-```
-
----
-
-## 3.3 物理验证 Bundle 示例（从 GPD cherry-pick）
-
-以下是从 GPD 项目中提取的物理验证 bundle，作为 MCP 服务器数据文件的**具体示例**。每个 bundle JSON 文件定义了该领域的验证检查清单、红红旗项和标准基准。
-
-### cherry-pick 验证方法
-
-为确保与 GPD 项目本身保持一致:
-
-1. **来源追踪**: 每个 bundle JSON 文件顶部包含 `gpd_source` 字段，指向 GPD 项目中的对应文件路径和 commit hash
-2. **语义等价**: 不逐字复制 GPD 的文件内容（GPD 使用 Python 模块而非 JSON），而是将 GPD 的验证逻辑**语义等价地**转换为 JSON 数据格式，保留所有检查维度、红旗项和标准基准
-3. **版本对齐**: 当 GPD 项目更新验证内容时，更新 `gpd_source` 的 commit hash 和对应的 JSON 数据
-4. **测试对齐**: 每个 bundle 有对应的测试文件，验证 JSON 数据中的检查项与 GPD 原始 Python 实现覆盖相同的检查维度
-
-### qft.json（量子场论验证 bundle）
-
-```json
-{
-  "gpd_source": {
-    "repo": "psi-oss/get-physics-done",
-    "path": "src/gpd/mcp/servers/verification_server.py + src/gpd/references/verification/domains/verification-domain-qft.md",
-    "commit": "main (to be pinned to specific commit on implementation)",
-    "cherry_pick_method": "semantic_equivalence"
-  },
-  "domain": "qft",
-  "description": "Quantum Field Theory verification bundle",
-  "priority_checks": [
-    {
-      "check_type": "dimensional",
-      "name": "Dimensional consistency",
-      "procedure": "Trace dimensions of every symbol through every equation. Verify [expression] = [expected].",
-      "red_flags": ["Dimension mismatch without explicit conversion", "Mixed natural/SI units without declaration"],
-      "standard_benchmarks": [
-        "Peskin & Schroeder Eq. (2.56) for retarded propagator",
-        "Dimensional analysis: [G] = mass^(d-2)"
-      ]
-    },
-    {
-      "check_type": "limiting_case",
-      "name": "Limiting cases",
-      "procedure": "Take independent limits: massless, static, zero coupling, high energy. Verify each reproduces known result.",
-      "red_flags": ["No massless limit computed", "Static limit doesn't reduce to known result"],
-      "standard_benchmarks": ["Massless propagator → 1/(4πr)", "Static limit of retarded Green's function"]
-    },
-    {
-      "check_type": "symmetry",
-      "name": "Symmetry constraints",
-      "procedure": "Check Ward identities, gauge invariance, Lorentz invariance. Replace ε^μ → k^μ, verify cancellation.",
-      "red_flags": ["Gauge parameter ξ survives in observable", "ε^μ → k^μ substitution doesn't cancel"],
-      "standard_benchmarks": ["Ward identity: q_μ M^μ = 0", "ξ cancellation in physical amplitude"]
-    },
-    {
-      "check_type": "conservation",
-      "name": "Conservation laws",
-      "procedure": "Verify energy-momentum conservation, charge conservation, probability conservation at each vertex.",
-      "red_flags": ["Energy-momentum not conserved at vertex", "Probability conservation violated"],
-      "standard_benchmarks": ["Sum rule: Σ|M_n|^2 = 1", "Charge conservation at each interaction"]
-    },
-    {
-      "check_type": "math_consistency",
-      "name": "Mathematical consistency",
-      "procedure": "Check analytic continuation, branch cut handling, pole structure, contour integration.",
-      "red_flags": ["Branch cut handled inconsistently", "Wrong contour for integral"],
-      "standard_benchmarks": ["S-matrix poles at physical masses", "Causal boundary conditions in contour integration"]
-    }
-  ],
-  "specific_red_flags": [
-    "Sign errors in angular momentum CG coefficients (verify triangle inequality, m-values sum)",
-    "Metric signature flip (trace metric through every equation)",
-    "Ward identity violation (ε^μ → k^μ must cancel)",
-    "Wrong eigenvalue count (must match Hilbert space dimension)",
-    "Fourier convention mismatch (verify 2π placement, reality conditions)",
-    "Fermionic sign error (count anticommutation signs, Pauli exclusion)",
-    "Missing fermion loop sign (-1)^L (count fermion loops)",
-    "Matsubara frequency convention: boson 2nπT, fermion (2n+1)πT",
-    "Renormalization scheme mixing (intermediate quantities are scheme-dependent)",
-    "Identity claim from training data (verify at 3+ test points numerically)"
-  ]
-}
-```
-
-### 其他领域 bundle（精简版）
-
-| Bundle           | 关键检查类型                                                                                 | GPD 源路径                                |
-| ---------------- | -------------------------------------------------------------------------------------------- | ----------------------------------------- |
-| condensed_matter | symmetry (lattice), convergence (k-point), conservation (energy)                             | `verification-domain-condensed-matter.md` |
-| stat_mech        | dimensional, limiting_case (T→0, T→∞), conservation (partition function Z>0)                 | `verification-domain-stat-mech.md`        |
-| numerical        | convergence, benchmark reproduction, error budget, grid resolution                           | `verification-domain-numerical.md`        |
-| gr               | dimensional, limiting_case (weak field → Newtonian), symmetry (diffeomorphism)               | `verification-domain-gr.md`               |
-| nuclear_particle | dimensional, limiting_case (zero momentum), symmetry (isospin), conservation (baryon number) | `verification-domain-nuclear.md`          |
-| quantum_info     | math_consistency (tensor product), symmetry (unitarity), conservation (norm)                 | `verification-domain-quantum-info.md`     |
-| optics           | dimensional, limiting_case (paraxial), symmetry (time reversal)                              | `verification-domain-optics.md`           |
-| astro            | dimensional, limiting_case (vacuum → flat spacetime), conservation (flux)                    | `verification-domain-astro.md`            |
-| fluid            | dimensional, limiting_case (laminar → Stokes), conservation (mass/momentum)                  | `verification-domain-fluid.md`            |
-| materials        | convergence (VASP parameters), dimensional, limiting_case (ideal crystal)                    | `verification-domain-materials.md`        |
-| genomics         | statistical_rigor (p-value), convergence (bootstrap), literature_agreement                   | `verification-domain-genomics.md`         |
-
----
-
-## 3.4 gpd-conventions MCP 服务器
-
-### 功能
-
-提供约定锁定管理，防止跨阶段约定漂移。
-
-### Tool Schema
+#### Tool Schema
 
 ```python
 @mcp_tool("convention_lock_status")
 def convention_lock_status(project_dir: str) -> dict:
-    """Return current convention lock state from .aether/conventions/state.json"""
+    """Return current convention lock state from state.json.
+    Convention keys are domain-specific — physics uses metric_signature,
+    fourier_convention, etc; other domains define their own convention schema."""
 
 @mcp_tool("convention_set")
 def convention_set(key: str, value: str, project_dir: str) -> dict:
-    """Set a convention value. Keys: natural_units, metric_signature, fourier_convention,
-    gauge_choice, renormalization_scheme, coupling_convention, spin_basis,
-    state_normalization, coordinate_system, index_positioning, time_ordering,
-    commutation_convention. Updates .aether/conventions/state.json"""
+    """Atomically set a convention value. Convention keys are defined by
+    the domain's convention schema (see references/convention_schema.json).
+    Physics keys: natural_units, metric_signature, fourier_convention, gauge_choice,
+    renormalization_scheme, coupling_convention, spin_basis, state_normalization,
+    coordinate_system, index_positioning, time_ordering, commutation_convention.
+    Uses file-lock for atomic write."""
 
 @mcp_tool("convention_check")
 def convention_check(file_content: str, project_dir: str) -> dict:
     """Check ASSERT_CONVENTION headers in file_content against current lock"""
-
-@mcp_tool("convention_diff")
-def convention_diff(phase_a: str, phase_b: str, project_dir: str) -> dict:
-    """Compare conventions between two phases"""
 
 @mcp_tool("assert_convention_validate")
 def assert_convention_validate(file_path: str, project_dir: str) -> dict:
@@ -321,255 +86,425 @@ def assert_convention_validate(file_path: str, project_dir: str) -> dict:
 
 @mcp_tool("subfield_defaults")
 def subfield_defaults(domain: str) -> dict:
-    """Return default conventions for a physics subfield"""
+    """Return default conventions for a domain.
+    Physics defaults (14 subfields) loaded from gpd-conventions skill data.
+    Other domain defaults can be registered in references/convention_defaults/."""
 ```
 
-### 数据存储
+**移除的工具**（转至 skill）：`convention_diff`（两个阶段约定对比 — 两个文件读 + 字典减法，agent 自行完成）、`convention_diff`（对比两个约定锁 — 纯 dict 操作，不需要 MCP）。
 
-`.aether/conventions/state.json`:
+#### 注册方式
 
 ```json
 {
-  "natural_units": "natural",
-  "metric_signature": "mostly-minus",
-  "fourier_convention": "physics",
-  "gauge_choice": "lorentz",
-  "renormalization_scheme": "on-shell",
-  "coupling_convention": "Yukawa",
-  "spin_basis": "Weyl",
-  "state_normalization": "covariant",
-  "coordinate_system": "cartesian",
-  "index_positioning": "upper-lower",
-  "time_ordering": "Euclidean",
-  "commutation_convention": "left-to-right",
-  "locked_at": "2026-05-10T12:00:00Z",
-  "locked_by": "research agent phase 1"
+  "mcp": {
+    "research-conventions": {
+      "type": "local",
+      "command": ["python3", "-m", "research_conventions_server"],
+      "enabled": true
+    }
+  }
 }
 ```
 
-### 子领域默认约定（从 GPD cherry-pick）
+#### 数据存储
+
+`.aether/conventions/state.json`（与 Layer 2 文档中定义一致）。
+
+#### 子领域默认约定
+
+物理领域的默认值由 gpd-conventions skill 提供（作为插件数据），MCP 服务器加载 `references/convention_defaults/physics.json`。其他领域可注册自己的默认值文件。
+
+### 3.1.2 research-state MCP 服务器
+
+保留原因：项目状态需要原子性写入（advance_plan 推进状态），健康检查需要结构化验证。
+
+#### Tool Schema
 
 ```python
-SUBFIELD_DEFAULTS = {
-    "qft": {
-        "natural_units": "natural",
-        "metric_signature": "mostly-minus",
-        "fourier_convention": "physics",
-        "renormalization_scheme": "on-shell",
-    },
-    "condensed_matter": {
-        "natural_units": "natural",
-        "metric_signature": "mostly-plus",
-        "fourier_convention": "physics",
-        "gauge_choice": "coulomb",
-    },
-    "stat_mech": {
-        "natural_units": "boltzmann",
-        "metric_signature": "mostly-minus",
-        "matsubara_convention": "standard",
-    },
-    "numerical": {
-        "natural_units": "SI",
-        "coordinate_system": "cartesian",
-        "convergence_threshold": "1e-6",
-    },
-    "gr": {
-        "natural_units": "geometric",
-        "metric_signature": "mostly-plus",
-        "coordinate_system": "general",
-    },
+@mcp_tool("get_state")
+def get_state(project_dir: str) -> dict:
+    """Return structured project state from state.json"""
+
+@mcp_tool("advance_plan")
+def advance_plan(phase: str, plan_number: str, project_dir: str) -> dict:
+    """Atomically advance project to next plan in state.json"""
+
+@mcp_tool("validate_state")
+def validate_state(project_dir: str) -> dict:
+    """Validate state.json schema, conventions, phase format"""
+
+@mcp_tool("get_progress")
+def get_progress(project_dir: str) -> dict:
+    """Return computed progress summary"""
+
+@mcp_tool("run_health_check")
+def run_health_check(project_dir: str, fix: bool = False) -> dict:
+    """Full project health dashboard: structure, storage, state validity, conventions, config"""
+```
+
+#### 注册方式
+
+```json
+{
+  "mcp": {
+    "research-state": {
+      "type": "local",
+      "command": ["python3", "-m", "research_state_server"],
+      "enabled": true
+    }
+  }
 }
 ```
 
 ---
 
-## 3.5 gpd-errors MCP 服务器
+## 3.2 research-\* Skills（通用框架层）
 
-### 功能
+### 3.2.1 research-verification skill
 
-提供 LLM 物理错误目录查询，帮助 verifier 识别常见 LLM 物理推理错误。
+**通用验证程序框架**——适用于任何研究领域。物理领域用户在此基础上叠加 gpd-\* 物理插件。
 
-### Tool Schema
+**核心创新**：替代 GPD 的 verification MCP 服务器。GPD 的 MCP 只返回指引文本和关键词扫描结果。我们的 skill 提供**行为指引**（SKILL.md），**确定性计算**（scripts/），**数据文件**（bundles/）。
 
-```python
-@mcp_tool("get_error_class")
-def get_error_class(class_id: str) -> dict:
-    """Get details of a specific error class"""
+#### 文件
 
-@mcp_tool("check_error_classes")
-def check_error_classes(content: str, domain: str) -> dict:
-    """Check content for known error patterns"""
+`.opencode/skills/research-verification/SKILL.md`
 
-@mcp_tool("list_error_classes")
-def list_error_classes(domain: str = None) -> dict:
-    """List all error classes, optionally filtered by domain"""
+```yaml
+---
+name: research-verification
+description: Structured research verification procedure (domain-agnostic). Establish contract targets, execute verification methods, produce VERIFICATION.md report. Domain-specific checks provided by domain plugin skills.
+---
 
-@mcp_tool("get_detection_strategy")
-def get_detection_strategy(class_id: str) -> dict:
-    """Get detection strategy for an error class"""
+# Structured Verification (General Framework)
 
-@mcp_tool("get_traceability")
-def get_traceability(check_category: str) -> dict:
-    """Get traceability matrix: error classes → verification check categories"""
+## When to Use
+After substantive research results, before finalizing a phase. Used by research-verifier subagent.
+
+## Verification Procedure
+
+### Step 1: Establish Contract Targets
+Read PLAN.md contract (claims, deliverables, acceptance_tests, forbidden_proxies). If no contract, derive from phase goal in ROADMAP.md.
+
+### Step 2: Classify Check Types
+For each contract target, classify verification method:
+
+| Check Category | Method | Availability |
+|----------------|--------|-------------|
+| Computational verification | Domain scripts (if available) | Physics: gpd-verification scripts; other domains: custom scripts |
+| Convention/norm consistency | MCP convention tools | Always available |
+| Literature agreement | LLM + web search | Always available (LLM judgment) |
+| Logical consistency | LLM reasoning | Always available (LLM judgment) |
+| Statistical rigor | LLM + scripts (if available) | Depends on domain |
+
+### Step 3: Execute Available Verification
+Invoke domain-specific scripts via shell if available. Otherwise use general verification methods: re-derivation, numerical spot-checks, cross-source comparison.
+
+### Step 4: Interpret Results
+- Script `pass` → record as independently confirmed
+- Script `fail` → investigate root cause, do NOT override with LLM reasoning
+- LLM-only judgment → downgrade confidence, flag as "not independently confirmed"
+
+### Step 5: Verify Conventions/Norms
+Use research-conventions MCP for convention lock operations (convention_lock_status, convention_check, assert_convention_validate).
+
+### Step 6: Write VERIFICATION.md
+Report must include:
+- YAML frontmatter with contract results, gap status, score, confidence
+- Computational oracle block (at least one executed code block or script output)
+- Convention consistency check results
+- Gaps summary (if any)
+
+## Do Not
+- Do not report "independently confirmed" based on LLM-only reasoning
+- Do not skip computational oracle — must include actual executed code or script output
+- Do not fabricate verification evidence
 ```
 
-### 错误类数据（精选 20 类，从 GPD 的 104 类中 cherry-pick 最高风险的）
+---
 
-**文件**: `.opencode/get-physics-done/verification/errors/error_catalog.json`
+## 3.3 gpd-\* Skills（物理插件层）
 
-```json
-{
-  "gpd_source": {
-    "repo": "psi-oss/get-physics-done",
-    "path": "src/gpd/references/verification/errors/llm-physics-errors.md",
-    "commit": "main (to be pinned)",
-    "cherry_pick_method": "semantic_equivalence",
-    "note": "GPD has 104 error classes; this catalog selects the 20 highest-risk classes. Full catalog can be added by expanding error_catalog.json."
-  },
-  "error_classes": [
-    {
-      "id": "E01",
-      "name": "Sign errors in angular momentum CG coefficients",
-      "domain": "qft",
-      "detection": "Verify triangle inequality, m-values sum",
-      "severity": "high"
-    },
-    {
-      "id": "E02",
-      "name": "Metric signature flip",
-      "domain": "qft/gr",
-      "detection": "Trace metric through every equation",
-      "severity": "high"
-    },
-    {
-      "id": "E03",
-      "name": "Ward identity violation",
-      "domain": "qft",
-      "detection": "Replace ε^μ → k^μ, check S-matrix cancellation",
-      "severity": "high"
-    },
-    {
-      "id": "E04",
-      "name": "Wrong eigenvalue count",
-      "domain": "quantum_info",
-      "detection": "Count matches Hilbert space dimension",
-      "severity": "high"
-    },
-    {
-      "id": "E05",
-      "name": "Gauge parameter survives observable",
-      "domain": "qft",
-      "detection": "ξ must cancel from physical observables",
-      "severity": "high"
-    },
-    {
-      "id": "E06",
-      "name": "Fourier convention mismatch",
-      "domain": "qft/signal",
-      "detection": "Verify 2π placement, reality conditions",
-      "severity": "medium"
-    },
-    {
-      "id": "E07",
-      "name": "Fermionic sign error",
-      "domain": "qft/condensed_matter",
-      "detection": "Count anticommutation signs, Pauli exclusion",
-      "severity": "high"
-    },
-    {
-      "id": "E08",
-      "name": "Partition function sign/phase",
-      "domain": "stat_mech",
-      "detection": "Z > 0, KMS periodicity",
-      "severity": "medium"
-    },
-    {
-      "id": "E09",
-      "name": "Matsubara frequency convention",
-      "domain": "stat_mech/qft",
-      "detection": "boson: 2nπT, fermion: (2n+1)πT",
-      "severity": "medium"
-    },
-    {
-      "id": "E10",
-      "name": "Renormalization scheme mixing",
-      "domain": "qft",
-      "detection": "Intermediate quantities are scheme-dependent",
-      "severity": "high"
-    },
-    {
-      "id": "E11",
-      "name": "Identity claim from training data",
-      "domain": "all",
-      "detection": "Verify at 3+ test points numerically",
-      "severity": "high"
-    },
-    {
-      "id": "E12",
-      "name": "Missing fermion loop sign (-1)^L",
-      "domain": "qft",
-      "detection": "Count fermion loops",
-      "severity": "medium"
-    },
-    {
-      "id": "E13",
-      "name": "Boundary condition mismatch",
-      "domain": "numerical",
-      "detection": "BC_COUNT must equal ODE_ORDER",
-      "severity": "high"
-    },
-    {
-      "id": "E14",
-      "name": "Jacobi identity violation",
-      "domain": "qft/gr",
-      "detection": "Verify for operator algebra",
-      "severity": "medium"
-    },
-    {
-      "id": "E15",
-      "name": "Self-consistency false convergence",
-      "domain": "condensed_matter",
-      "detection": "Check k-point convergence",
-      "severity": "medium"
-    },
-    {
-      "id": "E16",
-      "name": "Perturbation order incomplete",
-      "domain": "qft",
-      "detection": "Count all terms at declared order",
-      "severity": "high"
-    },
-    {
-      "id": "E17",
-      "name": "KK relation violation",
-      "domain": "optics/condensed_matter",
-      "detection": "Verify Re/Im χ(ω) satisfy KK",
-      "severity": "medium"
-    },
-    {
-      "id": "E18",
-      "name": "FEM convergence order mismatch",
-      "domain": "numerical",
-      "detection": "Richardson extrapolation",
-      "severity": "medium"
-    },
-    {
-      "id": "E19",
-      "name": "Elasticity normalization mismatch",
-      "domain": "gr/mechanics",
-      "detection": "Relativistic vs non-relativistic",
-      "severity": "low"
-    },
-    {
-      "id": "E20",
-      "name": "Symmetry factor wrong",
-      "domain": "qft",
-      "detection": "Count vertices and propagators",
-      "severity": "medium"
-    }
-  ]
-}
+物理领域验证插件，在 research-verification 通用框架之上叠加。gpd-verifier agent 的 skill_refs 包含 research-verification + 4 个 gpd-\* skills。
+
+### 插件目录约定
+
+**Skills** 放在 `.opencode/skills/plugins/gpd/` 子目录中，利用 OpenCode 的 `**/SKILL.md` glob 发现 + frontmatter `name` 字段命名，**零代码改动**即可实现插件隔离：
+
 ```
+.opencode/skills/plugins/gpd/gpd-verification/SKILL.md  → skill name: "gpd-verification"
+.opencode/skills/plugins/gpd/gpd-errors/SKILL.md         → skill name: "gpd-errors"
+.opencode/skills/plugins/gpd/gpd-domain-check/SKILL.md   → skill name: "gpd-domain-check"
+.opencode/skills/plugins/gpd/gpd-conventions/SKILL.md    → skill name: "gpd-conventions"
+```
+
+**Agents** 保持 flat 结构 + `gpd-` 前缀（因为 agent name 由路径推导）：
+
+```
+.opencode/agents/gpd-verifier.md    → agent name: "gpd-verifier"
+.opencode/agents/gpd-reviewer.md    → agent name: "gpd-reviewer"
+```
+
+**插件管理**：
+
+- **卸载**：删除 `.opencode/skills/plugins/gpd/` 目录 + 删除 `.opencode/agents/gpd-*.md`
+- **分享**：打包 `plugins/gpd/` + flat agents + MCP 配置建议
+- **其他领域插件**：创建 `.opencode/skills/plugins/bio/` + `.opencode/agents/bio-verifier.md`
+
+### 3.3.1 gpd-verification skill
+
+### 3.3.2 gpd-errors skill
+
+物理领域插件——LLM 物理推理错误目录。替代 GPD 的 errors MCP 服务器。
+
+#### 文件
+
+`.opencode/skills/plugins/gpd/gpd-errors/SKILL.md`
+
+```yaml
+---
+name: gpd-errors
+description: LLM physics error catalog with detection strategies. Use to identify common LLM physics reasoning errors during verification.
+---
+
+# LLM Physics Error Detection
+
+## When to Use
+During verification, after producing research results. Check for known LLM-specific physics error patterns.
+
+## Error Detection Procedure
+
+### Step 1: Identify Domain
+Determine which physics domain the current work belongs to (qft, condensed_matter, stat_mech, numerical, gr, nuclear_particle, quantum_info, optics, astro, fluid, materials, genomics).
+
+### Step 2: Load Error Catalog
+Read `references/error_catalog.json` for the 20 highest-risk error classes. Filter by domain.
+
+### Step 3: Check Each Error Class
+For each relevant error class, apply the detection strategy:
+
+| Error Class | Detection Strategy |
+|-------------|-------------------|
+| E01: CG coefficient sign error | Verify triangle inequality, m-values sum. Spot-check one CG against Varshalovich tables. |
+| E02: Metric signature flip | Trace metric through every equation. Check sign of contraction g_μν g^μν = d. |
+| E03: Ward identity violation | Replace ε^μ → k^μ. Check S-matrix cancellation. (Use ward_identity_check.py script) |
+| E04: Wrong eigenvalue count | Count must match Hilbert space dimension. |
+| E05: Gauge parameter in observable | ξ must cancel from physical observables. |
+| ... | (See references/error_catalog.json for full 20 classes) |
+
+### Step 4: Record Findings
+For each checked error class, record: {class_id, detected: bool, evidence: str, severity: high|medium|low}.
+
+### Step 5: Flag for Expert Review
+For errors that require domain expertise to evaluate, flag as "expert_needed" with specific domain and reason.
+
+## Do Not
+- Do not skip high-severity error checks
+- Do not claim "no errors found" without checking at least domain-relevant classes
+- Do not fabricate detection results — must be based on actual verification
+```
+
+#### References 目录
+
+`.opencode/skills/plugins/gpd/gpd-errors/references/`
+
+- `error_catalog.json` — 20 最高风险错误类（与 Layer 2 原设计一致，含 gpd_source 字段）
+- `detection_strategies.json` — 每个错误类的详细检测策略和示例
+- `traceability_matrix.json` — 错误类 → 验证检查方法映射
+
+---
+
+### 3.2.3 gpd-domain-check skill
+
+### 3.3.3 gpd-domain-check skill
+
+物理领域插件——物理领域验证 bundle。替代 GPD 的 verification MCP 中的 domain checklist 功能。
+
+#### 文件
+
+`.opencode/skills/plugins/gpd/gpd-domain-check/SKILL.md`
+
+```yaml
+---
+name: gpd-domain-check
+description: Domain-specific physics verification checklists. Use during verification to apply specialized checks for quantum field theory, condensed matter, statistical mechanics, and 9 other domains.
+---
+
+# Domain-Specific Verification
+
+## When to Use
+During verification, after identifying the physics domain of the current work.
+
+## Domain Checklist Procedure
+
+### Step 1: Identify Domain
+Determine domain from phase goal and research content. Domains: qft, condensed_matter, stat_mech, numerical, gr, nuclear_particle, quantum_info, optics, astro, fluid, materials, genomics.
+
+### Step 2: Load Domain Checklist
+Read `references/bundles/<domain>.json` for domain-specific priority checks, red flags, and standard benchmarks.
+
+### Step 3: Execute Domain Checks
+For each priority check in the domain checklist:
+- If a script exists (dimensional_check.py, limiting_case_check.py, etc.), invoke it via shell
+- If no script exists (literature agreement, physical plausibility), apply LLM judgment with explicit caveats
+
+### Step 4: Check Domain Red Flags
+Scan artifacts for domain-specific red flags listed in the bundle.
+
+### Step 5: Verify Standard Benchmarks
+For each standard benchmark in the bundle, verify the result matches known values.
+
+### Step 6: Record Coverage
+Report which checks were script-verified vs LLM-judged vs deferred.
+
+## Do Not
+- Do not skip domain red flags
+- Do not claim domain coverage without checking at least priority_checks
+- Do not use keyword scanning instead of script computation where scripts exist
+```
+
+#### References 目录
+
+`.opencode/skills/plugins/gpd/gpd-domain-check/references/bundles/`
+
+12 个领域 bundle JSON 文件（与 Layer 3 原设计中的 bundles/ 一致，含 gpd_source 字段）。qft.json 包含完整的 priority_checks、specific_red_flags 和 standard_benchmarks（与原设计一致）。
+
+---
+
+### 3.2.4 gpd-conventions skill
+
+### 3.3.4 gpd-conventions skill
+
+物理领域插件——物理约定程序和默认值。MCP 提供通用约定锁框架，gpd-conventions skill 提供物理领域的具体约定内容和 14 个子领域默认值。
+
+#### 文件
+
+`.opencode/skills/plugins/gpd/gpd-conventions/SKILL.md`
+
+```yaml
+---
+name: gpd-conventions
+description: Physics convention lock management. Check, set, validate, and compare conventions across research phases. Use before any calculation to ensure consistency.
+---
+
+# Convention Management
+
+## When to Use
+Before any physics/math calculation, and during verification to check convention consistency.
+
+## Convention Procedure
+
+### Step 1: Check Current Lock
+Call `convention_lock_status` MCP tool to read current convention state from state.json.
+
+### Step 2: Set Conventions (New Project)
+If no lock exists, call `subfield_defaults(domain)` MCP tool to get recommended defaults for your domain, then call `convention_set(key, value)` MCP tool for each convention to create the lock.
+
+### Step 3: Validate Conventions
+Before each derivation/computation:
+- Add `<!-- ASSERT_CONVENTION: natural_units=natural, metric_signature=mostly-minus -->` header to your file
+- Call `assert_convention_validate(file_path)` MCP tool to verify headers match lock
+
+### Step 4: Cross-Phase Consistency
+When referencing prior phase results, verify convention lock matches. If conventions differ, convert results to current lock conventions before use.
+
+## Subfield Defaults (Quick Reference)
+- QFT: natural units, mostly-minus metric, physics Fourier, on-shell renormalization
+- Condensed matter: natural units, mostly-plus metric, physics Fourier, Coulomb gauge
+- Stat mech: Boltzmann units, mostly-minus metric, standard Matsubara
+- Numerical: SI units, Cartesian coordinates, convergence threshold 1e-6
+- GR: geometric units, mostly-plus metric, general coordinates
+
+## Do Not
+- Do not start a derivation without checking convention_lock_status first
+- Do not mix conventions across phases without explicit conversion
+- Do not change conventions mid-project without convention_set and re-verification
+```
+
+---
+
+## 3.4 移除的 MCP 服务器
+
+以下 MCP 服务器**不保留**，功能由 research-_ 通用框架 + gpd-_ 物理插件替代：
+
+| 原 MCP 服务器        | 替代方案                                      | 替代原因                                                                                               |
+| -------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| **gpd-verification** | gpd-verification skill + scripts + references | MCP 只返回指引文本和关键词扫描。skill 提供持久可见的行为指引；scripts 提供确定性物理计算而非关键词扫描 |
+| **gpd-errors**       | gpd-errors skill + references                 | MCP 从 markdown 解析错误目录并返回 JSON。skill + references/ 数据文件直接提供，不需要 Python 进程解析  |
+| **gpd-patterns**     | 不需要                                        | CRUD 模式库（add_pattern、promote_pattern）。研究项目不需要跨 session 的错误模式演化                   |
+| **gpd-protocols**    | 不需要                                        | 协议路由（route_protocol）。skill_refs 本身就是路由机制，不需要额外 MCP                                |
+| **gpd-skills**       | 不需要                                        | 技能路由（route_skill）。OpenCode 的 skill_refs + slash commands 已提供路由                            |
+| **gpd-arxiv**        | arxiv-search skill（已存在）                  | GPD 的 arxiv MCP 是上游 arxiv_mcp_server 的桥接。OpenCode 已有独立的 arxiv-search skill                |
+
+**保留的 MCP**：research-conventions（通用约定锁框架）、research-state（通用项目状态管理）。2 个 MCP 进程替代 GPD 的 8 个。
+
+---
+
+## 3.4 与 GPD 的架构对比
+
+| 功能         | GPD 实现                                                                               | 我们实现                                                             | 改进点                                               |
+| ------------ | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------- | ---------------------------------------------------- |
+| 维度分析     | MCP dimensional_check：解析预标注 `[M][L]^2` 括号，关键词扫描                          | script dimensional_check.py：SymPy 解析原始表达式，追踪维度          | 确定性计算 vs 关键词扫描；原始表达式 vs 预标注       |
+| 极限推导     | MCP limiting_case_check：关键词扫描 "limit"/"→" 是否出现，返回 `requires_verification` | script limiting_case_check.py：`sympy.limit()` 实际计算极限值        | 确定性计算 vs 关键词扫描；实际推导 vs 文档存在性检查 |
+| Ward 恒等式  | MCP run_check 返回 oracle_hint 文本；LLM 自己写 SymPy 并自己判断                       | script ward*identity_check.py：`sympy.simplify(q*μ\*M^μ)` 确定性验证 | 确定性计算 vs LLM 自写代码自判断                     |
+| 对称性验证   | MCP symmetry_check：返回策略描述文本                                                   | script symmetry_check.py：SymPy 变换验证模板                         | 确定性计算 vs 文本指引                               |
+| 错误目录     | MCP 从 markdown 解析 104 类，返回 JSON                                                 | skill references/error_catalog.json（精选 20 类）+ SKILL.md 程序     | 预加载 vs 按需查询；精选 vs 全量                     |
+| 领域清单     | MCP 硬编码 DOMAIN_CHECKLISTS 字典                                                      | skill references/bundles/\*.json 数据文件                            | 可修改 JSON vs 硬编码 Python；按需加载 vs 预加载     |
+| 约定锁       | MCP（原子写入）                                                                        | MCP research-conventions（原子写入，通用框架）                       | 相同机制，但通用框架而非物理专用                     |
+| 项目状态     | MCP gpd-state                                                                          | MCP research-state（通用项目状态）                                   | 相同机制，但通用命名                                 |
+| 报告格式验证 | MCP correctness_validators                                                             | skill SKILL.md 中的 oracle gate 程序                                 | prompt 注入 vs MCP 调用                              |
+| 技能路由     | MCP skills_server route_skill                                                          | OpenCode skill_refs + slash commands                                 | 原生机制 vs 自建路由                                 |
+| 协议路由     | MCP protocols_server route_protocol                                                    | skill_refs 本身                                                      | 原生机制 vs 自建路由                                 |
+
+---
+
+## 3.5 参考文档
+
+### 文件结构
+
+```
+.opencode/
+  agents/                                     → flat 结构 + 前缀命名
+  │   research.md                             → 通用 research agent
+  │   research-explorer.md                    → 通用 explorer subagent
+  │   research-verifier.md                    → 通用 verifier subagent
+  │   gpd-verifier.md                         → 物理插件 verifier (gpd- 前缀)
+  │   gpd-reviewer.md                         → 物理插件 reviewer
+  skills/                                     → 通用 skills (flat) + 插件 skills (plugins/ 子目录)
+  │   deep-research/SKILL.md                  → 通用
+  │   autoresearch/SKILL.md                   → 通用
+  │   literature-review/SKILL.md              → 通用
+  │   research-verification/SKILL.md          → 通用验证框架
+  │   plugins/gpd/                            → 物理插件（可独立卸载/分享）
+  │   │   gpd-verification/SKILL.md           → 验证程序 + scripts/
+  │   │   │   scripts/dimensional_check.py
+  │   │   │   scripts/limiting_case_check.py
+  │   │   │   scripts/ward_identity_check.py
+  │   │   │   scripts/symmetry_check.py
+  │   │   │   scripts/spot_check.py
+  │   │   │   scripts/convergence_check.py
+  │   │   gpd-errors/SKILL.md                 → 错误目录 + references/
+  │   │   │   references/error_catalog.json
+  │   │   │   references/detection_strategies.json
+  │   │   │   references/traceability_matrix.json
+  │   │   gpd-domain-check/SKILL.md           → 领域 bundle + references/
+  │   │   │   references/bundles/qft.json (12 domains)
+  │   │   gpd-conventions/SKILL.md            → 约定程序 + references/
+  │   │   │   references/convention_defaults.json
+  │   │   │   references/subfield_defaults/physics.json
+  │   plugins/bio/                            → 生物插件（假设未来有，示例）
+  │   │   bio-verification/SKILL.md           → 生物验证程序
+  │   │   bio-errors/SKILL.md                 → 生物错误目录
+  get-physics-done/                           → 参考文档（物理领域参考，按需加载）
+  │   references/verification/
+  │   templates/
+  │   paper-templates/
+```
+
+参考文档不注入 system prompt，而是通过 agent prompt_append 中的 `@` 引用路径，由 LLM 在需要时通过 `read` 工具按需加载（GPD 方式）。
+
+**注意**: 错误目录和领域 bundle 数据文件不再放在 `get-physics-done/` 下，而是附在各自的 skills 中（references/ 子目录）。这样每个 skill 是自包含的，用户可以独立替换或移除某个 skill 而不影响其他。
 
 ---
 
@@ -585,134 +520,72 @@ def get_traceability(check_category: str) -> dict:
 
 ### 恢复机制
 
-research agent 的 prompt_append 中包含:
-
-```
-## Session Recovery
-On entering research mode, read GPD/STATE.md and GPD/state.json for project context.
-If STATE.md indicates incomplete phase, resume from that point.
-```
-
-**不修改核心 prompt.ts** — 恢复指令在 agent md 的 prompt_append 中，由 mode-switch enter 时注入。
+与 Layer 2 原设计一致（research agent prompt_append 中包含恢复指令）。
 
 ---
 
-## 3.7 MCP Skill 路由文件
+## 3.7 Cherry-pick 验证（与 GPD 项目保持一致）
 
-为了让 research agent 的 skill_refs 包含 `gpd-conventions` 和 `gpd-verification`，需要创建对应的 SKILL.md 文件（作为 MCP 工具的路由入口）:
+每个从 GPD cherry-pick 的数据文件包含 `gpd_source` 字段（与 overview 文档定义一致）。
 
-### gpd-conventions skill
-
-**文件**: `.opencode/skills/gpd-conventions/SKILL.md`
-
-```yaml
----
-name: gpd-conventions
-description: Physics convention lock management. Check, set, validate, and compare conventions across research phases. Use before any calculation to ensure consistency.
----
-
-# Convention Management
-
-Use gpd-conventions MCP tools:
-
-- `convention_lock_status` — check current convention lock
-- `convention_set` — set a convention (metric_signature, fourier_convention, units, gauge_choice, etc.)
-- `convention_check` — verify file's ASSERT_CONVENTION headers match lock
-- `subfield_defaults` — get default conventions for a domain
-
-Before any calculation in physics/math, call `convention_lock_status` to confirm which conventions are active.
-```
-
-### gpd-verification skill
-
-**文件**: `.opencode/skills/gpd-verification/SKILL.md`
-
-```yaml
----
-name: gpd-verification
-description: Structured physics verification via MCP tools. Dimensional analysis, limiting cases, symmetry checks, conservation laws, and domain-specific verification bundles. Use for rigorous verification of research results.
----
-
-# Structured Verification
-
-Use gpd-verification MCP tools:
-
-- `suggest_contract_checks(contract)` — get suggested verification checks for your PLAN
-- `run_contract_check(request)` — execute a specific check with custom parameters
-- `get_bundle_checklist(bundle_ids)` — get domain-specific checklist (qft, condensed_matter, numerical, etc.)
-- `run_check(check_type, input)` — run a check by type (dimensional, limiting_case, symmetry, conservation, ...)
-- `dimensional_check(expression, dimensions)` — dedicated dimensional analysis
-- `limiting_case_check(expression, limits)` — dedicated limiting case check
-- `symmetry_check(expression, symmetries)` — dedicated symmetry verification
-
-These tools are flexible — define custom verification parameters, not just use hardcoded checklists.
-```
+**语义等价但计算增强**: GPD 使用 Python MCP 模块返回指引文本和关键词扫描。我们使用 JSON 数据格式 + skill SKILL.md 程序 + scripts 确定性计算。验证维度、红旗项、标准基准与 GPD 对应文件完全一致，但**计算验证由 scripts 执行而非依赖 LLM 判断**。
 
 ---
 
-## 3.8 参考文档
+## 3.8 自定义检查的开发者指南
 
-### 文件结构
+### 添加新验证脚本
 
-```
-.opencode/get-physics-done/
-├── verification/
-│   ├── check_registry.json
-│   ├── bundles/ (12 domain JSON files)
-│   ├── checks/ (Python check implementations)
-│   ├── custom_checks/ (user directory + README)
-│   └── errors/
-│       └── error_catalog.json
-├── conventions/
-│   └── subfield_defaults.json
-├── references/
-│   ├── verification/
-│   │   ├── core/
-│   │   │   ├── verification-core.md         # 通用验证维度和优先级
-│   │   │   ├── computational-verification-templates.md  # 5 个 copy-paste 计算验证模板
-│   │   │   └── verification-hierarchy-mapping.md  # 验证层次映射
-│   │   └── domains/                          # 12+ 领域验证参考（按需加载）
-│   │       ├── verification-domain-qft.md
-│   │       ├── verification-domain-condensed-matter.md
-│   │       └─ ... (11 more)
-│   └── planning/
-│       ├── planner-conventions.md            # 规划约定检查指导
-│       └── planner-approximations.md         # 近似追踪指导
-│   └── shared/
-│       ├── shared-protocols.md               # 共享协议（禁止文件、源层次、约定追踪）
-│       └── canonical-schema-discipline.md    # 规范 schema 约定
-├── templates/
-│   ├── verification-report.md                # VERIFICATION.md 报告模板
-│   └── contract-results-schema.md            # 合同结果 schema
-└── paper-templates/
-│   ├── prl.tex                               # Physical Review Letters
-│   ├── nature.tex                            # Nature
-│   ├── jhep.tex                              # JHEP
-│   ├── apj.tex                               # ApJ
-│   ├── mnras.tex                             # MNRAS
-│   └── jfm.tex                               # JFM
-```
+1. 在 `.opencode/skills/plugins/gpd/gpd-verification/scripts/` 中创建 `my_check.py`
+2. 实现标准接口: `def run(input_data: dict) -> dict`，返回 `{status, computation, evidence, confidence}`
+3. 在 SKILL.md 的 Step 2 检查类型表中添加条目
+4. verifier subagent 会通过 shell 工具调用新脚本
 
-参考文档不注入 system prompt，而是通过 agent prompt_append 中的 `@` 引用路径，由 LLM 在需要时通过 `read` 工具按需加载（GPD 方式）。
+### 添加新错误类
+
+1. 在 `.opencode/skills/plugins/gpd/gpd-errors/references/error_catalog.json` 中添加条目
+2. 在 SKILL.md 的 Step 3 检测策略表中添加条目
+3. 无需修改 MCP 服务器或核心代码
+
+### 添加新领域 bundle
+
+1. 在 `.opencode/skills/plugins/gpd/gpd-domain-check/references/bundles/` 中创建 `<domain>.json`
+2. 在 SKILL.md 的 Step 1 域列表中添加条目
+3. 无需修改 MCP 服务器或核心代码
+
+### 替换验证 skill
+
+1. 创建新 skill 目录（如 `.opencode/skills/my-verification/SKILL.md`）
+2. 保持相同接口约定（Procedure 结构、script JSON 输入/输出格式）
+3. 在 verifier agent 的 skill_refs 中替换 `gpd-verification` → `my-verification`
+4. 无需修改 MCP 服务器或核心代码
 
 ---
 
 ## 验收测试
 
 ```
-T3.1: gpd-verification MCP 服务器启动后，mcp__gpd_verification__run_check 工具可用
-T3.2: gpd-verification suggest_contract_checks 返回基于 contract 的建议检查
-T3.3: gpd-verification get_bundle_checklist("qft") 返回 QFT 验证清单
-T3.4: gpd-verification dimensional_check 通过维度追踪返回 pass/fail
-T3.5: gpd-conventions MCP 服务器启动后，mcp__gpd_conventions__convention_lock_status 可用
-T3.6: gpd-conventions convention_set("metric_signature", "mostly-minus") 更新 state.json
-T3.7: gpd-conventions convention_check 验证 ASSERT_CONVENTION 行与锁定一致
-T3.8: gpd-errors MCP 服务器启动后，mcp__gpd_errors__list_error_classes 返回 20 个错误类
-T3.9: 修改 check_registry.json 添加新检查类型后，run_check 可调用新类型
-T3.10: 修改 bundles/custom.json 后，get_bundle_checklist("custom") 返回新 bundle
-T3.11: 添加 custom_checks/my_check.py + 注册后，run_check("my_check_type") 调用自定义检查
-T3.12: verifier agent 通过 MCP 工具运行验证（不硬编码检查清单）
-T3.13: cherry-pick 验证: qft.json 的检查维度与 GPD verification-domain-qft.md 语义等价
-T3.14: MCP 服务器独立运行，不影响 OpenCode 核心运行时
-T3.15: 删除 MCP 配置后，OpenCode 核心行为不变
+T3.1: research-conventions MCP 服务器启动后，mcp__research_conventions__convention_lock_status 可用
+T3.2: research-conventions convention_set("metric_signature", "mostly-minus") 原子更新 state.json
+T3.3: research-conventions convention_check 验证 ASSERT_CONVENTION 行与锁定一致
+T3.4: research-conventions subfield_defaults("qft") 返回 QFT 默认约定（从 gpd-conventions skill 数据加载）
+T3.5: research-state MCP 服务器启动后，mcp__research_state__get_state 可用
+T3.6: research-state advance_plan 原子推进项目状态
+T3.7: research-verification skill 通过 skill_refs 注入到 research-verifier prompt（通用框架）
+T3.8: gpd-verification skill 通过 skill_refs 注入到 gpd-verifier prompt（物理插件）
+T3.9: dimensional_check.py 接受 JSON 输入，返回 {status, computation, evidence, confidence}
+T3.10: dimensional_check.py 用 SymPy 解析原始表达式（非预标注括号），追踪维度
+T3.11: limiting_case_check.py 用 sympy.limit() 计算极限值（非关键词扫描）
+T3.12: ward_identity_check.py 用 sympy.simplify() 验证 q_μ*M^μ = 0（确定性计算）
+T3.13: gpd-errors skill 通过 skill_refs 注入（在 plugins/gpd/ 目录），references/error_catalog.json 包含 20 个物理错误类
+T3.14: gpd-domain-check skill 通过 skill_refs 注入（在 plugins/gpd/ 目录），references/bundles/qft.json 包含 QFT 验证清单
+T3.15: gpd-verifier agent 调用 gpd-verification scripts 获取确定性计算结果
+T3.16: gpd-verifier agent 调用 research-conventions MCP 进行约定锁读写
+T3.17: research-verifier agent 仅有 research-verification skill（无 gpd-* 物理插件）
+T3.18: cherry-pick 验证: qft.json 的检查维度与 GPD verification-domain-qft.md 语义等价
+T3.19: 修改 error_catalog.json 添加新错误类后，gpd-errors skill 识别新类
+T3.20: 添加 scripts/my_check.py + 注册后，gpd-verifier 可调用新检查
+T3.21: 仅 2 个 MCP 进程运行（research-conventions + research-state），不影响 OpenCode 核心
+T3.22: 删除 MCP 配置 + skills 后，OpenCode 核心行为不变
+T3.23: 非物理领域用户可使用 research-verifier + 自己的领域验证 skills（无需 gpd-* 插件）
 ```

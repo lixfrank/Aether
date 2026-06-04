@@ -21,8 +21,10 @@
 ## 设计原则
 
 - **增量添加**：在已有文件中只添加新函数/新字段，不改已有函数的行为
-- **零副作用**：不使用新功能时，行为与 v0.6.0 完全一致
+- **零副作用**：不使用新功能时，行为与 v0.6.0 完全一致（permission 语义安全修复除外）
 - **deny-before-allow**：Permission Ruleset 中 deny 规则排在 allow 规则之前（`findLast` 最后匹配胜，allow 覆盖 blanket deny）
+- **可选默认值 = undefined**：所有新增字段的默认值为 undefined（不设 z.default），确保缺失时不产生任何规则、不改变任何行为。显式传值才生效。内嵌对象的子字段同样不设 z.default，fallback 默认值在消费函数中用 `?? default` 实现。
+- **zod schema 的实际用途**：`Agent.Info` 的 zod schema 有两个实际用途——（1）通过 `resolver(Agent.Info.array())` 为 `/api/agents` 端点生成 OpenAPI 文档；（2）通过 `z.infer<typeof Info>` 为整个代码库提供 TypeScript 类型。**Agent.Info 不经过 zod parse**（native agent 在 agent.ts 中手工构建，custom agent 在 merge 循环中逐字段赋值），因此 `z.default()` 不在运行时生效。如果在 Agent.Info 上使用 `z.default()`，会导致 OpenAPI 文档和 TypeScript 类型暗示一个运行时不存在的默认值，造成误导。正确做法：使用 `.optional()` 让 schema 准确反映运行时行为（字段可为 undefined），默认值语义在 `Discipline.compile()` 或消费函数中实现。
 
 ---
 
@@ -72,6 +74,30 @@ export function intersection(parent: Ruleset, child: Ruleset, override?: Ruleset
 
 仅在 `tool/task.ts` 子代理 session 创建中使用 `intersection`，**不改变** `agent.ts` 中 build/plan/general/explore 的 `merge` 逻辑。
 
+### intersection 的 override 参数语义
+
+`intersection(parent, child, override)` 的计算过程：
+
+1. `childEffective = Permission.merge(child, override)` — override 是 child 的扩展，merge 后 override 中的规则排在 child 之后，findLast 使 override 胜
+2. `intersection(parent, childEffective)` — parent deny 总是生效，child deny 总是生效，child allow 只在 parent allow 时生效
+
+| parent 规则         | child 规则                 | override (discipline) 规则                       | childEffective = merge(child, override)               | intersection 结果                                                                | 说明                                                       |
+| ------------------- | -------------------------- | ------------------------------------------------ | ----------------------------------------------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| bash, \*, **allow** | bash, \*, **allow**        | bash, "alpha*", **allow** + bash, *, **deny**    | bash, _, allow → bash, alpha_, allow → bash, \*, deny | findLast → **deny**                                                              | discipline deny-before-allow：特定 allow 覆盖 blanket deny |
+| bash, \*, **deny**  | bash, "alpha\*", **allow** | 无 override                                      | bash, alpha\*, allow                                  | **deny**                                                                         | parent deny 覆盖 child allow（安全修复）                   |
+| bash, \*, **allow** | bash, "secret\*", **deny** | 无 override                                      | bash, secret\*, deny                                  | **deny**                                                                         | child deny 不被 parent allow 覆盖                          |
+| edit, \*, **allow** | 无 edit 规则               | edit, \*, **deny** + edit, "src/**", **allow\*\* | edit, \*, deny → edit, src/\*\*, allow                | evaluate("edit","src/foo") → **allow**; evaluate("edit","secret/foo") → **deny** | file_scope 精细限制                                        |
+| task, \*, **allow** | 无 task 规则               | task, \*, **deny**                               | task, \*, deny                                        | **deny**                                                                         | delegation_depth=0                                         |
+| _, _, **allow**     | _, _, **allow**            | todowrite, \*, **deny**                          | todowrite, \*, deny                                   | **deny**                                                                         | 禁止子代理 todowrite                                       |
+| _, _, **allow**     | _, _, **allow**            | 无 override                                      | \*, allow                                             | **allow**                                                                        | 无限制                                                     |
+
+**关键语义：**
+
+- parent deny **总是**生效（安全底线）
+- child deny **总是**生效（子代理主动限制）
+- override (discipline) 是 child 的扩展：先 merge(child, override)，再 intersection(parent, childEffective)
+- discipline 的 deny-before-allow 顺序保证特定 allow 覆盖 blanket deny
+
 ### 验收测试
 
 ```
@@ -98,6 +124,10 @@ T0.5: bun typecheck 在 packages/opencode 通过
 
 编译产物是普通 `Permission.Ruleset`，不引入新的运行时路径。**deny-before-allow 顺序**：deny 规则排在 allow 规则之前，保证 `findLast` 语义下特定 allow 覆盖 blanket deny。
 
+**默认值策略**：`delegation_depth`、`max_steps`、`timeout_seconds` 等字段的默认值为 **undefined**（不设 `z.default()`），仅在显式传值时编译规则。`undefined` = "不限制"（不产生规则），`0` = "显式禁止"。这确保不传新参数时行为与 v0.6.0 一致。
+
+> **注意**：`Agent.Info` 的 zod schema 有两个实际用途——OpenAPI 文档生成和 TypeScript 类型推断——但 Agent.Info 不经过 zod parse。native agent 在 `agent.ts` 中手工构建，custom agent 在 merge 循环中逐字段赋值。`z.default()` 不在运行时生效，且会误导 OpenAPI 文档和 TypeScript 类型。因此所有新增字段使用 `.optional()`（无 default），默认值语义在 `compile()` 中实现：`undefined` = "不限制"（不产生规则），显式传值才生效。
+
 ### 代码
 
 ```ts
@@ -114,10 +144,10 @@ export namespace Discipline {
       })
       .optional(),
     file_scope: z.string().array().optional(),
-    delegation_depth: z.number().int().min(0).max(3).default(0),
+    delegation_depth: z.number().int().min(0).max(3).optional(),
     max_steps: z.number().int().min(1).max(50).optional(),
-    timeout_seconds: z.number().int().min(30).max(600).default(300),
-    return_format: z.enum(["text", "structured", "raw"]).default("text"),
+    timeout_seconds: z.number().int().min(30).max(600).optional(),
+    return_format: z.enum(["text", "structured", "raw"]).optional(),
   })
 
   export function compile(d: z.infer<typeof Schema>): Permission.Ruleset {
@@ -160,15 +190,16 @@ export namespace Discipline {
     if (d.delegation_depth === 0) {
       rules.push({ permission: "task", pattern: "*", action: "deny" })
     }
+    // delegation_depth undefined 或 > 0 → 不产生规则，task 权限取决于 agent 自身
 
     return rules
   }
 }
 ```
 
-### Agent 级 env_scope
+### Agent 级 env_scope 编译（统一入口）
 
-当 agent md 文件中声明 `env_scope.allowed_commands`（如 research agent 的 bash 限制），这部分在 `agent.ts` 的 merge 循环中通过 `Discipline.compile()` 编译为 Ruleset 并合并到 agent.permission 中。
+env_scope 的编译**只在 `agent.ts` 中进行**，不在 `task.ts` 的 discipline 参数中重复编译。编译后的规则作为 agent.permission 的一部分，在 task.ts 的 `intersection()` 中自然参与权限计算。
 
 ```ts
 // agent.ts merge 循环中新增（在 value.permission 处理之后）
@@ -184,14 +215,15 @@ if (value.env_scope?.allowed_commands) {
 T0.6: compile({env_scope:{allowed_commands:["alpha","docker"]}}) 生成 [{bash,"*",deny}, {bash,"alpha*",allow}, {bash,"docker*",allow}]
 T0.7: compile({file_scope:["src/**","test/**"]}) 生成 每个 FILE_TOOL 一条 blanket deny + 每个 scope 一条 allow
 T0.8: compile({delegation_depth:0}) 包含 [{task,"*",deny}]
-T0.9: compile({permission_override:{edit:["allow"],bash:["allow","docker*"]}}) 生成正确的 allow/pattern 规则
-T0.10: deny-before-allow 顺序：Permission.evaluate("bash","alpha run...", ruleset) = allow；Permission.evaluate("bash","rm -rf...", ruleset) = deny
-T0.11: bun typecheck 通过
+T0.9: compile({delegation_depth:undefined}) 不产生任何 task 规则（与 v0.6.0 一致）
+T0.10: compile({permission_override:{edit:["allow"],bash:["allow","docker*"]}}) 生成正确的 allow/pattern 规则
+T0.11: deny-before-allow 顺序：Permission.evaluate("bash","alpha run...", ruleset) = allow；Permission.evaluate("bash","rm -rf...", ruleset) = deny
+T0.12: bun typecheck 通过
 ```
 
 ---
 
-## 改动 0.3: Task Tool 参数扩展
+## 改动 0.3: Task Tool 参数扩展与权限重构
 
 ### 问题
 
@@ -199,7 +231,7 @@ v0.6.0 的 task.ts 只有 5 个参数（description, prompt, subagent_type, task
 
 ### 文件
 
-`packages/opencode/src/tool/task.ts`（在已有 parameters 上添加 optional 字段 + 在 execute 中增量处理）
+`packages/opencode/src/tool/task.ts`（在已有 parameters 上添加 optional 字段 + 新增 2 个 import + 在 execute 中重构权限计算 + 移除已有手工拼接代码块）
 
 ### 新增参数
 
@@ -211,32 +243,108 @@ const parameters = z.object({
   subagent_type: z.string(),
   task_id: z.string().optional(),
   command: z.string().optional(),
-  // 新增（全部 optional，默认值 = v0.6.0 行为）
-  mode: z.enum(["serial", "concurrent", "background"]).default("serial").optional(),
+  // 新增（全部 optional，默认值 undefined = 不产生规则 = v0.6.0 行为）
+  mode: z.enum(["serial", "concurrent", "background"]).optional(),
   permission_override: z.record(z.string(), z.string().array().optional()).optional(),
   file_scope: z.string().array().optional(),
-  delegation_depth: z.number().int().min(0).max(3).default(0).optional(),
+  delegation_depth: z.number().int().min(0).max(3).optional(),
   max_steps: z.number().int().min(1).max(50).optional(),
-  timeout_seconds: z.number().int().min(30).max(600).default(300).optional(),
+  timeout_seconds: z.number().int().min(30).max(600).optional(),
   category: z.string().optional(),
 })
 ```
 
-### execute 中权限计算改为
+### execute 中权限计算（统一 permission 流程）
+
+v0.6.0 中 task.ts 使用两套并行机制：
+
+1. **permission 数组**：手工拼接 `{todowrite, *, deny}` / `{task, *, deny}` / `{primary_tool, *, allow}` → 传给 `Session.create({permission: [...]})`
+2. **tools dict**：`{todowrite: false, task: false}` → 传给 `SessionPrompt.prompt({tools: {...}})` → 在 `resolveTools` 中硬删除工具
+
+新方案将两套机制统一为一套：所有约束通过 `Discipline.compile()` 编译为 `Ruleset`，再通过 `intersection()` 计算出完整的 `sessionPermission`，传给 `Session.create`。运行时 `Permission.disabled()` 检测 `{tool, *, deny}` 规则并硬删除工具——与 `tools dict` 效果等价。
 
 ```ts
+// 注意：Tool.Context.agent 是 string（agent name），不是 Agent.Info。
+// 需要通过 Agent.get() 获取 caller 的 Agent.Info
+const callerAgent = await Agent.get(ctx.agent)
+const targetAgent = await Agent.get(params.subagent_type)
+
+// discipline 只包含 task 级参数（env_scope 不在此处，已在 agent.permission 中）
 const discipline = {
-  mode: params.mode ?? "serial",
   permission_override: params.permission_override,
-  env_scope: undefined, // env_scope comes from agent config, not task params
   file_scope: params.file_scope,
-  delegation_depth: params.delegation_depth ?? 0,
+  delegation_depth: params.delegation_depth,
   max_steps: params.max_steps,
-  timeout_seconds: params.timeout_seconds ?? 300,
+  timeout_seconds: params.timeout_seconds,
 }
 const disciplineRules = Discipline.compile(discipline)
-const effectivePermission = Permission.intersection(caller.permission, agent.permission, disciplineRules)
+
+// intersection 计算完整的 effective permission
+// targetAgent.permission 已包含 env_scope 编译的规则（来自改动 0.4 的 agent.ts merge）
+const sessionPermission = Permission.intersection(callerAgent.permission, targetAgent.permission, disciplineRules)
+
+// primary_tools 语义：v0.6.0 中 primary_tools 在子代理 session permission 中添加 allow，
+// 在 tools dict 中设为 false（硬删除）。新方案中，primary_tools 的 allow 不需要额外添加
+// （caller defaults 已有 * allow），但需要将 primary_tools deny 规则加入 sessionPermission，
+// 保留"子代理不可用 primary_tools"的行为。
+const cfg = await Config.get()
+const primaryToolsDeny = (cfg.experimental?.primary_tools ?? []).map((t) => ({
+  permission: t,
+  pattern: "*",
+  action: "deny" as const,
+}))
+const finalPermission = [...sessionPermission, ...primaryToolsDeny]
+
+// 创建 session 时传入完整的 permission
+const session = await Session.create({
+  parentID: ctx.sessionID,
+  title: params.description + ` (@${targetAgent.name} subagent)`,
+  permission: finalPermission,
+})
+
+// 不再需要 v0.6.0 的 tools dict（Permission.disabled 在运行时自动硬删除 denied 工具）
+const msg = await MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID })
+const model = targetAgent.model ?? { modelID: msg.info.modelID, providerID: msg.info.providerID }
+
+const promptParts = await SessionPrompt.resolvePromptParts(params.prompt)
+const result = await SessionPrompt.prompt({
+  messageID: MessageID.ascending(),
+  sessionID: session.id,
+  model,
+  agent: targetAgent.name,
+  parts: promptParts,
+})
 ```
+
+**被替换的已有代码块**（执行时必须移除）：
+
+- 第 66-67 行：`hasTaskPermission` / `hasTodoWritePermission` 检查（被 intersection + Discipline.compile 替代）
+- 第 78-102 行：手工拼接的 permission 数组（被 `finalPermission` 替代）
+- 第 108-111 行：手工 model 选择逻辑（被 category routing + fallback 链替代）
+- 第 138-143 行：tools dict（被 Permission.disabled 运行时硬删除替代）
+
+**新增 import**：
+
+```ts
+import { Discipline } from "@/session/discipline" // 新增
+import { Provider } from "../provider/provider" // 新增（category routing 需要）
+```
+
+**primary_tools 行为保留**：v0.6.0 中 `primary_tools` 的语义是"仅 primary agent 可用"。当前 task.ts 通过 permission allow + tools dict false 双重机制实现。新方案中 permission allow 不需要（caller defaults 已有 `* allow`），但需要在 sessionPermission 末尾追加 `{primary_tool, *, deny}` 规则，保留"子代理不可用"的行为。`Permission.disabled()` 在运行时检测这些规则并硬删除工具。
+
+**关于 prompt.ts 的交互**：运行时 `Permission.merge(agent.permission, session.permission)` 中的 `session.permission` 已经是 `intersection()` 的完整结果（包含 parent deny 传播 + discipline 扩展）。`merge` 后 `agent.permission` 的规则出现在 `session.permission` 之前，findLast 使得 `session.permission` 中的规则胜出。冗余的 `agent.permission` 规则不影响 evaluate 结果，**不需要改动 prompt.ts**。
+
+### 逐场景验证（v0.6.0 vs 新方案）
+
+| 场景                            | v0.6.0 行为                                                                                           | 新方案行为                                                                                                      | 是否一致                                                            |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| **A: general agent 正常调用**   | session 添加 `{todowrite, *, deny}`；merge(general.permission, session.permission) → todowrite denied | general.permission 已含 `{todowrite, *, deny}`；intersection(caller, general, discipline={}) → todowrite denied | ✓                                                                   |
+| **B: explore agent 正常调用**   | session 添加 `{todowrite, *, deny}` + `{task, *, deny}`；merge 后 denied                              | explore permission 中 `{*, deny}` 使 todowrite/task 在 explore 侧就 denied，intersection 正确传播               | ✓                                                                   |
+| **C: parent deny, child allow** | merge → child allow 覆盖 parent deny（安全漏洞）                                                      | intersection → parent deny 覆盖 child allow                                                                     | 预期改变（安全修复）                                                |
+| **D: primary_tools deny**       | session 添加 `{primary_tool, *, allow}` + tools dict `{primary_tool: false}` → 子代理不可用           | finalPermission 末尾追加 `{primary_tool, *, deny}` → Permission.disabled 硬删除 → 子代理不可用                  | ✓                                                                   |
+| **E: 不传新参数**               | 手工拼接 deny todowrite/task（if agent lacks permission）                                             | discipline={} → compile 不产生规则 → intersection(caller, agent, []) → 行为取决于 caller+agent 权限             | ✓（与 v0.6.0 一致，task/todowrite deny 来自 agent 自身 permission） |
+
+**场景 E 是关键一致性保证**：`delegation_depth` 默认 undefined（不传时不产生 `{task, *, deny}`），task 的 deny/allow 完全取决于 agent 自身权限——与 v0.6.0 中 `hasTaskPermission` 逻辑等价。
 
 ### Category routing
 
@@ -254,43 +362,60 @@ category: z.record(
 ).optional()
 ```
 
-在 `task.ts` execute 中:
+在 `task.ts` execute 中，category 路由保持 fallback 安全链：
 
 ```ts
 const cfg = await Config.get()
 const categoryConfig = params.category ? cfg.category?.[params.category] : undefined
 const categoryModel = categoryConfig?.model ? Provider.parseModel(categoryConfig.model) : undefined
-const model = categoryModel ?? agent.model ?? { modelID: msg.info.modelID, providerID: msg.info.providerID }
+// fallback 安全：category 失败 → agent.model → caller.model
+const model = categoryModel ?? targetAgent.model ?? { modelID: msg.info.modelID, providerID: msg.info.providerID }
 ```
+
+**注意**：`category` 字段添加在 `config.ts` 的 `Config.Info` schema 中（改动 0.4 的 config.ts 改动范围之一）。`Config.Info` 有 `.strict()` 模式（config.ts 约第 1320 行），不允许未知 key，因此 `category` 必须作为显式 schema 字段添加，否则 config 加载时会报错。此改动不改变已有字段的行为。
 
 ### 验收测试
 
 ```
-T0.12: 不传任何新参数时，task tool 行为与 v0.6.0 一致（除了权限用 intersection 替代 merge 的安全修复）
-T0.13: 传 permission_override: {bash:["allow","docker*"]} 时，子代理只有 docker* bash 权限
-T0.14: 传 delegation_depth:0 时，子代理的 task 工具被 deny
-T0.15: 传 file_scope:["src/**"] 时，子代理的文件操作工具被限制在 src/** 范围
-T0.16: 传 category:"quick" 且 config.category.quick.model 设为 claude-haiku-4-5 时，子代理使用指定模型
-T0.17: bun typecheck 通过
+T0.13: 不传任何新参数时，task tool 行为与 v0.6.0 一致（permission 语义安全修复除外）
+T0.14: 传 permission_override: {bash:["allow","docker*"]} 时，子代理只有 docker* bash 权限
+T0.15: 传 delegation_depth:0 时，子代理的 task 工具被 deny
+T0.16: 传 delegation_depth:undefined（或不传）时，task 权限取决于 agent 自身（与 v0.6.0 一致）
+T0.17: 传 file_scope:["src/**"] 时，子代理的文件操作工具被限制在 src/** 范围
+T0.18: 传 category:"quick" 且 config.category.quick.model 设为 claude-haiku-4-5 时，子代理使用指定模型
+T0.19: category 路由 model 无效时，静默 fallback 到 agent.model/caller.model
+T0.20: sessionPermission 通过 Session.create({permission}) 传递后，运行时 Permission.disabled 正确硬删除 denied 工具
+T0.21: bun typecheck 通过
 ```
 
 ---
 
-## 改动 0.4: Agent.Info 扩展字段
+## 改动 0.4: Agent.Info 扩展字段（不含 base_agent）
 
 ### 问题
 
-v0.6.0 的 Agent.Info 缺少 base_agent（继承）、skill_refs（技能白名单）、env_scope（环境隔离）、scale_decision（规模决策）等字段。
+v0.6.0 的 Agent.Info 缺少 skill_refs（技能白名单）、env_scope（环境隔离）、scale_decision（规模决策）等字段。
+
+### 设计决策：去掉 base_agent 继承
+
+原方案包含 `base_agent` 字段用于 agent 间继承（如 research 继承 explore 的 permission/model/prompt）。经分析后决定去掉，原因：
+
+1. 只涉及 4 个 research 系 agent，手动声明 permission 的成本很低
+2. explore 的 permission 不太会频繁变动，手动复制不会造成维护负担
+3. 去掉后 agent.ts 的改动从"带继承和编译的复杂合并"降为"逐字段赋值"，侵入性显著降低
+4. 如果未来需要继承，可作为独立改动单独引入，不在 Layer 0 中
+
+Layer 2 的 research 系 agent 需要手动声明 permission，参考 explore 的 permission 规则。
 
 ### 文件
 
-`packages/opencode/src/agent/agent.ts`（在 Info schema 末尾添加 optional 字段 + 在 state merge 循环中增量处理）
+`packages/opencode/src/agent/agent.ts`（在 Info schema 末尾添加 optional 字段 + 在 state merge 循环中逐字段赋值 + 新增 Discipline import）
+`packages/opencode/src/config/config.ts`（在 Agent schema 中添加 optional 字段 + 更新 knownKeys 白名单 + 在 Info schema 中添加 category 字段）
 
-### 新增字段
+### 新增字段（Agent.Info）
 
 ```ts
 // Info schema 末尾添加
-baseAgent: z.string().optional(),
 skillRefs: z.array(z.string()).optional(),
 delegationDepth: z.number().int().min(0).optional(),
 fileScope: z.string().array().optional(),
@@ -305,55 +430,53 @@ envScope: z.object({
   allowed_commands: z.string().array().optional(),
 }).optional(),
 scaleDecision: z.object({
-  direct_threshold: z.number().default(10),
-  never_spawn_for: z.string().array().default([]),
+  direct_threshold: z.number().optional(),
+  never_spawn_for: z.string().array().optional(),
   rules: z.array(z.object({
     condition: z.string(),
     subagent_count: z.number(),
     subagent_type: z.string(),
     mode: z.enum(["serial", "concurrent", "background"]),
-  })).default([]),
+  })).optional(),
 }).optional(),
 ```
 
+> 所有新增字段使用 `.optional()`（无 `z.default()`），包括内嵌对象的子字段。`Agent.Info` 的 zod schema 有两个实际用途：OpenAPI 文档生成（`resolver(Agent.Info.array())`）和 TypeScript 类型推断（`z.infer<typeof Info>`）。但 Agent.Info 不经过 zod parse——native agent 在 agent.ts 中手工构建，custom agent 在 merge 循环中逐字段赋值。`z.default()` 不在运行时生效，且会误导 OpenAPI 文档和 TypeScript 类型（让它们暗示字段总有值，但实际可为 undefined）。因此所有新增字段（含内嵌子字段）使用 `.optional()`，默认值语义在消费函数中通过 `?? fallback` 实现。
+
 ### Config.Agent 对应字段
 
-在 `config.ts` 的 Agent schema 中添加:
+在 `config.ts` 的 Agent schema 中添加（在 `permission: Permission.optional()` 之后）：
 
 ```ts
-base_agent: z.string().optional(),
 skill_refs: z.array(z.string()).optional(),
-delegation_depth: z.number().int().min(0).max(3).default(0).optional(),
+delegation_depth: z.number().int().min(0).max(3).optional(),
 file_scope: z.string().array().optional(),
 max_steps: z.number().int().positive().optional(),
 fallback_models: z.array(z.union([z.string(), z.object({...})])).optional(),
 env_scope: z.object({ allowed_commands: z.string().array().optional() }).optional(),
-scale_decision: z.object({ ... }).optional(),
+scale_decision: z.object({ direct_threshold: z.number().optional(), never_spawn_for: z.string().array().optional(), rules: z.array(z.object({...})).optional() }).optional(),
+```
+
+**实现注意**：`Config.Agent` 有 `.catchall(z.any()).transform(...)` 结构，transform 中 `knownKeys` 白名单硬编码了已有字段名。新增字段必须加入 `knownKeys`，否则会被静默扫入 `options`。建议在实现时添加 assertion/zod refine，确保 `skill_refs`/`env_scope` 等字段不会意外出现在 `options` 中。
+
+### 新增 import（agent.ts）
+
+```ts
+import { Discipline } from "@/session/discipline" // 新增（env_scope 编译需要）
 ```
 
 ### Merge 循环新增处理
 
 ```ts
-// base_agent inheritance
-if (value.base_agent && agents[value.base_agent]) {
-  const base = agents[value.base_agent]
-  if (!value.model && !item.model) item.model = base.model
-  if (item.temperature === undefined && base.temperature !== undefined) item.temperature = base.temperature
-  if (item.topP === undefined && base.topP !== undefined) item.topP = base.topP
-  if (!value.permission && !item.permission) item.permission = base.permission
-  if (item.steps === undefined && base.steps !== undefined) item.steps = base.steps
-  if (!value.prompt && !item.prompt && base.prompt) item.prompt = base.prompt
-  if (item.color === undefined && base.color !== undefined) item.color = base.color
-}
-// scalar fields
+// 逐字段赋值（无继承逻辑）
 item.skillRefs = value.skill_refs ?? item.skillRefs
-item.delegationDepth = value.delegation_depth ?? item.delegationDepth ?? 0
+item.delegationDepth = value.delegation_depth ?? item.delegationDepth
 item.fileScope = value.file_scope ?? item.fileScope
 item.maxSteps = value.max_steps ?? item.maxSteps ?? item.steps
 item.fallbackModels = value.fallback_models ?? item.fallbackModels
 item.envScope = value.env_scope ?? item.envScope
 item.scaleDecision = value.scale_decision ?? item.scaleDecision
-// env_scope compilation into permission
+// env_scope 编译为 permission（统一入口，不重复编译）
 if (value.env_scope?.allowed_commands) {
   const envRules = Discipline.compile({ env_scope: value.env_scope })
   item.permission = Permission.merge(item.permission, envRules)
@@ -363,17 +486,18 @@ if (value.env_scope?.allowed_commands) {
 ### 验收测试
 
 ```
-T0.18: 不设新字段时，所有 native agent (build/plan/general/explore/compaction/title/summary) 行为不变
-T0.19: 设 base_agent:"explore" 的 agent 继承 explore 的 permission/model/prompt
-T0.20: 设 skill_refs:["alpha-research","arxiv-search"] 的 agent 只看到这两个 skill
-T0.21: 设 env_scope.allowed_commands:["alpha","docker"] 的 agent 生成正确的 bash deny+allow 规则
-T0.22: 设 scale_decision 的 agent 不影响无 scale_decision 的 agent
-T0.23: bun typecheck 通过
+T0.22: 不设新字段时，所有 native agent (build/plan/general/explore/compaction/title/summary) 行为不变
+T0.23: 设 skill_refs:["alpha-research","arxiv-search"] 的 agent 在 skills() 中看到这两个 skill 的完整注入
+T0.24: 设 env_scope.allowed_commands:["alpha","docker"] 的 agent 生成正确的 bash deny+allow 规则
+T0.25: 设 scale_decision 的 agent 不影响无 scale_decision 的 agent
+T0.26: env_scope 编译只在 agent.ts 中发生一次，不在 task.ts 中重复编译
+T0.27: Config.Agent 新字段被 knownKeys 白名单正确识别，不落入 options
+T0.28: bun typecheck 通过
 ```
 
 ---
 
-## 改动 0.5: skill_refs 注入机制
+## 改动 0.5: skill_refs 注入机制（追加而非替换）
 
 ### 问题
 
@@ -381,43 +505,61 @@ v0.6.0 的 skill 注入是广播式（列出所有 skill），对有明确 skill
 
 ### 文件
 
-`packages/opencode/src/session/system.ts`（在 `skills()` 函数中添加 whitelist 分支，不改广播逻辑）
+`packages/opencode/src/session/system.ts`（在 `skills()` 函数返回后追加 skillRefs 内容，不改广播主路径）
 
-### 代码
+### 设计
+
+原方案在 `skills()` 函数开头插入 `if (agent.skillRefs?.length)` 拦截分支，使 skillRefs agent 走全新路径替换广播。这改变了函数的主路径语义。
+
+新方案**不改变主路径**，而是在广播输出之后追加 skillRefs 的完整内容：
 
 ```ts
 export async function skills(agent: Agent.Info) {
   if (Permission.disabled(["skill"], agent.permission).has("skill")) return
 
-  if (agent.skillRefs?.length) {
-    const loaded = await Promise.all(agent.skillRefs.map((name) => Skill.get(name)))
-    const found = loaded.filter((s): s is Skill.Info => s !== undefined)
-    const missing = agent.skillRefs.filter((name) => !loaded.find((s) => s?.name === name))
-    return [
-      "## Skills (mandatory)",
-      "You MUST follow these skills' instructions for every task they cover.",
-      ...found.map((s) => [`### Skill: ${s.name}`, s.content].join("\n")),
-      ...(missing.length ? [`Note: skills ${missing.join(", ")} referenced but not found.`] : []),
-    ].join("\n")
-  }
-
-  // v0.6.0 broadcast behavior (unchanged)
+  // 主路径不变：广播所有可用 skills
   const list = await Skill.available(agent)
-  return [
+  const broadcast = [
     "Skills provide specialized instructions and workflows for specific tasks.",
     "Use the skill tool to load a skill when a task matches its description.",
     Skill.fmt(list, { verbose: true }),
   ].join("\n")
+
+  // 如果有 skillRefs whitelist，追加完整内容（不替换广播）
+  if (agent.skillRefs?.length) {
+    const loaded = await Promise.all(agent.skillRefs.map((name) => Skill.get(name)))
+    const found = loaded.filter((s): s is Skill.Info => s !== undefined)
+    const missing = agent.skillRefs.filter((name) => !loaded.find((s) => s?.name === name))
+    const injected = [
+      "## Skills (mandatory)",
+      "You MUST follow these skills' instructions for every task they cover.",
+      "The following skills have been fully injected — do NOT use the skill tool to load them again.",
+      ...found.map((s) => [`### Skill: ${s.name}`, s.content].join("\n")),
+      ...(missing.length ? [`Note: skills ${missing.join(", ")} referenced but not found.`] : []),
+    ].join("\n")
+    return broadcast + "\n\n" + injected
+  }
+
+  return broadcast
 }
 ```
+
+**优势**：
+
+- `Permission.disabled` 检查位置不变
+- `Skill.available()` 调用不变
+- 广播格式不变
+- skillRefs 只是**追加**额外内容，不截断广播
+- 无 skillRefs 时输出与 v0.6.0 完全一致
 
 ### 验收测试
 
 ```
-T0.24: agent 无 skillRefs 时，skills() 输出与 v0.6.0 完全一致
-T0.25: agent skillRefs=["alpha-research"] 时，输出只包含 alpha-research 的完整内容
-T0.26: agent skillRefs=["nonexistent"] 时，输出包含 "referenced but not found" 提示
-T0.27: bun typecheck 通过
+T0.29: agent 无 skillRefs 时，skills() 输出与 v0.6.0 完全一致
+T0.30: agent skillRefs=["alpha-research"] 时，输出包含广播摘要 + alpha-research 的完整内容
+T0.31: agent skillRefs=["nonexistent"] 时，输出包含广播摘要 + "referenced but not found" 提示
+T0.32: agent skillRefs 有值时，广播部分（Skill.fmt）仍然存在，未被截断
+T0.33: bun typecheck 通过
 ```
 
 ---
@@ -430,36 +572,57 @@ scale_decision 定义了 research agent 在何种条件下使用多少子代理�
 
 ### 文件
 
-`packages/opencode/src/session/system.ts` 或 `packages/opencode/src/session/prompt.ts`（增量添加 scale_decision 注入函数）
+`packages/opencode/src/session/system.ts`（新增 `scaleDecision()` 函数，与 `skills()`/`environment()` 同层级）
 
 ### 设计
 
-scale_decision 不作为运行时强制机制（不像 Permission 那样拦截工具调用），而是作为**system prompt 中的行为指导**：
+scale_decision 不作为运行时强制机制（不像 Permission 那样拦截工具调用），而是作为**system prompt 中的行为指导**。
+
+选择 `system.ts` 作为注入点（而非 `prompt.ts`），原因：
+
+1. `system.ts` 是 system prompt 相关内容的自然归属（provider/environment/skills 都在这里）
+2. 改动量最小（system.ts 加一个函数，prompt.ts 加一行）
+3. prompt.ts 已经 2066 行，不应继续增加维护负担
+4. 新函数不影响已有函数，纯增量
 
 ```ts
-export async function scaleDecision(agent: Agent.Info): Promise<string | undefined> {
-  if (!agent.scaleDecision || agent.scaleDecision.rules.length === 0) return
+export function scaleDecision(agent: Agent.Info): string | undefined {
+  if (!agent.scaleDecision || !agent.scaleDecision.rules?.length) return
+  const sd = agent.scaleDecision
+  const threshold = sd.direct_threshold ?? 10
+  const neverSpawn = sd.never_spawn_for ?? []
   const lines = [
     "## Scale Decision",
-    `Direct research threshold: ${agent.scaleDecision.direct_threshold} words`,
-    `Never spawn subagents for: ${agent.scaleDecision.never_spawn_for.join(", ")}`,
+    `Direct research threshold: ${threshold} words`,
+    `Never spawn subagents for: ${neverSpawn.join(", ")}`,
     "Rules:",
   ]
-  for (const rule of agent.scaleDecision.rules) {
+  for (const rule of sd.rules) {
     lines.push(`- ${rule.condition}: ${rule.subagent_count} ${rule.subagent_type} subagents (${rule.mode})`)
   }
   return lines.join("\n")
 }
 ```
 
-在 prompt assembly 中调用 `scaleDecision(agent)` 并注入到 system prompt。
+在 `prompt.ts` 的 loop 函数中，system prompt 组装处追加一行：
+
+```ts
+// prompt.ts loop 中的 system prompt 组装（改动仅两行）
+const sd = SystemPrompt.scaleDecision(agent)
+const system = [
+  ...(await SystemPrompt.environment(model)),
+  ...(skills ? [skills] : []),
+  ...(sd ? [sd] : []), // 新增
+  ...(await InstructionPrompt.system()),
+]
+```
 
 ### 验收测试
 
 ```
-T0.28: agent 无 scaleDecision 时，无额外 prompt 注入
-T0.29: agent 有 scaleDecision.rules 时，system prompt 包含 "Scale Decision" section
-T0.30: bun typecheck 通过
+T0.34: agent 无 scaleDecision 时，无额外 prompt 注入
+T0.35: agent 有 scaleDecision.rules 时，system prompt 包含 "Scale Decision" section
+T0.36: bun typecheck 通过
 ```
 
 ---
@@ -475,10 +638,16 @@ T0.30: bun typecheck 通过
 4. 运行已有测试套件（无回归）
 5. 验证以下场景:
    a. 不设任何新字段/参数 → 所有 native agent 行为与 v0.6.0 完全一致
-   b. 设 base_agent:explore 的 agent → 继承 explore 权限
-   c. 设 skill_refs 的 agent → skills() 走 whitelist 分支
-   d. task tool 传 discipline 参数 → 子代理权限被 intersection 正确约束
-   e. Permission.intersection(parent deny, child allow) → deny（安全修复）
-   f. compileDiscipline deny-before-allow 顺序正确
-   g. env_scope.allowed_commands 编译为 bash deny + specific allow
+   b. 设 skill_refs 的 agent → skills() 广播 + skillRefs 追加
+   c. task tool 传 discipline 参数 → 子代理权限被 intersection 正确约束
+   d. Permission.intersection(parent deny, child allow) → deny（安全修复）
+   e. compileDiscipline deny-before-allow 顺序正确
+   f. env_scope.allowed_commands 编译为 bash deny + specific allow（只在 agent.ts 中编译一次）
+   g. delegation_depth undefined → 不产生 task 规则（v0.6.0 一致）；delegation_depth 0 → task denied
+   h. category 路由无效 model 时 → 静默 fallback 到 agent/caller model
+   i. Config.Agent 新字段在 knownKeys 白名单中，不落入 options
+   j. Config.Info 的 category 字段在 .strict() schema 中正确定义，config 加载不报错
+   k. sessionPermission + primary_tools deny 通过 Session.create({permission}) 传递后，Permission.disabled 正确硬删除 denied 工具
+   l. primary_tools 子代理不可用（与 v0.6.0 行为一致）
+   m. Tool.Context.agent 是 string，execute 中通过 Agent.get(ctx.agent) 获取 caller Agent.Info
 ```
