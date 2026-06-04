@@ -36,32 +36,6 @@
     "condition": "git_available == pass AND git_working_dir == fail",
     "priority": "high"
   },
-  "docker": {
-    "auto_installable": true,
-    "platforms": {
-      "macos": "brew install --cask docker",
-      "linux": "curl -fsSL https://get.docker.com | sh"
-    },
-    "verify_command": "docker version --format '{{.Client.Version}}'",
-    "post_install_note": "macOS 安装后需打开 Docker Desktop 应用；Linux 需 sudo systemctl start docker 启动 daemon",
-    "layer": "infrastructure",
-    "health_check_key": "docker_cli",
-    "priority": "medium"
-  },
-  "docker_daemon": {
-    "auto_installable": true,
-    "platforms": {
-      "macos": "open -a Docker",
-      "linux": "sudo systemctl start docker"
-    },
-    "verify_command": "docker info --format '{{.ServerVersion}}'",
-    "verify_delay_seconds": 30,
-    "post_install_note": "Docker Desktop 启动需要时间，将在 30 秒后验证 daemon 是否就绪",
-    "layer": "infrastructure",
-    "health_check_key": "docker_daemon",
-    "condition": "docker_cli == pass AND docker_daemon == fail",
-    "priority": "medium"
-  },
   "alpha_cli": {
     "auto_installable": "partial",
     "platforms": {

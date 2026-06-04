@@ -1,5 +1,7 @@
 # Layer 3.3: Path 3 Context Isolation — Phase-as-Subagent + Structured Digest Protocol
 
+> **SUPERSEDED BY**: [Layer 3.9](layer-3.9-remove-sandbox-add-local-compile.md) — sandbox-executor 已移除，执行架构从双 executor 改为单 local-executor。本文档中 sandbox-executor 相关的上下文隔离模式、dispatch 描述和 token 估算已过时，以 Layer 3.9 为准。
+
 > 前置依赖: Layer 0-3.2（核心安全 + Agent 基础设施 + Research 配置层 + Research Infrastructure + Gap Analysis）
 > 本文档定义 Path 3 (Research Project) 的上下文隔离架构：将 5 个 phase 从 coordinator 内联 skill 调用改为 isolated subagent dispatch + 结构化摘要协议。
 > phase_execution (autoresearch) 进一步拆分为 execution_cycle + verification 两类 sub-phase，由 coordinator 管控重试循环。

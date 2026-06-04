@@ -87,8 +87,6 @@ Write two temp files under `.aether/research/` (within file_scope, D17):
     "uv_python_management": { "status": "...", "versions": [...] },
     "git_available": { "status": "...", "version": "..." },
     "git_working_dir": { "status": "...", "git_dir": "..." },
-    "docker_cli": { "status": "...", "client_version": "..." },
-    "docker_daemon": { "status": "...", "server_version": "..." },
     "alpha_cli": { "status": "...", "authenticated": bool },
     "network_arxiv": { "status": "...", "method": "...", "http_code": N },
     "network_semantic_scholar": { "status": "...", "method": "...", "http_code": N },
@@ -138,14 +136,13 @@ From the health status result, build a degradation_summary:
    - `failure_class` comes from the check result's `failure_class` field
 
 3. auto_installable mapping (from install_registry.json):
-   - uv_available, git_available, git_working_dir, docker_cli, docker_daemon → `true`
+   - uv_available, git_available, git_working_dir → `true`
    - alpha_cli → `"partial"`
    - All other items → `false`
 
 4. priority mapping:
    - uv_available → `critical`
    - git_available, git_working_dir → `high`
-   - docker_cli, docker_daemon → `medium`
    - alpha_cli → `low`
    - All other items → `medium`
 

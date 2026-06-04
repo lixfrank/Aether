@@ -46,7 +46,7 @@ describe("Layer 2 — research primary agent", () => {
       fn: async () => {
         const r = await Agent.get("research")
         expect(Permission.evaluate("bash", "alpha search", r!.permission).action).toBe("allow")
-        expect(Permission.evaluate("bash", "docker run nginx", r!.permission).action).toBe("allow")
+        expect(Permission.evaluate("bash", "curl https://example.com", r!.permission).action).toBe("allow")
         expect(Permission.evaluate("bash", "curl https://example.com", r!.permission).action).toBe("allow")
         expect(Permission.evaluate("bash", "rg pattern", r!.permission).action).toBe("allow")
         expect(Permission.evaluate("bash", "grep -r term", r!.permission).action).toBe("allow")

@@ -95,7 +95,7 @@ Write to `.aether/research/persistence/ROADMAP.md` with this structure:
 
 ### Phase 5: Execution
 
-- Goal: [Execute PLAN.md via sandbox-executor, verify results]
+- Goal: [Execute PLAN.md via local-executor, verify results]
 - Status: pending
 - Deliverables: VERIFICATION.md
 

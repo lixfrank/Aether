@@ -3,7 +3,7 @@ name: autoresearch
 description: |
   Phase 5 (phase_execution) of the Path 3 research state machine.
   Environment-aware execution — probe host, classify isolation strategy,
-  dispatch multi-executor (sandbox-executor for Docker, local-executor for uv venv/local),
+  dispatch local-executor (uv venv / local tools / local compilation),
   collect results, evaluate acceptance tests, output digest.
   Invoked by research-worker via skill tool (unified invocation pattern).
 ---
@@ -26,7 +26,7 @@ This skill implements phase_execution of the Path 3 research state machine. It i
 
 **Precondition**: User must have confirmed execution at phase_checkpoint. MUST NOT invoke this skill without user confirmation.
 
-**MUST NOT**: Modify PLAN.md claims/deliverables during execution. Call advance_plan (coordinator manages state transitions). Skip environment verification. Fall back to host execution when Docker isolation is required.
+**MUST NOT**: Modify PLAN.md claims/deliverables during execution. Call advance_plan (coordinator manages state transitions). Skip environment verification. Execute compilation commands not declared in PLAN.md environment_requirements.
 
 ## Procedure — Execution Cycle (sub_phase=execution_cycle)
 
@@ -44,8 +44,22 @@ Probe the host system for available software:
 ```bash
 uv --version 2>/dev/null || echo "CRITICAL: uv not available — Python tasks cannot be isolated; report as critical gap"
 uv python list 2>/dev/null || echo "uv python management: not available"
-docker --version 2>/dev/null || echo "docker: not available"
 wolframscript --version 2>/dev/null || echo "wolframscript: not available"
+```
+
+Additionally, perform **demand-driven probing** for each `environment_requirements` entry with `isolation_hint` containing `local_compile` — extract tool names from the `software` field and probe:
+
+```bash
+[tool_name] --version 2>/dev/null || [tool_name] -V 2>/dev/null || echo "[tool_name]: not available"
+```
+
+Probe convention: try `--version` first, fall back to `-V`. Write results to ENVIRONMENT.md `host_system.tools` dict.
+
+If PLAN.md environment requirements mention GPU, perform GPU probe:
+
+```bash
+nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null || echo "nvidia-smi: not available"
+system_profiler SPDisplaysDataType 2>/dev/null | grep "Chipset Model" || echo "GPU: not detected"
 ```
 
 Record results for ENVIRONMENT.md host_system section.
@@ -57,15 +71,16 @@ For each task derived from PLAN.md contract:
 1. Extract software requirements from PLAN.md `environment_requirements` field
 2. Apply classification rules:
 
-| Condition                                                                             | Strategy                                                                      |
-| ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| Licensed/self-contained software (Mathematica, MATLAB, Stata), host available         | `local`                                                                       |
-| Pure Python + wheel-installable packages (numpy, scipy, sympy, pandas), uv available  | `uv_venv`                                                                     |
-| Pure Python + wheel-installable packages, **uv NOT available**                        | `gap (critical)` — user must install uv first; do NOT fallback to bare python |
-| C/C++ compilation needed (pybind11 development, Cython C extension), Docker available | `docker`                                                                      |
-| GPU workloads (PyTorch/TensorFlow training), Docker + GPU available                   | `docker`                                                                      |
-| Untrusted external repo code, Docker available                                        | `docker`                                                                      |
-| Mixed (Python + Mathematica)                                                          | Split into separate tasks per strategy                                        |
+| Condition                                                                            | Strategy                                                                      |
+| ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
+| Licensed/self-contained software (Mathematica, MATLAB, Stata), host available        | `local`                                                                       |
+| Pure Python + wheel-installable packages (numpy, scipy, sympy, pandas), uv available | `uv_venv`                                                                     |
+| Pure Python + wheel-installable packages, **uv NOT available**                       | `gap (critical)` — user must install uv first; do NOT fallback to bare python |
+| Compilation/build tasks, toolchain available                                         | `local_compile`                                                               |
+| GPU workloads (PyTorch/TensorFlow training), local GPU available                     | `local` (with GPU)                                                            |
+| Untrusted external repo code                                                         | `local_compile` with `untrusted_source: true` (security constraints apply)    |
+| Mixed (Python + compilation)                                                         | Split into separate tasks per strategy                                        |
+| Compilation/build tasks, toolchain NOT available                                     | `gap (medium)` — non-critical, tasks marked inconclusive                      |
 
 3. For each task, write `isolation_strategy` entry in ENVIRONMENT.md
 4. Identify gaps: critical software that is unavailable on host
@@ -84,18 +99,26 @@ host_system:
   os: "[e.g., macOS 15.5 (Apple Silicon aarch64)]"
   uv: { available: true|false, version: "..." }
   uv_python: { available: true|false, versions: ["..."] }
-  docker: { available: true|false, desktop: true|false, version: "..." }
   wolframscript: { available: true|false, version: "..." }
+  tools: # 动态填充，key 由 PLAN.md environment_requirements 决定
+    gcc: { available: true|false, version: "..." } # e.g., gcc, g++, rustc, go, cmake, make, ...
+    # ... 任意工具，由需求驱动探测结果决定
+  gpu:
+    available: true|false
+    info: "[e.g., NVIDIA A100 / Apple M2 Pro 16-core GPU / none]"
 
 plan_requirements: [copied from PLAN.md environment_requirements]
 
 isolation_strategy:
   - task: "[task_name]"
-    strategy: "[docker|uv_venv|local]"
+    strategy: "[uv_venv|local|local_compile]"
     software: ["..."]
     rationale: "[brief reason]"
-    setup_commands: ["..."] # for uv_venv strategy
-    run_prefix: "..." # for uv_venv strategy
+    untrusted_source: true|false # only for local_compile
+    setup_commands: ["..."] # for uv_venv / local_compile
+    run_prefix: "..." # for uv_venv
+    build_command: "..." # for local_compile (e.g., "cmake -B build && cmake --build build" / "cargo build" / "go build")
+    run_command: "..." # for local_compile (e.g., "./build/simulation")
     command: "..." # for local strategy (e.g., wolframscript -c)
 
 venv_state:
@@ -125,24 +148,6 @@ If gaps exist but are non-critical:
 
 For each task in isolation_strategy:
 
-**strategy=docker → dispatch sandbox-executor**:
-
-```
-task(
-  description: "[task_name] (docker)",
-  subagent_type: "sandbox-executor",
-  prompt: "Execute [task_name] in Docker sandbox.
-  Task: [description from PLAN.md]
-  Isolation strategy: docker
-  Base image: [from ENVIRONMENT.md]
-  Commands: [from PLAN.md]
-  Acceptance tests: [relevant tests from PLAN.md]
-  Convention context: [summary]
-  Read ENVIRONMENT.md for strategy details.
-  Write results to .aether/research/persistence/EXECUTION.md (append section)."
-)
-```
-
 **strategy=uv_venv or strategy=local → dispatch local-executor**:
 
 UV-FIRST POLICY: All Python execution MUST use .aether/research/.venv/bin/python or uv run. NEVER use bare python3 or pip install. If venv setup fails, report failure — do NOT fall back to host python.
@@ -161,6 +166,28 @@ task(
   Convention context: [summary]
   UV-FIRST POLICY: All Python execution MUST use .aether/research/.venv/bin/python or uv run. NEVER use bare python3 or pip install. If venv setup fails, report failure — do NOT fall back to host python.
   Read ENVIRONMENT.md for venv state and strategy details.
+  Write results to .aether/research/persistence/EXECUTION.md (append section)."
+)
+```
+
+**strategy=local_compile → dispatch local-executor**:
+
+> Security constraints are authoritatively defined in `local-executor.md`. The dispatch prompt references them without repeating.
+
+```
+task(
+  description: "[task_name] (local_compile)",
+  subagent_type: "local-executor",
+  prompt: "Execute [task_name] via local compilation.
+  Task: [description from PLAN.md]
+  Isolation strategy: local_compile
+  Build command: [from ENVIRONMENT.md]
+  Run command: [from ENVIRONMENT.md]
+  Acceptance tests: [relevant tests from PLAN.md]
+  Untrusted source: [true|false from ENVIRONMENT.md]
+  Observe ALL local_compile security constraints defined in local-executor.md.
+  UV-FIRST POLICY: All Python execution MUST use .aether/research/.venv/bin/python or uv run.
+  Read ENVIRONMENT.md for toolchain and strategy details.
   Write results to .aether/research/persistence/EXECUTION.md (append section)."
 )
 ```
@@ -212,8 +239,8 @@ phase_result_digest:
   revision_needed: null | "[what to revise if tests failed]"
   environment_strategy_used:
     - task: "[task_name]"
-      strategy: "[docker|uv_venv|local]"
-      executor: "[sandbox-executor|local-executor]"
+      strategy: "[uv_venv|local|local_compile]"
+      executor: "local-executor"
   gaps_reported: [] | ["[gap description]"]
   output_paths:
     environment: persistence/ENVIRONMENT.md
@@ -261,11 +288,10 @@ MUST NOT output any other text after this YAML block.
 
 ## Subagent Dispatch
 
-- sandbox-executor: For Docker-isolated tasks (strategy=docker)
-- local-executor: For uv venv and host tool tasks (strategy=uv_venv or local)
+- local-executor: For all local tasks (strategy=uv_venv, local, or local_compile)
 - gpd-verifier / research-verifier: For verification of results
 - FORBIDDEN: Dispatching explore or general subagents for execution or verification work
 
 ## Integrity
 
-Never fabricate sources. Never claim verification without evidence. Never override computational oracle results with LLM-only reasoning. Never silently adjust acceptance criteria when tests fail. Never skip environment verification. Never fall back to host execution when Docker isolation is required.
+Never fabricate sources. Never claim verification without evidence. Never override computational oracle results with LLM-only reasoning. Never silently adjust acceptance criteria when tests fail. Never skip environment verification. Never execute compilation commands not declared in PLAN.md environment_requirements.

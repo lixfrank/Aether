@@ -11,18 +11,9 @@ describe("Layer 2.1 — skill file existence", () => {
   test("T2.1.1: alpha-research SKILL.md exists with auth-first design", async () => {
     const content = await Bun.file(path.join(projectRoot, "alpha-research", "SKILL.md")).text()
     expect(content).toContain("name: alpha-research")
-    expect(content).toContain("Auth Check")
+    expect(content).toContain("Mode Selection")
     expect(content).toContain("alpha status")
-    expect(content).toContain("arxiv-search")
-    expect(content).not.toContain("category:")
-  })
-
-  test("T2.1.2: docker SKILL.md exists with full content", async () => {
-    const content = await Bun.file(path.join(projectRoot, "docker", "SKILL.md")).text()
-    expect(content).toContain("name: docker")
-    expect(content).toContain("docker run --rm")
-    expect(content).toContain("--gpus all")
-    expect(content).toContain("docker create")
+    expect(content).toContain("arxiv_search.py")
     expect(content).not.toContain("category:")
   })
 
@@ -43,7 +34,7 @@ describe("Layer 2.1 — skill file existence", () => {
   })
 
   test("T2.1.10: no category field in any ported skill frontmatter", async () => {
-    const skillDirs = ["alpha-research", "docker", "source-comparison", "paper-code-audit"]
+    const skillDirs = ["alpha-research", "source-comparison", "paper-code-audit"]
     for (const dir of skillDirs) {
       const content = await Bun.file(path.join(projectRoot, dir, "SKILL.md")).text()
       expect(content).not.toContain("category:")
@@ -75,7 +66,7 @@ mcp:
 env_scope:
   allowed_commands:
     - alpha
-    - docker
+    - curl
 output_dir: research
 ---
 
@@ -97,7 +88,7 @@ Route based on intent.
           expect(r?.outputDir).toBe("research")
           expect(r?.prompt).toContain("Research Mode")
           expect(Permission.evaluate("bash", "alpha test", r!.permission).action).toBe("allow")
-          expect(Permission.evaluate("bash", "docker run", r!.permission).action).toBe("allow")
+          expect(Permission.evaluate("bash", "curl https://example.com", r!.permission).action).toBe("allow")
           expect(Permission.evaluate("bash", "rm -rf /", r!.permission).action).toBe("deny")
         },
       })
@@ -151,15 +142,15 @@ Never fabricate a source.
     }
   })
 
-  test("sandbox-executor.md from .aether/agent/ creates subagent", async () => {
+  test("local-executor.md supports local_compile strategy", async () => {
     await using tmp = await tmpdir({
       git: true,
       init: async (dir) => {
         const agentDir = path.join(dir, ".aether", "agent")
         await Bun.write(
-          path.join(agentDir, "sandbox-executor.md"),
+          path.join(agentDir, "local-executor.md"),
           `---
-description: Execute research plans in isolated sandbox
+description: Execute research tasks in local environment
 mode: subagent
 permission:
   "*": deny
@@ -167,21 +158,15 @@ permission:
   glob: allow
   read: allow
   bash: allow
-skill_refs:
-  - docker
-  - research-verification
 mcp:
   research-conventions: true
-  research-state: true
-env_scope:
-  allowed_commands:
-    - docker
-    - python
+fallback_models:
+  - alibaba-cn/glm-5.1
 output_dir: .aether/research
 ---
 
-# Sandbox Executor
-Execute plans.
+# Local Executor
+Supports uv_venv, local, local_compile strategies.
 `,
         )
       },
@@ -192,13 +177,10 @@ Execute plans.
       await Instance.provide({
         directory: tmp.path,
         fn: async () => {
-          const s = await Agent.get("sandbox-executor")
-          expect(s?.mode).toBe("subagent")
-          expect(s?.skillRefs).toEqual(["docker", "research-verification"])
-          expect(s?.mcp).toEqual({ "research-conventions": true, "research-state": true })
-          expect(Permission.evaluate("bash", "docker run", s!.permission).action).toBe("allow")
-          expect(Permission.evaluate("bash", "python script.py", s!.permission).action).toBe("allow")
-          expect(Permission.evaluate("bash", "rm -rf /", s!.permission).action).toBe("deny")
+          const e = await Agent.get("local-executor")
+          expect(e?.mode).toBe("subagent")
+          expect(e?.prompt).toContain("local_compile")
+          expect(e?.fallbackModels).toBeDefined()
         },
       })
     } finally {

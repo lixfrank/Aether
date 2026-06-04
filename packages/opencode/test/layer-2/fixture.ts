@@ -42,7 +42,7 @@ export function makeResearchConfig(): Config.Agent {
     permission,
     fallback_models: ["anthropic/claude-sonnet-4-5"],
     mcp: { "research-conventions": true, "research-state": true },
-    env_scope: { allowed_commands: ["alpha", "curl", "rg", "grep", "git", "docker"] },
+    env_scope: { allowed_commands: ["alpha", "curl", "rg", "grep", "git"] },
     output_dir: ".aether/research",
   }
 }
@@ -142,33 +142,5 @@ export function makeGpdReviewerConfig(): Config.Agent {
     },
     skill_refs: ["gpd-errors", "gpd-conventions", "gpd-domain-check"],
     mcp: { "research-conventions": true, "research-state": true },
-  }
-}
-
-export function makeSandboxExecutorConfig(): Config.Agent {
-  const permission: Record<string, PermValue> = {
-    "*": "deny",
-    grep: "allow",
-    glob: "allow",
-    list: "allow",
-    read: "allow",
-    edit: "allow",
-    write: "allow",
-    bash: "allow",
-    webfetch: "allow",
-    external_directory: "ask",
-  }
-  permission["research_conventions_*"] = "allow"
-  permission["research_state_*"] = "allow"
-  return {
-    description: "Execute research plans in isolated sandbox environments and verify results against acceptance tests",
-    color: "#059669",
-    mode: "subagent",
-    permission,
-    skill_refs: ["docker", "research-verification"],
-    mcp: { "research-conventions": true, "research-state": true },
-    env_scope: { allowed_commands: ["docker", "uv", "python", "pip", "curl", "git"] },
-    output_dir: ".aether/research",
-    fallback_models: ["anthropic/claude-sonnet-4-5"],
   }
 }

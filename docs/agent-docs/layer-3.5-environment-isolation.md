@@ -1,5 +1,7 @@
 # Layer 3.5: Environment-Aware Execution — Tiered Isolation Strategy + Multi-Executor Architecture
 
+> **SUPERSEDED BY**: [Layer 3.9](layer-3.9-remove-sandbox-add-local-compile.md) — sandbox-executor 和 Docker 隔离已移除，双 executor 架构（sandbox-executor + local-executor）已合并为单 local-executor 架构。本文档中以下章节已过时：§8 sandbox-executor.md 修改、策略分类表中的 docker 行、dispatch 逻辑中的 sandbox-executor 派发。以 Layer 3.9 为准。
+
 > 前置依赖: Layer 0-3.4（核心安全 + Agent 基础设施 + Research 配置层 + Research Infrastructure + Gap Analysis + Context Isolation + Subagent Runtime Limits）
 > 本文档解决 phase_execution 中环境隔离的核心问题：当前设计假设 Docker 总是可用且足够轻量，但实际上 (1) Mac 上 Docker 需要 Docker Desktop 较重；(2) sandbox-executor 可能绕过 Docker 直接在宿主机安装包；(3) 商业软件（如 Mathematica）不适合容器化。
 > 改进方案：引入环境审核机制 + 分级隔离策略 + 多 Executor 架构 + 统一 skill 调用模式。

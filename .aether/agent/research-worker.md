@@ -48,7 +48,7 @@ HARD CONSTRAINT: Execution sub-phases MUST NOT call advance_plan. The coordinato
 
 HARD CONSTRAINT: Your LAST message MUST be a single YAML code block with the `phase_result_digest` key. No other text after this block. Violating this means the coordinator cannot parse your result.
 
-HARD CONSTRAINT: MUST NOT execute bare python/pip commands via bash. All Python execution MUST go through either: (a) uv run (for PEP 723 inline-script scripts), OR (b) .aether/research/.venv/bin/python (for venv-isolated execution), OR (c) dispatch to local-executor/sandbox-executor (for execution sub-phases). Direct `python3 -c '...'` or `pip install ...` is FORBIDDEN.
+HARD CONSTRAINT: MUST NOT execute bare python/pip commands via bash. All Python execution MUST go through either: (a) uv run (for PEP 723 inline-script scripts), OR (b) .aether/research/.venv/bin/python (for venv-isolated execution), OR (c) dispatch to local-executor (for execution sub-phases). Direct `python3 -c '...'` or `pip install ...` is FORBIDDEN.
 
 HARD CONSTRAINT: MUST NOT install any Python package on the host system. All pip/uv installs MUST target .aether/research/.venv only, or use PEP 723 inline metadata with uv run.
 
@@ -173,8 +173,8 @@ execution_summary: "[brief: what was run, key results]"
 revision_needed: null | "[what to revise if tests failed]"
 environment_strategy_used:
   - task: "[task_name]"
-    strategy: "[docker|uv_venv|local]"
-    executor: "[sandbox-executor|local-executor]"
+    strategy: "[uv_venv|local|local_compile]"
+    executor: "local-executor"
 gaps_reported: [] | ["[gap description]"]
 ```
 
@@ -249,7 +249,7 @@ next_phase: null
 
 ## Subagent Dispatch Rules
 
-- Allowed: research-explorer, sandbox-executor, local-executor, gpd-verifier, gpd-reviewer, research-verifier
+- Allowed: research-explorer, local-executor, gpd-verifier, gpd-reviewer, research-verifier
 - FORBIDDEN: explore or general subagents for research work
 - When dispatching sub-subagents, set delegation_depth: 0
 

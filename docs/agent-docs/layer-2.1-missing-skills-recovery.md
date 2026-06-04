@@ -1,5 +1,7 @@
 # Layer 2.1: Missing Skills & Agent Recovery
 
+> **PARTIALLY SUPERSEDED**: [Layer 3.9](layer-3.9-remove-sandbox-add-local-compile.md) — sandbox-executor subagent 补齐说明已过时（agent 已移除）。
+
 > 前置依赖: Layer 2（Research Config Layer）已完成基本 agent/skills 结构修复
 > 本文档补齐 Layer 2 设计文档中引用但当前分支缺失的 skills，并新增 sandbox-executor subagent。
 > 缺失原因：Layer 2 设计文档基于 `feat/research-agent` 分支制定，但实际实现在新分支进行，导致 `feat/research-agent` 上已有的 skills 在新分支上缺失。

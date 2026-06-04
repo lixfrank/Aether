@@ -1,5 +1,7 @@
 # Layer 3.6: Research Agent Health Check — 分层检测架构
 
+> **SUPERSEDED BY**: [Layer 3.9](layer-3.9-remove-sandbox-add-local-compile.md) — Docker 健康检查项（docker_cli, docker_daemon）已移除。编译工具链不纳入 health-check（由 autoresearch 需求驱动探测负责）。本文档中 Docker 相关的检查项定义和 sandbox-executor skill 验证已过时，以 Layer 3.9 为准。
+
 > 前置依赖: Layer 0-3.5（核心安全 + Agent 基础设施 + Research 配置层 + Research Infrastructure + Gap Analysis + Context Isolation + Subagent Runtime Limits + Environment Isolation）
 > 本文档定义 research agent 启动前的分层健康检测机制。当前系统无主动 health 检测——MCP servers 可能离线、uv 不可用、Docker 未启动、skill 引用链断裂时，agent 只能在运行时碰错才发现。改进方案：引入 4 层分级检测 + MCP tool 集成 + agent 启动时自检。
 

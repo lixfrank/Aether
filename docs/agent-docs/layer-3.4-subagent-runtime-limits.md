@@ -1,5 +1,7 @@
 # Layer 3.4: Subagent Runtime Limits — max_steps & timeout_seconds Enforcement
 
+> **SUPERSEDED BY**: [Layer 3.9](layer-3.9-remove-sandbox-add-local-compile.md) — sandbox-executor 已移除。本文档中 sandbox-executor 的 token 预算和超时设置已过时。local-executor 的预算保持不变；local_compile 策略的建议超时与 uv_venv 相同（20 分钟）。
+
 > 前置依赖: Layer 0（核心安全: Permission + Discipline）、Layer 3.3（上下文隔离: Coordinator-Worker 分离）
 > 本文档修复一个架构缺口：task 工具的 `max_steps` 和 `timeout_seconds` 参数虽然在 Schema 中定义，但未被 runtime 实际执行。
 > 无步数上限的 subagent 可能无限循环消耗 token；无超时切断的 subagent 可能长时间阻塞 coordinator。

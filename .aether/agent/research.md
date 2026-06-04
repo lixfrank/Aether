@@ -85,7 +85,7 @@ You MUST classify every user prompt through the Entry Gate BEFORE taking any oth
 
 - FORBIDDEN: Skipping the gate. You must classify before acting.
 - FORBIDDEN: Classifying as Path 1/2 and then executing Path 3 actions.
-- FORBIDDEN: Classifying as Path 3 and then dispatching explore, general, research-explorer, sandbox-executor, or verifiers directly — use research-worker only for Path 3.
+- FORBIDDEN: Classifying as Path 3 and then dispatching explore, general, research-explorer, or verifiers directly — use research-worker only for Path 3.
 - FORBIDDEN: Bypassing the state machine. Every phase in the chosen path must be executed in order.
 
 # ═══════════════════════════════════════════════════════════
@@ -205,7 +205,7 @@ phase_execution    ─── Coordinator-managed execution loop:
                        │                                     │
                        │  dispatch worker (sub_phase=         │
                        │    execution_cycle, cycle=1)         │
-                       │    → sandbox-executor/local-executor → EXECUTION.md │
+                        │    → local-executor → EXECUTION.md │
                        │    → execution_cycle_digest          │
                        │                                     │
                        │  [tests_passed] → dispatch worker    │
@@ -760,7 +760,7 @@ On session start:
      c. User agrees → execute: `curl -LsSf https://astral.sh/uv/install.sh | sh`
      d. Re-check `uv --version` → if still unavailable → suggest user `source ~/.bashrc` or restart terminal
      e. uv ultimately available → proceed to Tier 0.5
-     f. User declines → continue in LLM-only mode (no MCP, no Python, no SymPy, no Docker). Mark STATE.md `infrastructure: degraded`
+     f. User declines → continue in LLM-only mode (no MCP, no Python, no SymPy). Mark STATE.md `infrastructure: degraded`
 
 2. **Tier 0.5: Cache validity + global directory pre-creation**
    a. bash: `bash ~/.aether/health/cache_check.sh` (seeded by `seedDefaultAssets()` from `.aether/health/` at CLI startup)
@@ -880,7 +880,7 @@ When uv is unavailable and user declines installation:
 - Do NOT call any MCP tool
 - Do NOT dispatch research-worker (worker depends on MCP)
 - Do NOT execute any Python script
-- Do NOT use SymPy verification, alpha search, Docker containers
+- Do NOT use SymPy verification, alpha search
 - Only use LLM reasoning, basic bash commands (git, curl), local file read/write
 - Mark STATE.md `infrastructure: degraded`, details in `~/.aether/health/global_health.json`
 
@@ -902,8 +902,8 @@ Workflow for modifying project files:
 
 ## Subagent Dispatch Rules
 
-- FORBIDDEN: Dispatching explore, general, research-explorer, sandbox-executor, gpd-verifier, or research-verifier directly for Path 3 phase work. All Path 3 phases and sub-phases are dispatched via research-worker subagent.
-- Allowed for Path 3: research-worker only. Worker internally dispatches research-explorer/sandbox-executor/local-executor/verifiers with delegation_depth: 0.
+- FORBIDDEN: Dispatching explore, general, research-explorer, gpd-verifier, or research-verifier directly for Path 3 phase work. All Path 3 phases and sub-phases are dispatched via research-worker subagent.
+- Allowed for Path 3: research-worker only. Worker internally dispatches research-explorer/local-executor/verifiers with delegation_depth: 0.
 - Allowed for Path 2: literature-review skill handles its own subagent dispatch internally
 - explore/general: ONLY for non-research auxiliary tasks
 

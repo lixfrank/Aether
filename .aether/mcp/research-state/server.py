@@ -591,36 +591,6 @@ def _check_infrastructure(project_dir: Path) -> dict:
         }
         issues.append("not inside a git repository")
 
-    result = _run_cmd(["docker", "version", "--format", "{{.Client.Version}}"])
-    if result.returncode == 0:
-        checks["docker_cli"] = {
-            "status": "pass",
-            "client_version": result.stdout.strip(),
-        }
-    else:
-        checks["docker_cli"] = {"status": "fail", "failure_class": "not_installed"}
-        issues.append("docker CLI not installed")
-
-    result = _run_cmd(["docker", "info", "--format", "{{.ServerVersion}}"])
-    if result.returncode == 0:
-        checks["docker_daemon"] = {
-            "status": "pass",
-            "server_version": result.stdout.strip(),
-            "running": True,
-        }
-    else:
-        if checks.get("docker_cli", {}).get("status") == "pass":
-            checks["docker_daemon"] = {
-                "status": "fail",
-                "failure_class": "daemon_not_running",
-            }
-            issues.append("docker CLI available but daemon not running")
-        else:
-            checks["docker_daemon"] = {
-                "status": "fail",
-                "failure_class": "not_installed",
-            }
-
     result = _run_cmd(["alpha", "status"])
     if result.returncode == 0:
         authenticated = (
@@ -775,7 +745,6 @@ def _check_skill_chain(project_dir: Path) -> dict:
         "research_worker_debate_critic": "debate-critic",
         "research_worker_debate_adjudicator": "debate-adjudicator",
         "research_worker_debate_repair": "debate-repair",
-        "sandbox_executor_docker": "docker",
         "research_verifier_research_verification": "research-verification",
         "gpd_verifier_research_verification": "research-verification",
         "gpd_verifier_gpd_verification": "gpd-verification",
@@ -1159,7 +1128,7 @@ def run_health_check(
     """Full project health dashboard with 4-layer progressive detection.
 
     Layers:
-    - infrastructure: uv, docker, alpha CLI, network reachability (3 endpoints)
+    - infrastructure: uv, alpha CLI, network reachability (3 endpoints)
     - persistence: directory writable, state.json valid, convention_defaults readable
     - skill_chain: SKILL.md existence, gpd references/scripts completeness
     - runtime: MCP tool calls, all 9 SymPy scripts dry-run, alpha search

@@ -80,7 +80,7 @@ After installation completes, the coordinator should dispatch research-worker(mo
 
 ## Key Design
 
-- **Per-item authorization**: Each item is authorized individually. User can install only uv (required) and skip Docker (optional).
+- **Per-item authorization**: Each item is authorized individually. User can install only uv (required) and skip optional tools.
 - **Read-only health check**: The health check MCP tool is READ_ONLY. Installation is a write operation handled by this skill with per-item user authorization.
 - **No batch authorization**: NEVER ask "Install all missing items?" — always ask per-item.
 

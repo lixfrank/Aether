@@ -21,7 +21,7 @@ This skill implements **Phase 3** of the Path 3 research state machine. It conve
 2. `.aether/research/notepads/<slug>/research_questions.md` — Structured question framing
 3. `.aether/research/persistence/STATE.md` — Updated with phase=phase_framing completed
 
-**Downstream note**: The `environment_requirements` field in PLAN.md is NOT just informational — it is consumed by the `/autoresearch` skill during execution_cycle to probe the host system and write `.aether/research/persistence/ENVIRONMENT.md`. ENVIRONMENT.md contains: (1) host_system probe results (what software is actually available), (2) plan_requirements (what was declared), (3) isolation_strategy (per-task decisions: docker/uv_venv/local), (4) gaps (missing critical software). The coordinator uses gaps to inform the user about unavailable software. **You MUST write environment_requirements with enough specificity for the execution phase to classify each requirement into an isolation strategy (docker/uv_venv/local).**
+**Downstream note**: The `environment_requirements` field in PLAN.md is NOT just informational — it is consumed by the `/autoresearch` skill during execution_cycle to probe the host system and write `.aether/research/persistence/ENVIRONMENT.md`. ENVIRONMENT.md contains: (1) host_system probe results (what software is actually available), (2) plan_requirements (what was declared), (3) isolation_strategy (per-task decisions: uv_venv/local/local_compile), (4) gaps (missing critical software). The coordinator uses gaps to inform the user about unavailable software. **You MUST write environment_requirements with enough specificity for the execution phase to classify each requirement into an isolation strategy (uv_venv/local/local_compile).**
 
 **State transition**: phase_framing → phase_debate (multi-agent debate)
 
@@ -141,8 +141,9 @@ Write to `.aether/research/persistence/PLAN.md`:
 >
 > - Licensed/self-contained software (Mathematica, MATLAB, Stata) → strategy `local`
 > - Pure Python + wheel-installable packages → strategy `uv_venv`
-> - C/C++ compilation, GPU, untrusted code → strategy `docker`
-> - Docker itself → strategy prerequisite, `critical: false` (fallback to local if unavailable)
+> - Compilation/build tasks → strategy `local_compile` (requires toolchain declared in environment_requirements)
+> - GPU workloads → strategy `local` (requires local GPU)
+> - Toolchain not available → gap (medium priority, non-critical)
 
 - requirement_1:
   software: "[e.g., Python 3.11]"
@@ -157,9 +158,9 @@ Write to `.aether/research/persistence/PLAN.md`:
   isolation_hint: "[local — licensed, self-contained, no environment pollution]"
   critical: true
 - requirement_3:
-  software: "[e.g., Docker]"
-  purpose: "[e.g., C++ compilation isolation — only if needed]"
-  isolation_hint: "[docker prerequisite — not a research tool itself]"
+  software: "[e.g., gcc, cmake / rustc, cargo / go]"
+  purpose: "[e.g., C++ compilation — only if needed]"
+  isolation_hint: "[local_compile prerequisite — build toolchain]"
   critical: false
 ```
 

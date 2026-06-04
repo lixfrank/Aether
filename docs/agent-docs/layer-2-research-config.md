@@ -1,5 +1,7 @@
 # Layer 2: Research Configuration Layer
 
+> **PARTIALLY SUPERSEDED**: [Layer 3.9](layer-3.9-remove-sandbox-add-local-compile.md) — sandbox-executor subagent 定义已移除。其余 Layer 2 内容（research agent、skills、MCP）不受影响。
+
 > 前置依赖: Layer 0 + Layer 1（Permission/Discipline/Agent.Info 扩展 + output*dir/fallback/MCP per-agent/denied tools）
 > 本文档是 6 层重构计划的第三层。**零核心源文件改动** — 全部通过 `.aether/` 目录中的文件实现。
 > 完成后，research mode 可通过 UI dropdown 进入并使用完整研究工作流。
