@@ -1,155 +1,174 @@
 ---
 name: literature-landscape-scan
-description: Scan literature landscape for a research topic. Produces a structured landscape_map.md with domain map, school classification, key paper timeline, controversy annotations, and open problem list. Integrates with alpha-research, alphaxiv, and research-question-framing.
+description: |
+  Phase 2 (phase_landscape) of the Path 3 research state machine.
+  Scans literature landscape for a research topic. Produces a structured landscape_map.md
+  with domain map, school classification, key paper timeline, controversy annotations,
+  and open problem list. Can be skipped if ROADMAP.md already contains sufficient
+  literature coverage. Integrates with alpha-research, alphaxiv, and research-question-framing.
 ---
 
-# Literature Landscape Scan
+# Literature Landscape Scan — phase_landscape
 
-Produce a comprehensive, structured map of the literature landscape for a research topic, identifying schools of thought, key papers, controversies, and open problems.
+This skill implements **Phase 2** of the Path 3 research state machine. It expands the literature coverage beyond Phase 1's initial analysis.
 
-## When to Use
+## Lifecycle Contract
 
-Use this skill when:
+**Input**: ROADMAP.md from phase_analysis + research_analysis.md findings
 
-- Starting a new research project and need to understand the field landscape
-- Identifying open problems and research gaps before framing questions
-- Mapping competing theories and approaches before deep investigation
-- Providing input for research-question-framing (gap_list feeds into question framing)
+**Output** (MUST write all of these):
+
+1. `output_dir/notepads/<slug>/landscape_map.md` — Structured landscape map
+2. `output_dir/persistence/ROADMAP.md` — Updated with landscape findings (schools, papers, controversies)
+3. `output_dir/persistence/STATE.md` — Updated with phase=phase_landscape completed
+
+**State transition**: phase_landscape → phase_framing
+
+**MUST NOT**: Write PLAN.md (that is phase_framing's responsibility). Overwrite ROADMAP.md — only append/update the landscape section.
+
+**Skip condition**: This phase CAN be skipped ONLY if ROADMAP.md contains ALL of the following:
+
+- A "Schools of Thought" section with ≥3 schools, each with representative papers (arXiv IDs or DOIs)
+- A "Key Paper Timeline" section with chronological ordering
+- A "Controversies" or "Open Problems" section identifying gaps
+  OR: A prior landscape_map.md exists in notepads that covers the same domain (check domain overlap)
+  OR: The user's prompt explicitly lists ≥5 specific papers/authors with full citations, covering multiple approaches
+- If skipping: write skip justification to STATE.md, call advance_plan via research-state MCP with phase="phase_landscape_skipped", proceed to phase_framing
 
 ## Procedure
 
-### Step 1: Define Scope and Search Terms
+### Step 1: Read Current State
 
-1. Clarify the research topic and domain
-2. Identify 3-6 key search terms (primary concepts + synonyms)
-3. Define time range (e.g., last 10 years for active fields, longer for foundational fields)
+1. Read `output_dir/persistence/STATE.md` — confirm phase is phase_analysis completed
+2. Read `output_dir/persistence/ROADMAP.md` — understand project scope and question
+3. Read `output_dir/notepads/<slug>/research_analysis.md` — review Phase 1 findings
+4. Check skip condition: Does ROADMAP.md already contain sufficient landscape coverage?
+5. Read state.json via research-state MCP (`get_state`)
+6. Check `convention_lock_status` via research-conventions MCP if physics domain
+
+### Step 2: Define Scope and Search Terms
+
+1. Extract key concepts from ROADMAP.md research question
+2. Identify 3-6 key search terms (primary concepts + synonyms from Phase 1 findings)
+3. Define time range based on field activity level
 4. Determine domain-specific databases:
-   - **Physics**: arXiv (primary), INSPIRE-HEP (citation networks), alphaxiv (deep understanding)
-   - **Computer Science**: arXiv cs.\*, Semantic Scholar, Google Scholar
-   - **Biomedical**: PubMed, bioRxiv, Semantic Scholar
-   - **Cross-disciplinary**: Semantic Scholar, OpenAlex
+   - Physics: arXiv, INSPIRE-HEP, alphaxiv
+   - CS: arXiv cs.\*, Semantic Scholar, Google Scholar
+   - Biomedical: PubMed, bioRxiv, Semantic Scholar
+   - Cross-disciplinary: Semantic Scholar, OpenAlex
 
-### Step 2: Multi-Database Parallel Search
+### Step 3: Multi-Database Parallel Search
 
-Execute parallel searches across selected databases:
+Dispatch research-explorer subagent(s) for parallel searches:
 
 1. **arXiv**: Use alpha-research skill (no-login mode) with category-appropriate queries
-
-   ```bash
-   uv run .aether/skills/alpha-research/arxiv_search.py "cat:hep-ph AND ti:search_term" --max-papers 50
-   ```
-
-2. **alphaxiv Smart Search**: For AI-enhanced discovery beyond keywords:
-   - Use webfetch on `https://alphaxiv.org/search?q=<search_query>` for semantic search results
-   - Identifies papers beyond exact keyword matches
-
+2. **alphaxiv Smart Search**: For AI-enhanced discovery beyond keywords
 3. **Semantic Scholar**: Cross-disciplinary coverage and citation graphs
 4. **INSPIRE-HEP** (physics): Citation tracking and highly-cited paper identification
 
-### Step 3: Deep Understanding of Key Papers
+Scale:
+
+- 2-3 search angles → 1 research-explorer subagent
+- 4-6 search angles → 2 research-explorer subagents (concurrent)
+
+### Step 4: Deep Understanding of Key Papers
 
 For papers identified as potentially important:
 
 1. Extract arXiv IDs from search results
-2. For each key paper, use alphaxiv overview for structured understanding:
-   - `webfetch https://alphaxiv.org/overview/<arxiv_id>`
-   - Overview provides: Key Findings, Methodology, Limitations, Broader Impact
+2. Use alphaxiv overview for structured understanding
 3. Fallback to arXiv abstract if alphaxiv overview unavailable
 4. Classify papers by: theoretical approach, methodology, domain subfield
 
-### Step 4: Map the Landscape
+### Step 5: Map the Landscape
 
 Classify papers into a structured landscape:
 
 1. **Schools of Thought**: Group papers by theoretical framework or methodology
-   - Name each school (e.g., "String Theory approach", "Lattice QCD approach")
-   - List representative papers and authors for each school
+   - Name each school
+   - List representative papers and authors
    - Note key assumptions and distinguishing features
 
 2. **Key Paper Timeline**: Chronological ordering of foundational and influential papers
-   - Mark foundational papers (started the field/subfield)
-   - Mark influential papers (shifted direction, resolved key questions)
-   - Mark recent breakthroughs
+   - Mark foundational, influential, and recent breakthrough papers
 
 3. **Controversy Annotations**: Identify active disagreements
-   - What is being debated?
-   - Which schools hold which positions?
-   - What evidence supports each position?
-   - What would resolve the controversy?
+   - What is debated, which schools hold which positions, what evidence supports each
 
-4. **Open Problems**: List unsolved questions and gaps
-   - Each problem should have: description, significance, difficulty level, related school(s)
+4. **Open Problems (gap_list)**: List unsolved questions and gaps
+   - Each problem: description, significance, difficulty level, related school(s)
    - This gap_list feeds directly into research-question-framing skill
 
-### Step 5: Write Landscape Map
+### Step 6: Write Landscape Map
 
-Write output to `output_dir/notepads/<slug>/landscape_map.md` using this structure:
+Write to `output_dir/notepads/<slug>/landscape_map.md`:
 
 ```markdown
 # Literature Landscape: [Topic]
 
 ## Domain Overview
 
-[1-2 paragraph summary of the field, its scope, and current state]
+[1-2 paragraph summary]
 
 ## Schools of Thought
 
 ### School 1: [Name]
 
-- **Core idea**: [1-2 sentence summary]
-- **Key assumptions**: [List]
-- **Representative papers**: [arXiv IDs or DOIs with brief description]
-- **Proponents**: [Key authors/groups]
+- **Core idea**: [summary]
+- **Key assumptions**: [list]
+- **Representative papers**: [arXiv IDs/DOIs]
+- **Proponents**: [key authors/groups]
 
 ### School 2: [Name]
 
-[Same structure]
+[same structure]
 
 ## Key Paper Timeline
 
-| Year | Paper          | Impact                                    | School        |
-| ---- | -------------- | ----------------------------------------- | ------------- |
-| YYYY | [arXiv ID/DOI] | Foundational / Influential / Breakthrough | [School name] |
+| Year | Paper | Impact | School |
+| ---- | ----- | ------ | ------ |
 
 ## Controversies
 
 ### Controversy 1: [Topic]
 
-- **Debate**: [What is being argued]
-- **School A position**: [Position + supporting evidence]
-- **School B position**: [Position + supporting evidence]
-- **Resolution path**: [What would settle this]
-
-### Controversy 2: [Topic]
-
-[Same structure]
+- **Debate**: [what]
+- **School A position**: [position + evidence]
+- **School B position**: [position + evidence]
 
 ## Open Problems (gap_list)
 
-1. **[Problem 1]**: [Description] — Significance: [High/Medium/Low] — Difficulty: [Hard/Medium/Easy] — Related: [School(s)]
+1. **[Problem 1]**: [Description] — Significance: [H/M/L] — Difficulty: [H/M/E]
 2. **[Problem 2]**: [Description] — ...
 ```
 
-### Step 6: Quality Check
+### Step 7: Update ROADMAP.md
 
-Evaluate landscape scan quality:
+Append landscape findings to ROADMAP.md:
 
-1. **Coverage**: Did we search enough databases? Are all major schools represented?
-2. **Balance**: Is each school represented with similar depth? No school over/under-represented?
-3. **Time span**: Does the timeline cover foundational to recent work?
-4. **Controversy completeness**: Are known debates captured?
+- Add schools of thought section
+- Add key papers to milestones
+- Update phase 2 status to "completed"
 
-## Integration with Other Skills
+### Step 8: Update State
 
-- **research-question-framing**: The gap_list output feeds directly into question framing, converting open problems into structured research questions
-- **deep-research**: For deeper investigation of specific papers or subtopics identified in the landscape
-- **literature-review**: For systematic review of specific themes identified in the landscape
-- **alpha-research + alphaxiv**: For paper discovery and deep understanding
+1. Update `output_dir/persistence/STATE.md`:
+   - phase: phase_landscape completed
+   - key decisions: [landscape decisions]
+   - blockers: [any gaps in coverage]
+   - next_action: enter phase_framing
+2. Call `advance_plan` via research-state MCP
+3. Return to the research agent — the agent will route to phase_framing
+
+## Subagent Dispatch
+
+- Dispatch `research-explorer` subagent for parallel database searches
+- FORBIDDEN: Dispatching explore or general subagents — use research-explorer only
 
 ## MCP Integration
 
-- **research-conventions**: Call `convention_lock_status` before scanning physics domains to check metric_signature, natural_units, etc.
-- **research-state**: Call `get_state` to check current project phase; `advance_plan` after completing landscape scan
+- research-conventions: Call convention_lock_status before scanning physics domains
+- research-state: Call get_state before starting; advance_plan after completing
 
 ## Integrity
 

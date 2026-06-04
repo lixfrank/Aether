@@ -1,115 +1,80 @@
 ---
 name: research-question-framing
-description: Frame research questions for systematic investigation. Converts gaps from literature-landscape-scan into structured, falsifiable research questions with verification criteria. Supports PICO (biomedical) and System-Model-Expectation-Deviation (physics) frameworks. Outputs map directly to PLAN.md contracts.
+description: |
+  Phase 3 (phase_framing) of the Path 3 research state machine.
+  Converts gaps from literature-landscape-scan into structured, falsifiable research questions
+  with verification criteria. Supports PICO (biomedical) and SMED (physics) frameworks.
+  Outputs map directly to PLAN.md contracts.
 ---
 
-# Research Question Framing
+# Research Question Framing — phase_framing
 
-Transform research gaps and open problems into structured, falsifiable research questions that can drive systematic investigation and map directly to PLAN.md contracts.
+This skill implements **Phase 3** of the Path 3 research state machine. It converts landscape gaps and analysis findings into structured research questions that become the PLAN.md contract.
 
-## When to Use
+## Lifecycle Contract
 
-Use this skill when:
+**Input**: ROADMAP.md + landscape_map.md (gap_list) + research_analysis.md
 
-- Converting open problems from a literature-landscape-scan gap_list into actionable research questions
-- Defining or refining a research question before beginning a project
-- Creating PLAN.md contracts from identified research gaps
-- Ensuring research questions are falsifiable and verifiable before committing resources
+**Output** (MUST write all of these):
 
-## Framework Selection
+1. `output_dir/persistence/PLAN.md` — Contract with claims, deliverables, acceptance_tests, forbidden_proxies
+2. `output_dir/notepads/<slug>/research_questions.md` — Structured question framing
+3. `output_dir/persistence/STATE.md` — Updated with phase=phase_framing completed
 
-Choose a question framework based on domain:
+**State transition**: phase_framing → phase_checkpoint (user confirmation)
 
-### PICO Framework (Biomedical / Clinical)
-
-- **P**opulation: Who/what is the study about?
-- **I**ntervention: What is being tested/applied?
-- **C**omparison: What is it compared against?
-- **O**utcome: What is the measured result?
-
-Example: "What is the efficacy of CRISPR-Cas9 (I) for treating sickle cell disease (P) compared to standard care (C) in improving patient outcomes (O)?"
-
-### SMED Framework (Physics / Theoretical)
-
-- **System**: What physical system or phenomenon?
-- **Model**: What theoretical model or computational approach?
-- **Expectation**: What does the model predict?
-- **Deviation**: What discrepancies exist between prediction and observation?
-
-Example: "In the Standard Model (M) applied to B-meson decays (S), does the predicted branching ratio (E) deviate from LHCb measurements (D) beyond 3σ?"
-
-### General Framework (Cross-disciplinary)
-
-- **Context**: What is the broader setting?
-- **Problem**: What specific issue needs investigation?
-- **Approach**: What methodology will be used?
-- **Evidence**: What kind of evidence would confirm or refute?
+**MUST NOT**: Execute experiments (that is phase_execution). Skip to phase_execution without phase_checkpoint.
 
 ## Procedure
 
-### Step 1: Read Landscape Input
+### Step 1: Read Current State
 
-If starting from a literature-landscape-scan:
+1. Read `output_dir/persistence/STATE.md` — confirm phase is phase_landscape completed (or phase_analysis if landscape was skipped)
+2. Read `output_dir/persistence/ROADMAP.md` — understand project scope
+3. Read landscape_map.md (if exists) — extract gap_list
+4. Read research_analysis.md — extract initial findings
+5. Read state.json via research-state MCP (`get_state`)
+6. Check `convention_lock_status` via research-conventions MCP if physics domain
 
-1. Read the gap_list from `landscape_map.md`
+### Step 2: Select Gaps for Framing
+
+1. Read the gap_list from landscape_map.md (or derive gaps from research_analysis.md if landscape was skipped)
 2. For each open problem, extract: description, significance, difficulty, related schools
 3. Prioritize gaps by: significance (High first) × feasibility (Easy/Medium first)
 4. Select 1-3 gaps to frame as research questions
 
-### Step 2: Apply Question Framework
+### Step 3: Apply Question Framework
 
-For each selected gap, apply the appropriate framework:
+For each selected gap:
 
-1. **Identify domain**: Is this physics, biomedical, CS, or cross-disciplinary?
-2. **Select framework**: PICO, SMED, or General
+1. **Identify domain**: Physics, biomedical, CS, or cross-disciplinary
+2. **Select framework**:
+   - **SMED (Physics/Theoretical)**: System, Model, Expectation, Deviation
+   - **PICO (Biomedical/Clinical)**: Population, Intervention, Comparison, Outcome
+   - **General (Cross-disciplinary)**: Context, Problem, Approach, Evidence
 3. **Fill in framework elements**:
    - Be specific — avoid vague terms
    - Include quantitative bounds where possible
    - Reference specific systems, models, or populations
 4. **Formulate question**: Combine framework elements into a single, focused question
 
-### Step 3: Specify Verifiability Criteria
+### Step 4: Specify Verifiability Criteria
 
 Every research question MUST include:
 
-1. **Falsification criterion**: What specific result would prove the question's hypothesis wrong?
+1. **Falsification criterion**: What specific result would prove the hypothesis wrong?
    - Must be concrete and measurable
-   - Example: "If the branching ratio is within 2σ of SM prediction, the anomaly claim is falsified"
 
 2. **Measurement method**: How will evidence be gathered?
    - Computational simulation, experimental data, literature synthesis, theoretical derivation
-   - Specify tools/databases: arXiv, alphaxiv, INSPIRE-HEP, specific simulation packages
+   - Specify tools/databases/packages
 
 3. **Evidence kind**: What type of evidence is expected?
-   - Numerical result with error bars
-   - Qualitative classification
-   - Literature consensus or disagreement
-   - Theoretical proof or derivation
+   - Numerical result with error bars, qualitative classification, literature consensus, theoretical proof
 
-### Step 4: Map to PLAN.md Contract
+### Step 5: Write Research Questions Document
 
-Each research question maps directly to PLAN.md contract fields:
-
-| Question element            | PLAN.md field     |
-| --------------------------- | ----------------- |
-| Framework assertion         | claims            |
-| Expected deliverable        | deliverables      |
-| Falsification criterion     | acceptance_tests  |
-| Disallowed evidence sources | forbidden_proxies |
-
-Write the mapping to `.aether/research/persistence/PLAN.md`.
-
-### Step 5: Check Conventions
-
-Before finalizing questions for physics domains:
-
-1. Call `convention_lock_status` via research-conventions MCP
-2. Verify that metric_signature, natural_units, fourier_convention, etc. are consistent with the question's assumptions
-3. If conventions are unlocked, set them before proceeding
-
-### Step 6: Write Structured Output
-
-Write output to `output_dir/notepads/<slug>/research_questions.md`:
+Write to `output_dir/notepads/<slug>/research_questions.md`:
 
 ```markdown
 # Research Questions: [Topic]
@@ -118,31 +83,75 @@ Write output to `output_dir/notepads/<slug>/research_questions.md`:
 
 - **Domain**: [Physics / Biomedical / CS / Cross-disciplinary]
 - **Framework**: [SMED / PICO / General]
-- **System**: [Specific system/phenomenon]
-- **Model**: [Specific theoretical/computational approach]
-- **Expectation**: [What the model predicts]
-- **Deviation**: [Observed or expected discrepancy]
+- **System/Population**: [Specific system/phenomenon]
+- **Model/Intervention**: [Specific approach]
+- **Expectation/Comparison**: [What the model predicts / what it's compared against]
+- **Deviation/Outcome**: [Observed discrepancy / measured result]
 - **Question**: [Full formulated question]
-- **Falsification_criterion**: [Specific result that would prove hypothesis wrong]
+- **Falsification_criterion**: [What proves hypothesis wrong]
 - **Measurement_method**: [How evidence will be gathered]
 - **Evidence_kind**: [Type of expected evidence]
 - **Scope_constraints**: [Time range, system bounds, approximation limits]
-- **PLAN.md mapping**:
-  - claims: [Derived from framework assertion]
-  - acceptance_tests: [Derived from falsification criterion]
-  - forbidden_proxies: [Sources that must not be used as sole evidence]
 
 ## Question 2: [Title]
 
-[Same structure]
+[same structure]
 ```
 
-## Integration with Other Skills
+### Step 6: Map to PLAN.md Contract
 
-- **literature-landscape-scan**: Input — gap_list provides open problems to convert into questions
-- **deep-research**: Use for preliminary evidence gathering on newly framed questions
-- **research-verification**: Verify that questions meet falsifiability and verifiability standards
-- **autoresearch**: Framed questions drive PLAN.md contracts for the autonomous research loop
+Write to `output_dir/persistence/PLAN.md`:
+
+```markdown
+# Research Plan — [Project Name]
+
+## Contract
+
+### Claims
+
+- [Claim 1]: [Specific assertion derived from research question]
+- [Claim 2]: [Specific assertion derived from research question]
+
+### Deliverables
+
+- [Deliverable 1]: [Expected output — e.g., numerical results, code implementation, theoretical derivation]
+- [Deliverable 2]: [Expected output]
+
+### Acceptance Tests
+
+- [Test 1]: [How to verify claim 1 — derived from falsification criterion]
+- [Test 2]: [How to verify claim 2]
+
+### Forbidden Proxies
+
+- [Proxy 1]: [What shortcuts MUST NOT be used as evidence — e.g., LLM-only reasoning for numerical claims]
+- [Proxy 2]: [What sources MUST NOT be sole evidence]
+
+### Execution Plan
+
+- Method: [Python/C++/Mathematica/etc.]
+- Tools: [Specific software packages — e.g., amflow, dct_nis_python]
+- Environment: [Docker/local/remote]
+- Verification approach: [gpd-verifier / research-verifier]
+```
+
+### Step 7: Check Conventions
+
+Before finalizing for physics domains:
+
+1. Call `convention_lock_status` via research-conventions MCP
+2. Verify metric_signature, natural_units, fourier_convention consistency
+3. If conventions are unlocked, set them before proceeding
+
+### Step 8: Update State
+
+1. Update `output_dir/persistence/STATE.md`:
+   - phase: phase_framing completed
+   - key decisions: [research questions chosen, framework selected]
+   - blockers: [any]
+   - next_action: enter phase_checkpoint (present plan to user for confirmation)
+2. Call `advance_plan` via research-state MCP
+3. Return to the research agent — the agent will enter phase_checkpoint
 
 ## Integrity
 

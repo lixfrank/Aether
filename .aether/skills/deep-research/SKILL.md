@@ -1,102 +1,126 @@
 ---
 name: deep-research
 description: |
-  Comprehensive research assistant that synthesizes information from multiple sources with citations.
-  Use when: conducting in-depth research, gathering sources, writing research summaries, analyzing topics
-  from multiple perspectives, or when user mentions research, investigation, or needs synthesized analysis
-  with citations.
+  Phase 1 (phase_analysis) of the Path 3 research state machine.
+  Synthesizes information from multiple sources, analyzes local reference materials,
+  and writes ROADMAP.md. Invoked automatically by the research agent when a
+  research project is classified through the Entry Gate.
+  Do NOT invoke this skill for quick lookups (Path 1) or literature reviews (Path 2).
 ---
 
-# Deep Research
+# Deep Research — phase_analysis
 
-You are an expert researcher who provides thorough, well-cited analysis by synthesizing information from multiple perspectives.
+This skill implements **Phase 1** of the Path 3 research state machine. It is invoked by the research agent after the Entry Gate classifies a prompt as a research project.
 
-## When to Apply
+## Lifecycle Contract
 
-Use this skill when:
+**Input**: User's research prompt + any local file references
 
-- Conducting in-depth research on a topic
-- Synthesizing information from multiple sources
-- Creating research summaries with proper citations
-- Analyzing different viewpoints and perspectives
-- Identifying key findings and trends
-- Evaluating the quality and credibility of sources
+**Output** (MUST write all of these):
 
-## Research Process
+1. `output_dir/persistence/ROADMAP.md` — Project definition, phase breakdown, milestones, expected deliverables
+2. `output_dir/persistence/STATE.md` — Updated with phase=phase_analysis completed
+3. `output_dir/notepads/<slug>/research_analysis.md` — Detailed analysis with citations
 
-Follow this systematic approach:
+**State transition**: phase_analysis → phase_landscape (or phase_framing if landscape is skipped)
 
-### 1. **Clarify the Research Question**
+**MUST NOT**: Write PLAN.md (that is phase_framing's responsibility). Write VERIFICATION.md (that is phase_execution's responsibility).
 
-- What exactly needs to be researched?
-- What level of detail is required?
-- Are there specific angles to prioritize?
-- What is the purpose of the research?
+## Procedure
 
-### 2. **Identify Key Aspects**
+### Step 1: Read Current State
 
-- Break the topic into subtopics or dimensions
-- List main questions to answer
-- Note important context or background needed
+1. Read `output_dir/persistence/STATE.md` — confirm phase indicates gate classification complete and Path 3 selected (Current Phase field should contain "gate → Path 3" or be empty/not yet started)
+2. Read `output_dir/persistence/state.json` via research-state MCP (`get_state`)
+3. Check `convention_lock_status` via research-conventions MCP if physics domain
 
-### 3. **Gather Information**
+### Step 2: Clarify the Research Question
 
-- Consider multiple perspectives
-- Look for primary and secondary sources
-- Check publication dates and currency
-- Evaluate source credibility
+- Extract the core research question from the user's prompt
+- Identify subtopics, dimensions, and required angles
+- Note local reference materials mentioned (files, code, tools)
+- Determine the research domain (physics, CS, cross-disciplinary)
+
+### Step 3: Gather Information
+
+- **Local files**: Read any referenced local files (papers, code, data). Use read/glob/grep tools directly, NOT explore subagent.
+- **Literature**: Dispatch research-explorer subagent for parallel database searches (arXiv, INSPIRE-HEP, Semantic Scholar)
+- **Web**: Use websearch/webfetch for supplementary context
 - For physics literature: use alpha-research skill for initial search, then alphaxiv overview for deeper understanding
-- Delegate parallel search tasks to research-explorer subagent when multiple database searches are needed
 
-### 4. **Synthesize Findings**
+### Step 4: Synthesize Findings
 
-- Identify patterns and themes
+- Identify patterns, themes, and key insights
 - Note areas of consensus and disagreement
-- Highlight key insights
-- Connect related information
+- Map the research landscape at a high level (schools, approaches, methods)
+- Identify what is known vs what needs further investigation
 
-### 5. **Document Sources**
+### Step 5: Write ROADMAP.md
 
-- Use numbered citations [1], [2], etc.
-- List full sources at the end
-- Note if information is uncertain or contested
-- Indicate confidence levels where appropriate
+Write to `output_dir/persistence/ROADMAP.md` with this structure:
 
-## Research Persistence
+```markdown
+# Research Roadmap
 
-Write research outputs to the project's output_dir structure:
+## Project: [Project name]
 
-1. **ROADMAP.md**: After initial research, write a roadmap to `output_dir/persistence/ROADMAP.md` defining research phases, milestones, and expected deliverables
-2. **PLAN.md**: Before each phase, write a contract to `output_dir/persistence/PLAN.md` with: claims, deliverables, acceptance_tests, forbidden_proxies
-3. **STATE.md**: After each phase completion, update `output_dir/persistence/STATE.md` with: current_phase, decisions, blockers, next_steps
+## Research Question
 
-## MCP Integration
+[Core question extracted from user prompt]
 
-Integrate with research MCP servers during the research process:
+## Phase Breakdown
 
-- **research-conventions**: Before starting research on a domain, call `convention_lock_status` to check current convention settings. Call `convention_check` on any document containing ASSERT_CONVENTION headers before finalizing.
-- **research-state**: After completing a research phase, call `advance_plan` to advance the state machine. Read current state via `get_state` before beginning work.
+### Phase 1: Analysis (current)
 
-## Subagent Dispatch
+- Goal: [Initial research question clarification and evidence gathering]
+- Status: completed
+- Deliverables: research_analysis.md
 
-- When multiple database searches are needed in parallel, dispatch `research-explorer` subagent to execute literature landscape scans
-- When verification of findings is required, delegate to `research-verifier` or `gpd-verifier` subagent
-- Provide clear instructions and scope to subagents
+### Phase 2: Landscape Expansion
 
-## Output Format
+- Goal: [Broad literature mapping, school classification]
+- Status: pending
+- Deliverables: landscape_map.md
 
-Structure your research as:
+### Phase 3: Question Framing
+
+- Goal: [Convert gaps into falsifiable research questions]
+- Status: pending
+- Deliverables: PLAN.md with contract
+
+### Phase 4: User Checkpoint
+
+- Goal: [Present final plan, get user confirmation]
+- Status: pending
+
+### Phase 5: Execution
+
+- Goal: [Execute PLAN.md via sandbox-executor, verify results]
+- Status: pending
+- Deliverables: VERIFICATION.md
+
+## Milestones
+
+[Key checkpoints across phases]
+
+## Expected Deliverables
+
+[Final outputs the user expects]
+```
+
+### Step 6: Write Research Analysis
+
+Write to `output_dir/notepads/<slug>/research_analysis.md`:
 
 ```markdown
 ## Executive Summary
 
-[2-3 sentence overview of key findings]
+[2-3 sentence overview]
 
 ## Key Findings
 
 - **[Finding 1]**: [Brief explanation] [1]
 - **[Finding 2]**: [Brief explanation] [2]
-- **[Finding 3]**: [Brief explanation] [3]
 
 ## Detailed Analysis
 
@@ -108,42 +132,41 @@ Structure your research as:
 
 [In-depth analysis with citations]
 
-## Areas of Consensus
+## Literature Coverage Assessment
 
-[What sources agree on]
-
-## Areas of Debate
-
-[Where sources disagree or uncertainty exists]
+- Schools identified: [list]
+- Key papers found: [count]
+- Gaps needing landscape expansion: [list]
 
 ## Sources
 
-[1] [Full citation with credibility note]
-[2] [Full citation with credibility note]
-
-## Gaps and Further Research
-
-[What's still unknown or needs investigation]
+[1] [Full citation]
+[2] [Full citation]
 ```
 
-Write output to: `output_dir/notepads/<slug>/` where `<slug>` is a URL-safe version of the research topic.
+### Step 7: Update State
 
-## Source Evaluation Criteria
+1. Update `output_dir/persistence/STATE.md`:
+   - phase: phase_analysis completed
+   - key decisions: [what was decided]
+   - blockers: [any identified]
+   - next_action: enter phase_landscape (or phase_framing if skip justified)
+2. Call `advance_plan` via research-state MCP
+3. Return to the research agent — the agent will route to the next phase
 
-When citing sources, note:
+## Subagent Dispatch
 
-- **Peer-reviewed journals** - Highest credibility
-- **Official reports/statistics** - Authoritative data
-- **News from reputable outlets** - Timely, fact-checked
-- **Expert commentary** - Qualified opinions
-- **General websites** - verify independently
+- Dispatch `research-explorer` subagent for parallel literature searches
+- FORBIDDEN: Dispatching explore or general subagents — use research-explorer only
+- Provide clear scope, search terms, and database targets to subagents
 
-For physics/math literature, add domain-specific evaluation:
+## Source Evaluation
 
-- **arXiv preprints** - Check for subsequent peer-reviewed publication; note if still preprint-only
-- **alphaxiv overview** - AI-generated summary useful for initial understanding, but verify claims against original paper
-- **INSPIRE-HEP** - Citation counts and community endorsement metrics
-- **Conference proceedings** - Note peer-review status of the proceedings
+- Peer-reviewed journals: highest credibility
+- arXiv preprints: check for subsequent peer-reviewed publication
+- alphaxiv overview: verify claims against original paper
+- INSPIRE-HEP: citation counts and community endorsement
+- Local files: treat as primary sources with direct verification
 
 ## Integrity
 
