@@ -80,6 +80,28 @@ For papers identified as potentially important:
 3. Fallback to arXiv abstract if alphaxiv overview unavailable
 4. Classify papers by: theoretical approach, methodology, domain subfield
 
+### Step 4.5: Download Representative and Key Papers
+
+For papers classified as representative or key in the landscape:
+
+1. **Collect identifiers** from:
+   - Representative papers of each school (arXiv IDs / DOIs)
+   - Foundational and influential papers in the timeline
+   - Papers central to identified controversies
+2. **Prepare batch file**: Create `key_papers.json` with metadata:
+   ```json
+   [
+     {"arxiv_id": "2401.12345", "doi": "...", "title": "...", "authors": "...", "year": 2024, "relevance": "representative"},
+     ...
+   ]
+   ```
+3. **Run download script**:
+   ```bash
+   uv run .aether/skills/literature-review/scripts/download_paper.py --batch key_papers.json --output .aether/research/literatures --relevance representative
+   ```
+4. **Record results**: Successfully downloaded papers go to `literatures/index.json`; unavailable papers go to `literatures/unavailable.md` (title, authors, journal, DOI, URL, reason)
+5. **Do NOT block on failures**: If a paper has no OA version, note it in unavailable.md and proceed — landscape scan focuses on mapping, not full archiving
+
 ### Step 5: Map the Landscape
 
 Classify papers into a structured landscape:
@@ -188,6 +210,7 @@ phase_result_digest:
       positions: ["School A: position X", "School B: position Y"]
   output_paths:
     landscape_map: notepads/[slug]/landscape_map.md
+    literatures_index: research/literatures/index.json
   next_phase: phase_framing
 ```
 

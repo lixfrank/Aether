@@ -76,6 +76,26 @@ State is tracked in `output_dir/notepads/<slug>/review_state.md`, NOT in STATE.m
 6. **Create PRISMA Flow Diagram**: Track screening progression
 7. **Write screening_log.md**: Document all inclusion/exclusion decisions with reasons
 
+### Phase 3b: Download Included Papers
+
+After full-text screening identifies the final included set:
+
+1. **Collect identifiers** from all included papers (arXiv IDs, DOIs)
+2. **Prepare batch file**: Create `included_papers.json` with metadata for each included paper:
+   ```json
+   [
+     {"arxiv_id": "2401.12345", "doi": "...", "title": "...", "authors": "...", "year": 2024, "relevance": "included"},
+     ...
+   ]
+   ```
+3. **Run download script**:
+   ```bash
+   uv run .aether/skills/literature-review/scripts/download_paper.py --batch included_papers.json --output .aether/research/literatures --relevance included
+   ```
+4. **Record results**: Successfully downloaded papers are recorded in `literatures/index.json`; failed papers are recorded in `literatures/unavailable.md` with full metadata (title, authors, journal, DOI, URL, reason)
+5. **Update screening_log.md**: Add download status column — mark local_path for downloaded, "unavailable" for failed
+6. **Do NOT retry excessively**: If a paper has no OA version, note it and proceed
+
 ### Phase 4: Data Extraction and Quality Assessment
 
 1. **Extract Key Data** from each included study: metadata, methods, findings, limitations
@@ -123,6 +143,12 @@ output_dir/notepads/<slug>/
   review_state.md    — Review progress tracking (internal state machine)
   screening_log.md   — Inclusion/exclusion decisions
   search_results/    — Raw search results from each database
+  download_report.json — Download results report
+
+.aether/research/literatures/
+  index.json           — Download index (metadata + local path + source)
+  unavailable.md       — Papers that could not be downloaded (title, authors, journal, DOI, URL, reason)
+  <author>_<year>_<id>.pdf — Downloaded PDF files
 ```
 
 ## Integrity
