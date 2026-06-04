@@ -60,3 +60,5 @@ uv run scripts/dimensional_check.py '{"expression": "...", "context": {"domain":
 ## Integrity
 
 Never override a script `fail` verdict with LLM reasoning. Never use keyword scanning instead of SymPy computation where scripts exist.
+
+- MUST NOT use bare python/pip commands. All script execution MUST use `uv run` (PEP 723) or `.aether/research/.venv/bin/python` (venv-isolated). Direct `python3` or `pip install` is FORBIDDEN.

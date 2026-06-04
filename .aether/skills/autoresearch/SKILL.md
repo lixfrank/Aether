@@ -43,7 +43,7 @@ Probe the host system for available software:
 
 ```bash
 python3 --version 2>/dev/null || echo "python: not available"
-uv --version 2>/dev/null || echo "uv: not available"
+uv --version 2>/dev/null || echo "CRITICAL: uv not available — Python tasks cannot be isolated; report as critical gap"
 docker --version 2>/dev/null || echo "docker: not available"
 wolframscript --version 2>/dev/null || echo "wolframscript: not available"
 nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null || echo "gpu: not available"
@@ -58,29 +58,57 @@ For each task derived from PLAN.md contract:
 1. Extract software requirements from PLAN.md `environment_requirements` field
 2. Apply classification rules:
 
-| Condition                                                                             | Strategy                               |
-| ------------------------------------------------------------------------------------- | -------------------------------------- |
-| Licensed/self-contained software (Mathematica, MATLAB, Stata), host available         | `local`                                |
-| Pure Python + wheel-installable packages (numpy, scipy, sympy, pandas), uv available  | `uv_venv`                              |
-| C/C++ compilation needed (pybind11 development, Cython C extension), Docker available | `docker`                               |
-| GPU workloads (PyTorch/TensorFlow training), Docker + GPU available                   | `docker`                               |
-| Untrusted external repo code, Docker available                                        | `docker`                               |
-| Mixed (Python + Mathematica)                                                          | Split into separate tasks per strategy |
+| Condition                                                                             | Strategy                                                                      |
+| ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Licensed/self-contained software (Mathematica, MATLAB, Stata), host available         | `local`                                                                       |
+| Pure Python + wheel-installable packages (numpy, scipy, sympy, pandas), uv available  | `uv_venv`                                                                     |
+| Pure Python + wheel-installable packages, **uv NOT available**                        | `gap (critical)` — user must install uv first; do NOT fallback to bare python |
+| C/C++ compilation needed (pybind11 development, Cython C extension), Docker available | `docker`                                                                      |
+| GPU workloads (PyTorch/TensorFlow training), Docker + GPU available                   | `docker`                                                                      |
+| Untrusted external repo code, Docker available                                        | `docker`                                                                      |
+| Mixed (Python + Mathematica)                                                          | Split into separate tasks per strategy                                        |
 
 3. For each task, write `isolation_strategy` entry in ENVIRONMENT.md
 4. Identify gaps: critical software that is unavailable on host
 
 ### Step 4: Write ENVIRONMENT.md
 
-Write `.aether/research/persistence/ENVIRONMENT.md` with:
+Write `.aether/research/persistence/ENVIRONMENT.md` with the following YAML structure:
 
-- `probe_timestamp`: ISO 8601 timestamp
-- `cycle`: cycle number from dispatch prompt
-- `host_system`: probe results
-- `plan_requirements`: from PLAN.md environment_requirements
-- `isolation_strategy`: per-task classification decisions
-- `venv_state`: reuse check from previous cycle if .aether/research/.venv exists
-- `gaps`: missing critical software
+```yaml
+# Environment Profile — written by research-worker at execution_cycle start
+
+probe_timestamp: "[ISO 8601]"
+cycle: [N]
+
+host_system:
+  os: "[e.g., macOS 15.5 (Apple Silicon aarch64)]"
+  python: { available: true|false, versions: ["..."], default: "..." }
+  docker: { available: true|false, desktop: true|false, version: "..." }
+  wolframscript: { available: true|false, version: "..." }
+  uv: { available: true|false, version: "..." }
+  gpu: { available: true|false }
+
+plan_requirements: [copied from PLAN.md environment_requirements]
+
+isolation_strategy:
+  - task: "[task_name]"
+    strategy: "[docker|uv_venv|local]"
+    software: ["..."]
+    rationale: "[brief reason]"
+    setup_commands: ["..."] # for uv_venv strategy
+    run_prefix: "..." # for uv_venv strategy
+    command: "..." # for local strategy (e.g., wolframscript -c)
+
+venv_state:
+  path: ".aether/research/.venv"
+  installed_packages: [] # populated after local-executor runs
+  last_cycle: null # updated after each cycle
+
+gaps: [] # or list of missing critical software
+```
+
+HARD CONSTRAINT: ENVIRONMENT.md MUST be written to `.aether/research/persistence/ENVIRONMENT.md` BEFORE dispatching any executor. Executors read this file to determine their execution strategy. If ENVIRONMENT.md is not written, executors will lack isolation strategy information and may default to unsafe host execution.
 
 ### Step 5: Gap Check
 
@@ -119,6 +147,8 @@ task(
 
 **strategy=uv_venv or strategy=local → dispatch local-executor**:
 
+UV-FIRST POLICY: All Python execution MUST use .aether/research/.venv/bin/python or uv run. NEVER use bare python3 or pip install. If venv setup fails, report failure — do NOT fall back to host python.
+
 ```
 task(
   description: "[task_name] ([strategy])",
@@ -131,6 +161,7 @@ task(
   Run prefix: [from ENVIRONMENT.md]
   Acceptance tests: [relevant tests from PLAN.md]
   Convention context: [summary]
+  UV-FIRST POLICY: All Python execution MUST use .aether/research/.venv/bin/python or uv run. NEVER use bare python3 or pip install. If venv setup fails, report failure — do NOT fall back to host python.
   Read ENVIRONMENT.md for venv state and strategy details.
   Write results to .aether/research/persistence/EXECUTION.md (append section)."
 )

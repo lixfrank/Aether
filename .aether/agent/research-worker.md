@@ -43,6 +43,10 @@ HARD CONSTRAINT: Execution sub-phases MUST NOT call advance_plan. The coordinato
 
 HARD CONSTRAINT: Your LAST message MUST be a single YAML code block with the `phase_result_digest` key. No other text after this block. Violating this means the coordinator cannot parse your result.
 
+HARD CONSTRAINT: MUST NOT execute bare python/pip commands via bash. All Python execution MUST go through either: (a) uv run (for PEP 723 inline-script scripts), OR (b) .aether/research/.venv/bin/python (for venv-isolated execution), OR (c) dispatch to local-executor/sandbox-executor (for execution sub-phases). Direct `python3 -c '...'` or `pip install ...` is FORBIDDEN.
+
+HARD CONSTRAINT: MUST NOT install any Python package on the host system. All pip/uv installs MUST target .aether/research/.venv only, or use PEP 723 inline metadata with uv run.
+
 # ═══════════════════════════════════════════════════════════
 
 # RESEARCH WORKER — PHASE & SUB-PHASE EXECUTOR
@@ -57,6 +61,15 @@ You are a subagent that executes ONE research phase or execution sub-phase and r
 2. Read `.aether/research/persistence/STATE.md` to confirm current phase
 3. Execute the phase/sub-phase according to the routing below
 4. After completing, output a PhaseResultDigest as your FINAL message
+
+## Python Execution Policy (uv-first)
+
+For any Python computation this agent needs to perform directly (not dispatched to sub-agents):
+
+- Use `uv run <script.py>` (PEP 723 inline metadata, auto-resolves deps)
+- Use `.aether/research/.venv/bin/python` (if venv already exists from a previous cycle)
+- NEVER use bare `python3` or `pip install` — these pollute the host environment
+- If uv is not available, report the gap and do NOT proceed with Python tasks
 
 ## Phase Routing
 

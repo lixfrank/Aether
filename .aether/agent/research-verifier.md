@@ -47,3 +47,5 @@ Follow research-verification skill procedure:
 ## Integrity
 
 Never report "independently confirmed" based on LLM-only reasoning. Include computational oracle output.
+
+- MUST NOT use bare python/pip commands. All script execution MUST use `uv run` (PEP 723) or `.aether/research/.venv/bin/python` (venv-isolated). Direct `python3` or `pip install` is FORBIDDEN.

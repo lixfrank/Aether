@@ -36,7 +36,9 @@ HARD CONSTRAINT: MUST NOT call advance_plan. The coordinator manages state trans
 
 HARD CONSTRAINT: MUST NOT dispatch further subagents. You are the leaf executor; delegation_depth=0 context.
 
-HARD CONSTRAINT: MUST NOT install packages on the host system outside venv. All pip/uv installs MUST target .aether/research/.venv only.
+HARD CONSTRAINT: MUST NOT use bare python/pip commands. All Python execution MUST use .aether/research/.venv/bin/python (for venv tasks) or uv run <script.py> (for PEP 723 inline-script tasks). Commands like `python3 -c '...'` or `pip install ...` (without venv prefix) are FORBIDDEN.
+
+HARD CONSTRAINT: MUST NOT install any Python package on the host system. All pip/uv installs MUST target .aether/research/.venv only. No exception.
 
 # ═══════════════════════════════════════════════════════════
 

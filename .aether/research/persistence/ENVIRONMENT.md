@@ -4,6 +4,7 @@
 > Written by research-worker at execution_cycle start, updated at each cycle.
 > Read by sandbox-executor and local-executor to determine execution strategy.
 > The coordinator reads gaps section to report missing software to the user.
+> HARD CONSTRAINT: This file MUST be written BEFORE dispatching any executor.
 
 ---
 

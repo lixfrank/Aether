@@ -17,9 +17,11 @@ This skill implements **Phase 3** of the Path 3 research state machine. It conve
 
 **Output** (MUST write all of these):
 
-1. `.aether/research/persistence/PLAN.md` — Contract with claims, deliverables, acceptance_tests, forbidden_proxies
+1. `.aether/research/persistence/PLAN.md` — Contract with claims, deliverables, acceptance_tests, forbidden_proxies, **environment_requirements**
 2. `.aether/research/notepads/<slug>/research_questions.md` — Structured question framing
 3. `.aether/research/persistence/STATE.md` — Updated with phase=phase_framing completed
+
+**Downstream note**: The `environment_requirements` field in PLAN.md is NOT just informational — it is consumed by the `/autoresearch` skill during execution_cycle to probe the host system and write `.aether/research/persistence/ENVIRONMENT.md`. ENVIRONMENT.md contains: (1) host_system probe results (what software is actually available), (2) plan_requirements (what was declared), (3) isolation_strategy (per-task decisions: docker/uv_venv/local), (4) gaps (missing critical software). The coordinator uses gaps to inform the user about unavailable software. **You MUST write environment_requirements with enough specificity for the execution phase to classify each requirement into an isolation strategy (docker/uv_venv/local).**
 
 **State transition**: phase_framing → phase_checkpoint (user confirmation)
 
@@ -135,19 +137,29 @@ Write to `.aether/research/persistence/PLAN.md`:
 
 ### Environment Requirements
 
+> Each requirement MUST include the `critical` field and enough detail for the execution phase to classify the isolation strategy. The autoresearch skill will map these requirements to strategies during execution_cycle:
+>
+> - Licensed/self-contained software (Mathematica, MATLAB, Stata) → strategy `local`
+> - Pure Python + wheel-installable packages → strategy `uv_venv`
+> - C/C++ compilation, GPU, untrusted code → strategy `docker`
+> - Docker itself → strategy prerequisite, `critical: false` (fallback to local if unavailable)
+
 - requirement_1:
   software: "[e.g., Python 3.11]"
   packages: ["numpy", "scipy", "sympy"]
   purpose: "[e.g., numerical simulation]"
+  isolation_hint: "[uv_venv — pure Python, wheel-installable]"
   critical: true
 - requirement_2:
   software: "[e.g., Mathematica 13+]"
   packages: []
   purpose: "[e.g., symbolic verification]"
+  isolation_hint: "[local — licensed, self-contained, no environment pollution]"
   critical: true
 - requirement_3:
   software: "[e.g., Docker]"
   purpose: "[e.g., C++ compilation isolation — only if needed]"
+  isolation_hint: "[docker prerequisite — not a research tool itself]"
   critical: false
 ```
 
@@ -194,9 +206,11 @@ phase_result_digest:
     - software: "[Python 3.11]"
       packages: ["numpy", "scipy"]
       purpose: "[numerical simulation]"
+      isolation_hint: "[uv_venv]"
       critical: true
     - software: "[Mathematica 13+]"
       purpose: "[symbolic verification]"
+      isolation_hint: "[local]"
       critical: true
   verification_approach: [gpd-verifier | research-verifier]
   output_paths:
