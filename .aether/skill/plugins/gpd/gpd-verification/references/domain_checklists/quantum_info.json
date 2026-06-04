@@ -1,0 +1,38 @@
+{
+  "gpd_source": {
+    "repo": "psi-oss/get-physics-done",
+    "path": "gpd/mcp/servers/verification_server.py (DOMAIN_CHECKLISTS)",
+    "commit": "to_be_pinned",
+    "cherry_pick_method": "semantic_equivalence"
+  },
+  "domain": "quantum_info",
+  "name": "Quantum Information",
+  "priority_checks": ["dimensional_analysis", "numerical_spot_check", "positivity_constraints", "physical_plausibility", "conservation_laws", "unitarity_bounds"],
+  "red_flags": [
+    "Density matrix with negative eigenvalue",
+    "Non-unitary quantum gate",
+    "Bell inequality violation > 2√2 (Tsirelson bound)",
+    "Entanglement measure exceeding theoretical maximum",
+    "Wrong partial trace dimension",
+    "Channel capacity exceeding Holevo bound"
+  ],
+  "standard_benchmarks": [
+    {
+      "name": "CNOT gate matrix",
+      "reference": "Standard 4×4 CNOT",
+      "tolerance": 1e-10
+    },
+    {
+      "name": "Bell state fidelity",
+      "reference": "F = 1 for ideal Bell state",
+      "tolerance": 1e-8
+    },
+    {
+      "name": "Von Neumann entropy of maximally mixed state",
+      "reference": "S = log₂(d)",
+      "tolerance": 1e-8
+    }
+  ],
+  "convention_sensitive": ["natural_units", "basis_convention", "qubit_ordering"],
+  "scripts_available": ["scripts/dimensional_check.py", "scripts/spot_check.py", "scripts/symmetry_check.py"]
+}

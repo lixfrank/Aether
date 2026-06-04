@@ -1,0 +1,38 @@
+{
+  "gpd_source": {
+    "repo": "psi-oss/get-physics-done",
+    "path": "gpd/mcp/servers/verification_server.py (DOMAIN_CHECKLISTS)",
+    "commit": "to_be_pinned",
+    "cherry_pick_method": "semantic_equivalence"
+  },
+  "domain": "condensed_matter",
+  "name": "Condensed Matter Physics",
+  "priority_checks": ["dimensional_analysis", "numerical_spot_check", "limiting_cases", "physical_plausibility", "order_of_magnitude", "conservation_laws"],
+  "red_flags": [
+    "Band structure with negative density of states",
+    "Fermi level in band gap with nonzero DOS",
+    "Thermal conductivity exceeding Wiedemann-Franz law without explanation",
+    "Missing Umklapp scattering in resistivity calculation",
+    "Wrong lattice symmetry group",
+    "Inconsistent Brillouin zone boundary conditions"
+  ],
+  "standard_benchmarks": [
+    {
+      "name": "Free electron DOS (3D)",
+      "reference": "ρ(E) = (2m)^{3/2} E^{1/2} / (2π²)",
+      "tolerance": 1e-4
+    },
+    {
+      "name": "BCS gap equation solution",
+      "reference": "Δ₀ = 2ω_D exp(-1/N(0)V)",
+      "tolerance": 1e-3
+    },
+    {
+      "name": "Debye model specific heat (low T)",
+      "reference": "C_V ∝ T³",
+      "tolerance": 1e-3
+    }
+  ],
+  "convention_sensitive": ["metric_signature", "natural_units", "fourier_convention", "gauge_choice"],
+  "scripts_available": ["scripts/dimensional_check.py", "scripts/spot_check.py", "scripts/limiting_case_check.py", "scripts/convergence_check.py"]
+}

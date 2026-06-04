@@ -1,0 +1,38 @@
+{
+  "gpd_source": {
+    "repo": "psi-oss/get-physics-done",
+    "path": "gpd/mcp/servers/verification_server.py (DOMAIN_CHECKLISTS)",
+    "commit": "to_be_pinned",
+    "cherry_pick_method": "semantic_equivalence"
+  },
+  "domain": "soft_matter",
+  "name": "Soft Matter & Biophysics",
+  "priority_checks": ["dimensional_analysis", "numerical_spot_check", "limiting_cases", "physical_plausibility", "statistical_validation", "order_of_magnitude"],
+  "red_flags": [
+    "Polymer chain with wrong scaling exponent",
+    "Missing entropic contribution in free energy",
+    "Incorrect Flory-Huggins parameter sign",
+    "Surface tension with wrong dimensionality",
+    "Membrane elasticity exceeding theoretical bound",
+    "Wrong osmotic pressure formula"
+  ],
+  "standard_benchmarks": [
+    {
+      "name": "Ideal chain end-to-end distance",
+      "reference": "R = N^{1/2} a (3D)",
+      "tolerance": 1e-3
+    },
+    {
+      "name": "Flory exponent (good solvent)",
+      "reference": "ν ≈ 0.588",
+      "tolerance": 1e-2
+    },
+    {
+      "name": "Laplace pressure",
+      "reference": "ΔP = 2γ/R",
+      "tolerance": 1e-4
+    }
+  ],
+  "convention_sensitive": ["natural_units", "thermal_units", "dimensionality"],
+  "scripts_available": ["scripts/dimensional_check.py", "scripts/spot_check.py", "scripts/convergence_check.py"]
+}

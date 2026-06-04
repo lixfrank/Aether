@@ -1,0 +1,38 @@
+{
+  "gpd_source": {
+    "repo": "psi-oss/get-physics-done",
+    "path": "gpd/mcp/servers/verification_server.py (DOMAIN_CHECKLISTS)",
+    "commit": "to_be_pinned",
+    "cherry_pick_method": "semantic_equivalence"
+  },
+  "domain": "mathematical_physics",
+  "name": "Mathematical Physics",
+  "priority_checks": ["dimensional_analysis", "limiting_cases", "numerical_spot_check", "conservation_laws", "symmetry_verification", "proof_hypothesis_coverage"],
+  "red_flags": [
+    "Functional integral with wrong measure",
+    "Topology assumption without justification",
+    "Divergent series treated as convergent",
+    "Incorrect application of Stokes theorem",
+    "Wrong boundary condition in PDE",
+    "Assuming smoothness where singularity exists"
+  ],
+  "standard_benchmarks": [
+    {
+      "name": "Gaussian integral",
+      "reference": "∫exp(-x²)dx = √π",
+      "tolerance": 1e-10
+    },
+    {
+      "name": "Fourier transform of Gaussian",
+      "reference": "Self-reciprocal under proper convention",
+      "tolerance": 1e-8
+    },
+    {
+      "name": "Green's function for Laplacian (3D)",
+      "reference": "G(r) = -1/(4πr)",
+      "tolerance": 1e-8
+    }
+  ],
+  "convention_sensitive": ["natural_units", "fourier_convention", "integration_measure"],
+  "scripts_available": ["scripts/dimensional_check.py", "scripts/spot_check.py", "scripts/limiting_case_check.py", "scripts/symmetry_check.py"]
+}

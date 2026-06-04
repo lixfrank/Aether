@@ -1,0 +1,38 @@
+{
+  "gpd_source": {
+    "repo": "psi-oss/get-physics-done",
+    "path": "gpd/mcp/servers/verification_server.py (DOMAIN_CHECKLISTS)",
+    "commit": "to_be_pinned",
+    "cherry_pick_method": "semantic_equivalence"
+  },
+  "domain": "fluid_plasma",
+  "name": "Fluid Dynamics & Plasma Physics",
+  "priority_checks": ["dimensional_analysis", "numerical_spot_check", "limiting_cases", "physical_plausibility", "conservation_laws", "numerical_convergence"],
+  "red_flags": [
+    "Navier-Stokes with negative viscosity",
+    "Plasma dispersion relation with wrong sign",
+    "Missing Landau damping in plasma calculation",
+    "Reynolds number inconsistency",
+    "Shock velocity exceeding theoretical bound",
+    "Magnetic pressure not balanced in MHD"
+  ],
+  "standard_benchmarks": [
+    {
+      "name": "Poiseuille flow velocity profile",
+      "reference": "v(r) = (ΔP/(4μL))(R² - r²)",
+      "tolerance": 1e-4
+    },
+    {
+      "name": "Plasma frequency",
+      "reference": "ω_p = √(n_e e²/(m_e ε₀))",
+      "tolerance": 1e-4
+    },
+    {
+      "name": "Sound speed in ideal gas",
+      "reference": "c_s = √(γkT/m)",
+      "tolerance": 1e-4
+    }
+  ],
+  "convention_sensitive": ["natural_units", "coordinate_system", "viscosity_convention"],
+  "scripts_available": ["scripts/dimensional_check.py", "scripts/spot_check.py", "scripts/convergence_check.py", "scripts/limiting_case_check.py"]
+}

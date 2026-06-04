@@ -1,0 +1,38 @@
+{
+  "gpd_source": {
+    "repo": "psi-oss/get-physics-done",
+    "path": "gpd/mcp/servers/verification_server.py (DOMAIN_CHECKLISTS)",
+    "commit": "to_be_pinned",
+    "cherry_pick_method": "semantic_equivalence"
+  },
+  "domain": "gr_cosmology",
+  "name": "General Relativity & Cosmology",
+  "priority_checks": ["dimensional_analysis", "limiting_cases", "physical_plausibility", "conservation_laws", "causality_constraints", "numerical_spot_check"],
+  "red_flags": [
+    "Metric signature inconsistency (mostly-plus vs mostly-minus)",
+    "Einstein tensor not matching Ricci + scalar combination",
+    "Superluminal signal in metric",
+    "Missing cosmological constant in Friedmann equations",
+    "Wrong stress-energy tensor symmetry",
+    "Horizon problem not addressed in cosmological model"
+  ],
+  "standard_benchmarks": [
+    {
+      "name": "Schwarzschild metric components",
+      "reference": "g_tt = -(1 - 2M/r), g_rr = (1 - 2M/r)^{-1}",
+      "tolerance": 1e-6
+    },
+    {
+      "name": "Friedmann equation (flat ΛCDM)",
+      "reference": "H² = (8πG/3)ρ + Λ/3",
+      "tolerance": 1e-4
+    },
+    {
+      "name": "Gravitational redshift",
+      "reference": "z ≈ GM/(rc²) for weak field",
+      "tolerance": 1e-4
+    }
+  ],
+  "convention_sensitive": ["metric_signature", "geometric_units", "coordinate_system"],
+  "scripts_available": ["scripts/dimensional_check.py", "scripts/spot_check.py", "scripts/limiting_case_check.py"]
+}

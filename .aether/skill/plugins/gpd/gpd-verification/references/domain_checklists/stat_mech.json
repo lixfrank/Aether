@@ -1,0 +1,38 @@
+{
+  "gpd_source": {
+    "repo": "psi-oss/get-physics-done",
+    "path": "gpd/mcp/servers/verification_server.py (DOMAIN_CHECKLISTS)",
+    "commit": "to_be_pinned",
+    "cherry_pick_method": "semantic_equivalence"
+  },
+  "domain": "stat_mech",
+  "name": "Statistical Mechanics",
+  "priority_checks": ["dimensional_analysis", "numerical_spot_check", "limiting_cases", "physical_plausibility", "statistical_validation", "conservation_laws"],
+  "red_flags": [
+    "Negative probability or partition function",
+    "Entropy decreasing in closed system",
+    "Wrong thermodynamic limit scaling",
+    "Missing extensive property of entropy",
+    "Incorrect Boltzmann factor exp(-E/kT)",
+    "Equilibrium distribution with imaginary temperature"
+  ],
+  "standard_benchmarks": [
+    {
+      "name": "Ideal gas partition function",
+      "reference": "Z_N = (V/N!)(2πmkT/h²)^{3/2}",
+      "tolerance": 1e-4
+    },
+    {
+      "name": "Ising model critical temperature (2D)",
+      "reference": "T_c = 2J/(k_B ln(1+√2))",
+      "tolerance": 1e-5
+    },
+    {
+      "name": "Maxwell-Boltzmann distribution normalization",
+      "reference": "∫f(v)dv = 1",
+      "tolerance": 1e-6
+    }
+  ],
+  "convention_sensitive": ["natural_units", "boltzmann_units", "matsubara_convention"],
+  "scripts_available": ["scripts/dimensional_check.py", "scripts/spot_check.py", "scripts/convergence_check.py", "scripts/limiting_case_check.py"]
+}

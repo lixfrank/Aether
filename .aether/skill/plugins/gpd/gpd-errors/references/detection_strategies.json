@@ -1,0 +1,161 @@
+{
+  "gpd_source": {
+    "repo": "psi-oss/get-physics-done",
+    "path": "gpd/core/verification_checks.py (ERROR_CLASS_COVERAGE)",
+    "commit": "to_be_pinned",
+    "cherry_pick_method": "semantic_equivalence"
+  },
+  "description": "Detection strategy descriptions for each LLM physics error class",
+  "detection_strategies": {
+    "E01_cg_coefficient_sign": {
+      "method": "Verify triangle inequality for angular momentum coupling. Check m₁+m₂=m₃ sum rule. Spot-check one CG coefficient against Varshalovich/Edmonds tables using scripts/spot_check.py.",
+      "confidence_baseline": 0.8,
+      "requires_script": true,
+      "script": "scripts/spot_check.py"
+    },
+    "E02_metric_signature_flip": {
+      "method": "Trace metric through every equation from Lagrangian to final result. Compute g_μν g^μν and verify equals spacetime dimension d. Check sign of kinetic terms in Lagrangian.",
+      "confidence_baseline": 0.9,
+      "requires_script": true,
+      "script": "scripts/dimensional_check.py"
+    },
+    "E03_ward_identity_violation": {
+      "method": "Replace polarization vector ε^μ with momentum k^μ in amplitude. Simplify q_μ·M^μ using sympy.simplify(). Verify cancellation to zero. Use scripts/ward_identity_check.py.",
+      "confidence_baseline": 0.95,
+      "requires_script": true,
+      "script": "scripts/ward_identity_check.py"
+    },
+    "E04_wrong_eigenvalue_count": {
+      "method": "Count eigenvalues and verify total matches Hilbert space dimension. Check degeneracy structure against representation theory. Verify trace equals sum of eigenvalues.",
+      "confidence_baseline": 0.7,
+      "requires_script": false,
+      "script": null
+    },
+    "E05_gauge_parameter_in_observable": {
+      "method": "Scan all final physical expressions for gauge parameter ξ. Verify ξ cancels completely. Check that S-matrix elements are gauge-independent. Compare cross sections at different ξ values.",
+      "confidence_baseline": 0.85,
+      "requires_script": true,
+      "script": "scripts/spot_check.py"
+    },
+    "E06_wrong_fourier_convention": {
+      "method": "Check 2π placement in all Fourier transforms. Verify transform-inverse pair normalizes correctly under stated convention. Compute one known transform pair numerically.",
+      "confidence_baseline": 0.8,
+      "requires_script": true,
+      "script": "scripts/spot_check.py"
+    },
+    "E07_missing_counterterm": {
+      "method": "List all divergent integrals in calculation. For each, verify corresponding counterterm exists and uses correct subtraction scheme. Check Z-factor consistency.",
+      "confidence_baseline": 0.7,
+      "requires_script": false,
+      "script": null
+    },
+    "E08_unitarity_violation": {
+      "method": "Compute partial wave amplitudes a_J. Verify |a_J| ≤ 1 for all J. Check S†S = I relation. Verify optical theorem: σ_tot = Im(a₀)/(k²).",
+      "confidence_baseline": 0.8,
+      "requires_script": true,
+      "script": "scripts/spot_check.py"
+    },
+    "E09_causality_violation": {
+      "method": "Check propagator pole structure: poles must be on real axis or below (retarded). Verify no response before stimulus. Check analytic structure in complex frequency plane.",
+      "confidence_baseline": 0.7,
+      "requires_script": false,
+      "script": null
+    },
+    "E10_negative_probability": {
+      "method": "Compute eigenvalues of density matrix. Verify all ≥ 0 and sum = 1. Check spectral function positivity. Verify probability distributions normalize to 1.",
+      "confidence_baseline": 0.9,
+      "requires_script": true,
+      "script": null
+    },
+    "E11_wrong_limit_behavior": {
+      "method": "Compute actual limits using sympy.limit(). Compare computed limits against claimed behavior. Test multiple limit directions if applicable. Use scripts/limiting_case_check.py.",
+      "confidence_baseline": 0.95,
+      "requires_script": true,
+      "script": "scripts/limiting_case_check.py"
+    },
+    "E12_dimension_mismatch": {
+      "method": "Track dimensions through all expressions using dimensional_check.py. Verify LHS and RHS dimensions match. Check dimensionless ratios. Use scripts/dimensional_check.py.",
+      "confidence_baseline": 0.95,
+      "requires_script": true,
+      "script": "scripts/dimensional_check.py"
+    },
+    "E13_order_of_magnitude_error": {
+      "method": "Spot-check numerical values against known physical scales. Verify unit conversions. Compare against literature values. Use scripts/spot_check.py.",
+      "confidence_baseline": 0.8,
+      "requires_script": true,
+      "script": "scripts/spot_check.py"
+    },
+    "E14_symmetry_breaking_error": {
+      "method": "Apply stated symmetry transformation to expression. Compute transformed expression and simplify. Verify invariance: simplify(expr_transformed - expr_original) = 0. Use scripts/symmetry_check.py.",
+      "confidence_baseline": 0.95,
+      "requires_script": true,
+      "script": "scripts/symmetry_check.py"
+    },
+    "E15_wrong_matsubara_convention": {
+      "method": "Check bosonic ω_n = 2nπ/β vs fermionic ω_n = (2n+1)π/β. Verify period β consistency. Check trace formulas use correct summation convention.",
+      "confidence_baseline": 0.7,
+      "requires_script": false,
+      "script": null
+    },
+    "E16_wrong_spin_statistics": {
+      "method": "Verify commutation/anticommutation relations match spin (integer→commutation, half-integer→anticommutation). Check partition function uses correct sign. Verify distribution function type.",
+      "confidence_baseline": 0.7,
+      "requires_script": false,
+      "script": null
+    },
+    "E17_wrong_coupling_sign": {
+      "method": "Trace coupling sign from Lagrangian through to physical result. Verify attractive/repulsive nature matches physical expectation. Check sign consistency in perturbation series.",
+      "confidence_baseline": 0.6,
+      "requires_script": false,
+      "script": null
+    },
+    "E18_wrong_normalization": {
+      "method": "Compute normalization integrals numerically. Verify ∫|ψ|²dV = 1 for wavefunctions. Check propagator normalization. Verify partition function normalization. Use scripts/spot_check.py.",
+      "confidence_baseline": 0.85,
+      "requires_script": true,
+      "script": "scripts/spot_check.py"
+    },
+    "E19_wrong_propagator_structure": {
+      "method": "Check pole positions and residues. Verify numerator structure matches field type (scalar: 1, vector: -g_μν+..., spinor: (p_μγ^μ+m)). Compute propagator at known points.",
+      "confidence_baseline": 0.7,
+      "requires_script": true,
+      "script": "scripts/spot_check.py"
+    },
+    "E20_thermodynamic_limit_error": {
+      "method": "Verify correct limit order (N→∞ first, then other limits). Check extensive properties scale with N. Check intensive properties are N-independent. Verify entropy extensivity.",
+      "confidence_baseline": 0.6,
+      "requires_script": false,
+      "script": null
+    },
+    "E21_wrong_renormalization_scheme": {
+      "method": "Verify renormalization scheme matches claim (on-shell, MS, MS-bar). Check subtraction point. Convert between schemes if needed using known relation. Compare against scheme-specific literature.",
+      "confidence_baseline": 0.6,
+      "requires_script": false,
+      "script": null
+    },
+    "E22_wrong_canonical_quantization": {
+      "method": "Check commutation relations [x̂,p̂] = iℏ (or natural units). Verify operator ordering in products. Check i factors in commutators. Compare against standard textbook results.",
+      "confidence_baseline": 0.7,
+      "requires_script": false,
+      "script": null
+    },
+    "E23_wrong_convergence_claim": {
+      "method": "Test numerical convergence at boundary values using scripts/convergence_check.py. Check analyticity domain. Verify series radius of convergence. Compute partial sums.",
+      "confidence_baseline": 0.85,
+      "requires_script": true,
+      "script": "scripts/convergence_check.py"
+    },
+    "E24_wrong_boundary_condition": {
+      "method": "Verify boundary conditions match physical setup. Check Dirichlet/Neumann/periodic choice is appropriate. Verify boundary terms in integration by parts. Check compactification if applicable.",
+      "confidence_baseline": 0.6,
+      "requires_script": false,
+      "script": null
+    },
+    "E25_missing_physical_effect": {
+      "method": "Enumerate all known physical effects in the regime from literature. Check each is included or explicitly excluded with justification. Compare against complete literature results for the regime.",
+      "confidence_baseline": 0.5,
+      "requires_script": false,
+      "script": null
+    }
+  }
+}

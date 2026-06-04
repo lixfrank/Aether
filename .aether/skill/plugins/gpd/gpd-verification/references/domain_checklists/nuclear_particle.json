@@ -1,0 +1,38 @@
+{
+  "gpd_source": {
+    "repo": "psi-oss/get-physics-done",
+    "path": "gpd/mcp/servers/verification_server.py (DOMAIN_CHECKLISTS)",
+    "commit": "to_be_pinned",
+    "cherry_pick_method": "semantic_equivalence"
+  },
+  "domain": "nuclear_particle",
+  "name": "Nuclear & Particle Physics",
+  "priority_checks": ["dimensional_analysis", "ward_identities", "unitarity_bounds", "conservation_laws", "numerical_spot_check", "positivity_constraints"],
+  "red_flags": [
+    "CG coefficient sign error in decay amplitude",
+    "Isospin violation in strong interaction",
+    "Wrong quark flavor flow in Feynman diagram",
+    "Missing color factor in QCD amplitude",
+    "CPT violation in cross section",
+    "Incorrect branching ratio normalization"
+  ],
+  "standard_benchmarks": [
+    {
+      "name": "QCD β-function coefficient (one-loop)",
+      "reference": "β₀ = (11N_c - 2N_f)/3",
+      "tolerance": 1e-6
+    },
+    {
+      "name": "Proton-neutron mass difference",
+      "reference": "Δm ≈ 1.3 MeV",
+      "tolerance": 1e-1
+    },
+    {
+      "name": "Weinberg angle",
+      "reference": "sin²θ_W ≈ 0.231",
+      "tolerance": 1e-2
+    }
+  ],
+  "convention_sensitive": ["metric_signature", "natural_units", "renormalization_scheme", "isospin_convention"],
+  "scripts_available": ["scripts/dimensional_check.py", "scripts/ward_identity_check.py", "scripts/spot_check.py"]
+}

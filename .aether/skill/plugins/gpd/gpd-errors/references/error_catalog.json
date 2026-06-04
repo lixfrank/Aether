@@ -1,0 +1,236 @@
+{
+  "gpd_source": {
+    "repo": "psi-oss/get-physics-done",
+    "path": "gpd/core/verification_checks.py (ERROR_CLASS_COVERAGE)",
+    "commit": "to_be_pinned",
+    "cherry_pick_method": "semantic_equivalence"
+  },
+  "description": "25 LLM physics error class coverage entries for detection during verification",
+  "error_classes": [
+    {
+      "id": "E01",
+      "key": "cg_coefficient_sign",
+      "name": "CG Coefficient Sign Error",
+      "severity": "high",
+      "domains": ["qft", "nuclear_particle", "amo"],
+      "catches": ["wrong sign in Clebsch-Gordan coefficient", "triangle inequality violation", "m-value sum mismatch"],
+      "detection_hint": "Verify triangle inequality, m-values sum. Spot-check one CG against Varshalovich tables."
+    },
+    {
+      "id": "E02",
+      "key": "metric_signature_flip",
+      "name": "Metric Signature Flip",
+      "severity": "high",
+      "domains": ["qft", "gr_cosmology", "string_field_theory", "condensed_matter"],
+      "catches": ["mostly-minus vs mostly-plus inconsistency", "wrong contraction sign", "g_μν g^μν ≠ d"],
+      "detection_hint": "Trace metric through every equation. Check sign of contraction g_μν g^μν = d."
+    },
+    {
+      "id": "E03",
+      "key": "ward_identity_violation",
+      "name": "Ward Identity Violation",
+      "severity": "high",
+      "domains": ["qft", "nuclear_particle", "string_field_theory"],
+      "catches": ["q_μ·M^μ ≠ 0", "gauge inconsistency", "polarization mismatch in amplitude"],
+      "detection_hint": "Replace ε^μ → k^μ. Check S-matrix cancellation. Use ward_identity_check.py script."
+    },
+    {
+      "id": "E04",
+      "key": "wrong_eigenvalue_count",
+      "name": "Wrong Eigenvalue Count",
+      "severity": "medium",
+      "domains": ["quantum_info", "condensed_matter", "mathematical_physics"],
+      "catches": ["eigenvalue count ≠ Hilbert space dimension", "missing degeneracy", "wrong multiplicity"],
+      "detection_hint": "Count must match Hilbert space dimension. Verify degeneracy structure."
+    },
+    {
+      "id": "E05",
+      "key": "gauge_parameter_in_observable",
+      "name": "Gauge Parameter in Observable",
+      "severity": "high",
+      "domains": ["qft", "nuclear_particle", "string_field_theory"],
+      "catches": ["ξ appearing in physical observables", "gauge-dependent cross section", "unphysical pole contribution"],
+      "detection_hint": "ξ must cancel from physical observables. Check all final expressions for gauge parameter remnants."
+    },
+    {
+      "id": "E06",
+      "key": "wrong_fourier_convention",
+      "name": "Wrong Fourier Convention",
+      "severity": "medium",
+      "domains": ["qft", "condensed_matter", "mathematical_physics", "stat_mech"],
+      "catches": ["2π placement inconsistency", "physics vs math convention mismatch", "wrong normalization"],
+      "detection_hint": "Check 2π factors in Fourier transforms. Verify transform-inverse pair normalizes correctly."
+    },
+    {
+      "id": "E07",
+      "key": "missing_counterterm",
+      "name": "Missing Renormalization Counterterm",
+      "severity": "high",
+      "domains": ["qft", "nuclear_particle"],
+      "catches": ["divergent bare expression without counterterm", "wrong subtraction scheme", "missing wavefunction renormalization"],
+      "detection_hint": "Verify all divergent integrals have corresponding counterterms. Check renormalization scheme consistency."
+    },
+    {
+      "id": "E08",
+      "key": "unitarity_violation",
+      "name": "Unitarity Violation",
+      "severity": "high",
+      "domains": ["qft", "quantum_info", "nuclear_particle", "string_field_theory"],
+      "catches": ["|scattering amplitude| > 1", "wrong partial wave unitarity bound", "non-unitary evolution"],
+      "detection_hint": "Check |a_J| ≤ 1 for partial wave amplitudes. Verify S-matrix unitarity S†S = I."
+    },
+    {
+      "id": "E09",
+      "key": "causality_violation",
+      "name": "Causality Violation",
+      "severity": "high",
+      "domains": ["qft", "gr_cosmology", "algebraic_qft", "string_field_theory"],
+      "catches": ["acausal propagator", "pole in wrong position", "retrocausal effect"],
+      "detection_hint": "Check propagator pole structure. Verify no response before stimulus."
+    },
+    {
+      "id": "E10",
+      "key": "negative_probability",
+      "name": "Negative Probability / Density",
+      "severity": "high",
+      "domains": ["quantum_info", "qft", "stat_mech", "condensed_matter"],
+      "catches": ["negative eigenvalue in density matrix", "negative spectral function", "probability > 1 or < 0"],
+      "detection_hint": "Check all probability distributions for positivity. Verify density matrix eigenvalues ≥ 0."
+    },
+    {
+      "id": "E11",
+      "key": "wrong_limit_behavior",
+      "name": "Wrong Asymptotic/Limit Behavior",
+      "severity": "medium",
+      "domains": ["qft", "stat_mech", "condensed_matter", "fluid_plasma", "classical_mechanics"],
+      "catches": ["wrong power-law exponent", "missing limiting case", "incorrect decay rate"],
+      "detection_hint": "Compute actual limit using sympy.limit(). Compare against claimed behavior."
+    },
+    {
+      "id": "E12",
+      "key": "dimension_mismatch",
+      "name": "Dimension Mismatch",
+      "severity": "high",
+      "domains": ["all"],
+      "catches": ["wrong dimensional scaling", "missing units", "inconsistent dimension across equation"],
+      "detection_hint": "Track dimensions through all expressions. Verify LHS and RHS dimensions match."
+    },
+    {
+      "id": "E13",
+      "key": "order_of_magnitude_error",
+      "name": "Order of Magnitude Error",
+      "severity": "medium",
+      "domains": ["astrophysics", "nuclear_particle", "condensed_matter", "fluid_plasma"],
+      "catches": ["wildly wrong numerical scale", "exponent off by ≥2", "unit conversion factor wrong"],
+      "detection_hint": "Spot-check numerical values against known scales. Verify unit conversions."
+    },
+    {
+      "id": "E14",
+      "key": "symmetry_breaking_error",
+      "name": "Unintended Symmetry Breaking",
+      "severity": "medium",
+      "domains": ["qft", "condensed_matter", "mathematical_physics", "algebraic_qft"],
+      "catches": ["expression not invariant under stated symmetry", "spurious symmetry violation", "wrong transformation rule"],
+      "detection_hint": "Apply symmetry transform to expression. Verify invariance using sympy.simplify()."
+    },
+    {
+      "id": "E15",
+      "key": "wrong_matsubara_convention",
+      "name": "Wrong Matsubara Convention",
+      "severity": "medium",
+      "domains": ["stat_mech", "condensed_matter", "qft"],
+      "catches": ["bosonic vs fermionic frequency confusion", "wrong imaginary time period", "missing factor of 2"],
+      "detection_hint": "Check ω_n = 2nπ/β (bosonic) vs ω_n = (2n+1)π/β (fermionic). Verify period consistency."
+    },
+    {
+      "id": "E16",
+      "key": "wrong_spin_statistics",
+      "name": "Wrong Spin-Statistics Connection",
+      "severity": "high",
+      "domains": ["qft", "stat_mech", "nuclear_particle", "condensed_matter"],
+      "catches": ["bosonic field with anticommutation", "fermionic field with commutation", "wrong partition function sign"],
+      "detection_hint": "Verify commutation relations match spin. Check Fermi-Dirac vs Bose-Einstein distribution usage."
+    },
+    {
+      "id": "E17",
+      "key": "wrong_coupling_sign",
+      "name": "Wrong Coupling Sign",
+      "severity": "medium",
+      "domains": ["qft", "condensed_matter", "nuclear_particle", "classical_mechanics"],
+      "catches": ["wrong sign in interaction term", "attractive vs repulsive confusion", "sign flip in potential"],
+      "detection_hint": "Trace coupling sign through Lagrangian to physical result. Check attractive/repulsive consistency."
+    },
+    {
+      "id": "E18",
+      "key": "wrong_normalization",
+      "name": "Wrong Normalization",
+      "severity": "medium",
+      "domains": ["qft", "quantum_info", "stat_mech", "mathematical_physics"],
+      "catches": ["wrong 2π factor", "incorrect volume normalization", "missing state normalization"],
+      "detection_hint": "Check normalization of wavefunctions, propagators, partition functions. Verify ∫|ψ|² = 1."
+    },
+    {
+      "id": "E19",
+      "key": "wrong_propagator_structure",
+      "name": "Wrong Propagator Structure",
+      "severity": "high",
+      "domains": ["qft", "condensed_matter", "string_field_theory"],
+      "catches": ["wrong pole structure", "missing residue condition", "incorrect numerator structure"],
+      "detection_hint": "Check pole positions and residues. Verify numerator matches field type (scalar, vector, spinor)."
+    },
+    {
+      "id": "E20",
+      "key": "thermodynamic_limit_error",
+      "name": "Wrong Thermodynamic Limit",
+      "severity": "medium",
+      "domains": ["stat_mech", "condensed_matter", "soft_matter"],
+      "catches": ["wrong N-scaling", "extensive vs intensive confusion", "wrong limit order"],
+      "detection_hint": "Verify correct limit order (N→∞ first, then other limits). Check extensive/intensive properties."
+    },
+    {
+      "id": "E21",
+      "key": "wrong_renormalization_scheme",
+      "name": "Wrong Renormalization Scheme",
+      "severity": "medium",
+      "domains": ["qft", "nuclear_particle"],
+      "catches": ["on-shell vs MS-bar mismatch", "wrong subtraction point", "scheme-dependent result without conversion"],
+      "detection_hint": "Verify renormalization scheme matches claim. Convert between schemes if needed."
+    },
+    {
+      "id": "E22",
+      "key": "wrong_canonical_quantization",
+      "name": "Wrong Canonical Quantization",
+      "severity": "high",
+      "domains": ["qft", "classical_mechanics", "quantum_info"],
+      "catches": ["wrong commutation relation", "missing factor of i", "incorrect operator ordering"],
+      "detection_hint": "Check [x, p] = iℏ (or appropriate units). Verify operator ordering matches convention."
+    },
+    {
+      "id": "E23",
+      "key": "wrong_convergence_claim",
+      "name": "Wrong Convergence Claim",
+      "severity": "medium",
+      "domains": ["mathematical_physics", "qft", "stat_mech", "numerical"],
+      "catches": ["divergent series claimed convergent", "wrong convergence radius", "missing analyticity assumption"],
+      "detection_hint": "Test numerical convergence at boundary values. Check analyticity domain."
+    },
+    {
+      "id": "E24",
+      "key": "wrong_boundary_condition",
+      "name": "Wrong Boundary Condition",
+      "severity": "medium",
+      "domains": ["mathematical_physics", "fluid_plasma", "condensed_matter", "classical_mechanics"],
+      "catches": ["missing boundary term", "wrong Dirichlet/Neumann choice", "incorrect compactification"],
+      "detection_hint": "Verify boundary conditions match physical setup. Check consistency with equations."
+    },
+    {
+      "id": "E25",
+      "key": "missing_physical_effect",
+      "name": "Missing Physical Effect",
+      "severity": "high",
+      "domains": ["all"],
+      "catches": ["missing Landau damping", "missing Lamb shift", "missing Casimir effect", "omitted important contribution"],
+      "detection_hint": "Check whether all known physical effects in the regime are included. Compare against complete literature results."
+    }
+  ]
+}

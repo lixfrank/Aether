@@ -1,0 +1,186 @@
+{
+  "gpd_source": {
+    "repo": "psi-oss/get-physics-done",
+    "path": "gpd/core/verification_checks.py (ERROR_CLASS_COVERAGE)",
+    "commit": "to_be_pinned",
+    "cherry_pick_method": "semantic_equivalence"
+  },
+  "description": "Error class to verification check method mapping — traceability matrix",
+  "traceability": [
+    {
+      "error_class": "E01",
+      "error_key": "cg_coefficient_sign",
+      "verification_checks": ["5.2 numerical_spot_check", "5.8 physical_plausibility"],
+      "primary_check": "5.2",
+      "detection_method": "script + domain reasoning"
+    },
+    {
+      "error_class": "E02",
+      "error_key": "metric_signature_flip",
+      "verification_checks": ["5.1 dimensional_analysis", "5.9 ward_identities", "5.2 numerical_spot_check"],
+      "primary_check": "5.1",
+      "detection_method": "script (dimensional tracking)"
+    },
+    {
+      "error_class": "E03",
+      "error_key": "ward_identity_violation",
+      "verification_checks": ["5.9 ward_identities", "5.5 numerical_convergence", "5.2 numerical_spot_check"],
+      "primary_check": "5.9",
+      "detection_method": "script (ward_identity_check.py)"
+    },
+    {
+      "error_class": "E04",
+      "error_key": "wrong_eigenvalue_count",
+      "verification_checks": ["5.12 positivity_constraints", "5.2 numerical_spot_check"],
+      "primary_check": "5.12",
+      "detection_method": "script + representation theory"
+    },
+    {
+      "error_class": "E05",
+      "error_key": "gauge_parameter_in_observable",
+      "verification_checks": ["5.9 ward_identities", "5.2 numerical_spot_check", "5.8 physical_plausibility"],
+      "primary_check": "5.9",
+      "detection_method": "script + gauge analysis"
+    },
+    {
+      "error_class": "E06",
+      "error_key": "wrong_fourier_convention",
+      "verification_checks": ["5.1 dimensional_analysis", "5.2 numerical_spot_check", "5.3 limiting_cases"],
+      "primary_check": "5.2",
+      "detection_method": "script (spot_check.py)"
+    },
+    {
+      "error_class": "E07",
+      "error_key": "missing_counterterm",
+      "verification_checks": ["5.9 ward_identities", "5.1 dimensional_analysis", "5.2 numerical_spot_check"],
+      "primary_check": "5.9",
+      "detection_method": "LLM reasoning + script spot-check"
+    },
+    {
+      "error_class": "E08",
+      "error_key": "unitarity_violation",
+      "verification_checks": ["5.10 unitarity_bounds", "5.2 numerical_spot_check"],
+      "primary_check": "5.10",
+      "detection_method": "script + literature bounds"
+    },
+    {
+      "error_class": "E09",
+      "error_key": "causality_violation",
+      "verification_checks": ["5.11 causality_constraints", "5.13 kramers_kronig", "5.9 ward_identities"],
+      "primary_check": "5.11",
+      "detection_method": "LLM reasoning + analytic structure check"
+    },
+    {
+      "error_class": "E10",
+      "error_key": "negative_probability",
+      "verification_checks": ["5.12 positivity_constraints", "5.2 numerical_spot_check"],
+      "primary_check": "5.12",
+      "detection_method": "script (eigenvalue check)"
+    },
+    {
+      "error_class": "E11",
+      "error_key": "wrong_limit_behavior",
+      "verification_checks": ["5.3 limiting_cases", "5.15 limit_recovery"],
+      "primary_check": "5.3",
+      "detection_method": "script (limiting_case_check.py)"
+    },
+    {
+      "error_class": "E12",
+      "error_key": "dimension_mismatch",
+      "verification_checks": ["5.1 dimensional_analysis", "5.7 order_of_magnitude"],
+      "primary_check": "5.1",
+      "detection_method": "script (dimensional_check.py)"
+    },
+    {
+      "error_class": "E13",
+      "error_key": "order_of_magnitude_error",
+      "verification_checks": ["5.7 order_of_magnitude", "5.2 numerical_spot_check"],
+      "primary_check": "5.7",
+      "detection_method": "script (spot_check.py)"
+    },
+    {
+      "error_class": "E14",
+      "error_key": "symmetry_breaking_error",
+      "verification_checks": ["5.4 conservation_laws", "scripts/symmetry_check.py"],
+      "primary_check": "symmetry_verification",
+      "detection_method": "script (symmetry_check.py)"
+    },
+    {
+      "error_class": "E15",
+      "error_key": "wrong_matsubara_convention",
+      "verification_checks": ["5.1 dimensional_analysis", "5.3 limiting_cases", "5.2 numerical_spot_check"],
+      "primary_check": "5.2",
+      "detection_method": "script + convention check"
+    },
+    {
+      "error_class": "E16",
+      "error_key": "wrong_spin_statistics",
+      "verification_checks": ["5.8 physical_plausibility", "5.12 positivity_constraints"],
+      "primary_check": "5.8",
+      "detection_method": "LLM reasoning"
+    },
+    {
+      "error_class": "E17",
+      "error_key": "wrong_coupling_sign",
+      "verification_checks": ["5.2 numerical_spot_check", "5.3 limiting_cases", "5.4 conservation_laws"],
+      "primary_check": "5.2",
+      "detection_method": "script + sign tracking"
+    },
+    {
+      "error_class": "E18",
+      "error_key": "wrong_normalization",
+      "verification_checks": ["5.2 numerical_spot_check", "5.1 dimensional_analysis"],
+      "primary_check": "5.2",
+      "detection_method": "script (spot_check.py)"
+    },
+    {
+      "error_class": "E19",
+      "error_key": "wrong_propagator_structure",
+      "verification_checks": ["5.9 ward_identities", "5.11 causality_constraints", "5.2 numerical_spot_check"],
+      "primary_check": "5.9",
+      "detection_method": "script + pole analysis"
+    },
+    {
+      "error_class": "E20",
+      "error_key": "thermodynamic_limit_error",
+      "verification_checks": ["5.3 limiting_cases", "5.5 numerical_convergence"],
+      "primary_check": "5.3",
+      "detection_method": "script (limiting_case_check.py)"
+    },
+    {
+      "error_class": "E21",
+      "error_key": "wrong_renormalization_scheme",
+      "verification_checks": ["5.1 dimensional_analysis", "5.2 numerical_spot_check", "5.9 ward_identities"],
+      "primary_check": "5.2",
+      "detection_method": "script + scheme comparison"
+    },
+    {
+      "error_class": "E22",
+      "error_key": "wrong_canonical_quantization",
+      "verification_checks": ["5.8 physical_plausibility", "5.2 numerical_spot_check", "5.9 ward_identities"],
+      "primary_check": "5.8",
+      "detection_method": "LLM reasoning + spot-check"
+    },
+    {
+      "error_class": "E23",
+      "error_key": "wrong_convergence_claim",
+      "verification_checks": ["5.5 numerical_convergence", "5.3 limiting_cases"],
+      "primary_check": "5.5",
+      "detection_method": "script (convergence_check.py)"
+    },
+    {
+      "error_class": "E24",
+      "error_key": "wrong_boundary_condition",
+      "verification_checks": ["5.8 physical_plausibility", "5.3 limiting_cases"],
+      "primary_check": "5.8",
+      "detection_method": "LLM reasoning"
+    },
+    {
+      "error_class": "E25",
+      "error_key": "missing_physical_effect",
+      "verification_checks": ["5.6 literature_cross_check", "5.8 physical_plausibility", "5.7 order_of_magnitude"],
+      "primary_check": "5.6",
+      "detection_method": "LLM + literature comparison"
+    }
+  ]
+}

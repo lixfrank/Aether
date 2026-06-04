@@ -1,0 +1,39 @@
+{
+  "gpd_source": {
+    "repo": "psi-oss/get-physics-done",
+    "path": "gpd/mcp/servers/verification_server.py (DOMAIN_CHECKLISTS)",
+    "commit": "to_be_pinned",
+    "cherry_pick_method": "semantic_equivalence"
+  },
+  "domain": "qft",
+  "name": "Quantum Field Theory",
+  "priority_checks": ["dimensional_analysis", "ward_identities", "unitarity_bounds", "causality_constraints", "positivity_constraints", "limiting_cases"],
+  "red_flags": [
+    "Gauge parameter ξ appearing in physical observables",
+    "Ward identity violation in amplitude",
+    "Negative norm states in gauge theory",
+    "Unitarity violation: |scattering amplitude| > 1",
+    "Acausal propagator: pole in wrong position",
+    "Missing renormalization counterterm",
+    "Wrong metric signature in contraction"
+  ],
+  "standard_benchmarks": [
+    {
+      "name": "QED Compton scattering cross section",
+      "reference": "Klein-Nishina formula",
+      "tolerance": 1e-4
+    },
+    {
+      "name": "Free propagator normalization",
+      "reference": "Δ(x=0) = 1/(2π)^d",
+      "tolerance": 1e-6
+    },
+    {
+      "name": "One-loop QED vacuum polarization",
+      "reference": "Schwinger result (α/2π)",
+      "tolerance": 1e-3
+    }
+  ],
+  "convention_sensitive": ["metric_signature", "natural_units", "fourier_convention", "renormalization_scheme"],
+  "scripts_available": ["scripts/dimensional_check.py", "scripts/ward_identity_check.py", "scripts/spot_check.py", "scripts/limiting_case_check.py"]
+}

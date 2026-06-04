@@ -1,0 +1,38 @@
+{
+  "gpd_source": {
+    "repo": "psi-oss/get-physics-done",
+    "path": "gpd/mcp/servers/verification_server.py (DOMAIN_CHECKLISTS)",
+    "commit": "to_be_pinned",
+    "cherry_pick_method": "semantic_equivalence"
+  },
+  "domain": "astrophysics",
+  "name": "Astrophysics",
+  "priority_checks": ["dimensional_analysis", "order_of_magnitude", "limiting_cases", "physical_plausibility", "numerical_spot_check", "literature_cross_check"],
+  "red_flags": [
+    "Stellar luminosity exceeding Eddington limit",
+    "White dwarf mass exceeding Chandrasekhar limit",
+    "Wrong spectral classification boundary",
+    "Incorrect H-R diagram placement",
+    "Missing opacity contribution",
+    "Nuclear reaction rate with wrong temperature dependence"
+  ],
+  "standard_benchmarks": [
+    {
+      "name": "Eddington luminosity",
+      "reference": "L_Edd = 4πGMc/κ",
+      "tolerance": 1e-3
+    },
+    {
+      "name": "Chandrasekhar mass",
+      "reference": "M_Ch ≈ 1.44 M_sun",
+      "tolerance": 1e-2
+    },
+    {
+      "name": "Main sequence luminosity-mass relation",
+      "reference": "L ∝ M^{3.5}",
+      "tolerance": 1e-1
+    }
+  ],
+  "convention_sensitive": ["natural_units", "astronomical_units", "coordinate_system"],
+  "scripts_available": ["scripts/dimensional_check.py", "scripts/spot_check.py", "scripts/limiting_case_check.py"]
+}
