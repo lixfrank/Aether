@@ -194,11 +194,9 @@ if (d.env_scope?.allowed_commands) {
   - consistency check → 回滚到 DIGESTS.md 最后一条 digest 对应的阶段
 
 步骤 2: 定位目标 commit SHA
-  - 首选: 从 state.json 的 phase_commits 字段读取目标阶段的 SHA
-    注意: phase_commits 中的 SHA 遵循自引用不变量（§6.3），
-    checkout 该 SHA 恢复的 state.json 中 phase_commits 值与 SHA 一致
+  - 首选: 从当前（未被 checkout 覆盖的）state.json 的 phase_commits 字段读取目标阶段的 SHA
+    注意: phase_commits 采用延迟记录策略（§6.3），SHA 在 git log 中稳定可见
   - Fallback: git log --oneline --grep="research: phase_[target]" -10
-    注意: --grep 只返回 SHA_final（amend 后），不返回 reflog 中孤立的 SHA_pre
 
 步骤 3: 完全恢复到目标版本
   git checkout <target_sha> -- .aether/research/
@@ -310,7 +308,31 @@ if (d.env_scope?.denied_commands) {
 - `allowed_commands`: deny-all(`bash: "*"` → deny) + allow-list → 只有白名单内的命令可执行
 - `denied_commands`: 只追加 deny 规则 → 全局 bash 权限不变，但特定命令模式被阻断
 
-两种模式可同时使用。`findLast` 规则匹配确保 deny 规则优先于 allow（只要 deny 的 pattern 更具体）。
+两种模式可同时使用。
+
+**规则顺序与 findLast 语义验证**：
+
+`Permission.evaluate()` 使用 `findLast`（从数组末尾向前查找第一个匹配规则）。deny 规则必须排在 allow 规则**之后**，才能被优先匹配。`compile()` 的输出顺序保证这一点：
+
+```
+compile() 输出顺序:
+  1. permission_override 规则
+  2. allowed_commands: deny-all(*) → allow-list
+  3. denied_commands: deny-specific（追加在 allowed_commands 规则之后）
+  4. file_scope 规则
+  5. delegation_depth 规则
+```
+
+最终顺序示例（research agent）:
+
+```
+[..., {bash, "*", allow}, {bash, "git push --force*", deny}, {bash, "git reset --hard*", deny}, ...]
+```
+
+`findLast` 匹配 `git push --force main` 时，从末尾向前搜索，首先命中 `{bash, "git push --force*", deny}` → 返回 deny。
+匹配 `git status` 时，deny 规则均不匹配，命中 `{bash, "*", allow}` → 返回 allow。
+
+`Permission.intersection()` 的第二个循环将父 agent 的 deny 规则追加到结果数组末尾，同样保证 `findLast` 优先匹配 deny（见 §5.3 传播示例）。
 
 ### 5.2 Research Agent 配置
 
@@ -362,7 +384,41 @@ file_scope:
 注意：
 
 - `git clean -fd` 不带通配符后缀 — 只阻断不带路径限定的 `git clean -fd`。`git clean -fd .aether/research/` 不匹配此 pattern，允许执行。
-- `git checkout * -- .` 阻断不带 `.aether/research/` 路径限定的 checkout — `git checkout <sha> -- .` 会恢复整个 repo 工作区到目标版本，违反 rollback 范围限定。`git checkout <sha> -- .aether/research/` 不匹配此 pattern（以 `.aether/research/` 结尾而非 `.`），允许执行。Wildcard 匹配原理：pattern `"git checkout * -- ."` 转换为正则 `^git checkout .* -- \.$`，仅匹配以 `.` 结尾的 checkout 命令。
+- `git checkout * -- .` 阻断不带 `.aether/research/` 路径限定的 checkout — `git checkout <sha> -- .` 会恢复整个 repo 工作区到目标版本，违反 rollback 范围限定。`git checkout <sha> -- .aether/research/` 不匹配此 pattern，允许执行。
+
+#### Wildcard 匹配语义验证
+
+`denied_commands` 的 pattern 使用 `Wildcard.match()` 匹配。核心语义：`*` 转换为 `.*`（贪婪匹配任意字符），pattern 必须匹配**整个**命令文本（`^...$` 锚定）。`Wildcard.match` 实现见 `packages/opencode/src/util/wildcard.ts`。
+
+**`git checkout * -- .` 的匹配验证**：
+
+pattern `"git checkout * -- ."` → 正则 `^git checkout .* -- \.$`
+
+| 命令                                    | 匹配 | 结果  | 说明                      |
+| --------------------------------------- | ---- | ----- | ------------------------- |
+| `git checkout abc -- .`                 | ✅   | DENY  | 恢复整个 repo 工作区      |
+| `git checkout abc -- .aether/research/` | ❌   | ALLOW | 以 `/` 结尾，不匹配 `\.$` |
+| `git checkout abc -- .aether/research`  | ❌   | ALLOW | 以 `h` 结尾，不匹配 `\.$` |
+| `git checkout abc -- ./src`             | ❌   | ALLOW | 以 `c` 结尾，不匹配 `\.$` |
+
+**`git clean -fd` 的匹配验证**：
+
+pattern `"git clean -fd"` → 正则 `^git clean -fd$`（无通配符后缀，精确匹配）
+
+| 命令                              | 匹配 | 结果  | 说明                        |
+| --------------------------------- | ---- | ----- | --------------------------- |
+| `git clean -fd`                   | ✅   | DENY  | 删除项目所有 untracked 文件 |
+| `git clean -fd .aether/research/` | ❌   | ALLOW | 末尾有路径参数，不匹配      |
+
+**`git push --force*` 的匹配验证**：
+
+pattern `"git push --force*"` → 正则 `^git push --force.*$`
+
+| 命令                           | 匹配 | 结果  | 说明                          |
+| ------------------------------ | ---- | ----- | ----------------------------- |
+| `git push --force origin main` | ✅   | DENY  | `--force` 后有参数，`.*` 匹配 |
+| `git push --force`             | ✅   | DENY  | `.*` 匹配空字符串             |
+| `git push origin main`         | ❌   | ALLOW | 无 `--force`，不匹配          |
 
 ### 5.3 Subagent 传播
 
@@ -396,7 +452,9 @@ bash tool call: "git push --force origin main"
 
 LLM 收到工具错误消息，无法继续执行该命令。用户不会被提示审批（deny ≠ ask）。
 
-### 5.6 编译链完整性 — config.ts + agent.ts 同步修改
+### 5.6 编译链完整性 — config.ts + agent.ts 同步修改（**P0 级阻塞项**）
+
+> **⚠️ 此 bug 不修复则 `denied_commands` 功能完全不生效**：如果 agent frontmatter 只配置 `env_scope.denied_commands`（无 `allowed_commands`），旧条件不触发编译 → deny 规则不生成 → 所有破坏性 git 命令畅通无阻。必须在实现 §5.1 之前或同时修复。
 
 §5.1 仅修改了 `Discipline.Schema` 和 `compile()`，但 `denied_commands` 要真正生效还需更新编译链上游的两个文件：
 
@@ -468,75 +526,80 @@ Prompt 层约束补充：`git commit --amend` 仅在 clean check 步骤中使用
 
 ### 6.2 Commit 流程
 
-Phase commit 包含 SHA 记录，因此需要三步序列而非简单的 commit + amend：
+Phase commit 采用"**延迟记录**"策略 — SHA 记录在 state.json 中更新但不立即提交到当前 phase commit，而是作为工作区修改保留，随下一个 phase 的 `git add + commit` 一起入库。这避免了 amend 导致的 SHA 变化问题和自引用循环。
 
 ```bash
 # 1. 添加所有 research 文件
 git add .aether/research/
 
-# 2. 提交（state.json 中 phase_commits 尚无本阶段 SHA）
+# 2. 提交
 git commit -m "research: phase_[phase_name] (plan [plan_number])"
 
-# 3. 获取 SHA 并写入 state.json
-SHA=$(git rev-parse HEAD)
-# 写入 state.json.phase_commits[phase_name] = SHA
-# 通过 MCP advance_plan(commit_sha=SHA) 或 bash 直接修改 state.json
-
-# 4. Amend 将 SHA 记录纳入同一 commit
-git add .aether/research/persistence/state.json
-git commit --amend --no-edit
-
-# 5. Clean check
+# 3. Clean check
 git status .aether/research/
 # 预期: "nothing to commit, working tree clean"
 
-# 6. 如果不干净 — 说明有遗漏文件（非 state.json 的遗漏）
+# 4. 如果不干净 — 说明有遗漏文件
 git add .aether/research/
 git commit --amend --no-edit
-# 再次 clean check
+# 回到步骤 3 重新检查
+
+# 5. 获取最终 SHA（在所有 amend 完成后）
+SHA=$(git rev-parse HEAD)
+
+# 6. 记录 SHA 到 state.json（工作区修改，不立即提交）
+# 写入 state.json.phase_commits[phase_name] = SHA
+# 通过 MCP advance_plan(commit_sha=SHA) 或 bash 直接修改
+
+# 注意：此 SHA 记录将在下一个 phase 的 git add + commit 中入库
+# amend 仅用于步骤 4 的 clean check，不用于 SHA 记录
 ```
 
-### 6.3 SHA 记录的时序分析与自引用不变量
+**与旧方案的关键区别**：旧方案试图将 SHA 记录 amend 回当前 commit（commit → 记录 SHA → amend），导致 SHA 变化（SHA_pre → SHA_final）和自引用循环问题。新方案将 SHA 记录推迟到下一个 phase 的 commit，完全避免 amend 用于 SHA 记录。
 
-上述流程存在一个时序特性：amend 步骤（第 4 步）将 SHA 写入 state.json 后 amend 同一 commit，导致 commit SHA 发生变化（从 SHA_pre → SHA_final）。最终 state.json 中记录的 `phase_commits[phase_name] = SHA_final`，而 SHA_final 就是当前 commit 的 SHA — **这是一个自引用**。
+### 6.3 SHA 延迟记录策略
 
-**时序分解**：
+#### 核心设计
+
+`phase_commits` 中的 SHA 记录采用"延迟提交" — 当前 phase 的 SHA 在 state.json 中更新后，不 amend 到当前 commit，而是作为工作区修改保留，随下一个 phase 的 commit 一起提交。
+
+#### 时序分解
 
 ```
-步骤 2: git commit → SHA_pre
-  state.json 内容: phase_commits.phase_analysis = null（或空）
-  SHA_pre commit 的 tree 中不包含本阶段的 SHA 记录
+phase_analysis 完成时:
+  git commit → SHA_A
+  state.json.phase_commits.phase_analysis = SHA_A（工作区修改，未提交）
+  → state.json 工作区内容: phase=phase_landscape, phase_commits.phase_analysis=SHA_A
 
-步骤 3: 获取 SHA_pre → 写入 state.json.phase_commits
+phase_landscape 完成时:
+  git add .aether/research/
+    → 包含 state.json（已有 phase_commits.phase_analysis = SHA_A）
+  git commit → SHA_L
+  state.json.phase_commits.phase_landscape = SHA_L（工作区修改，未提交）
+  → state.json 工作区内容: phase=phase_framing, phase_commits={phase_analysis: SHA_A, phase_landscape: SHA_L}
 
-步骤 4: git commit --amend → SHA_final
-  state.json 内容: phase_commits.phase_analysis = SHA_final（不是 SHA_pre）
-  SHA_final commit 的 tree 中包含 phase_commits.phase_analysis = SHA_final
+checkout SHA_A 恢复时:
+  恢复的 state.json 是 SHA_A commit 时的版本:
+    - phase_commits 中不包含 phase_analysis 的 SHA（该记录在 SHA_L 的 commit 中）
+    - 但 phase, plan_number, progress 等字段均正确
 ```
 
-SHA_pre 成为 reflog 中的孤儿 commit — 不在 git log 可见历史中，但可通过 reflog 访问。
+#### 对回滚的影响
 
-**自引用不变量**：每个 phase commit 的 `phase_commits[本阶段]` 值等于该 commit 自身的 SHA。此不变量保证：
+回滚时从**当前** state.json（未被 checkout 覆盖前）读取 `phase_commits[target_phase]` 获取目标 SHA，然后执行 checkout。checkout 后的 state.json 可能缺少该 phase 的 SHA 记录（因为该记录在下一个 phase 的 commit 中），但这不影响回滚的正确性 — 重要的是 phase、plan_number 和所有输出文件被正确恢复。
 
-- `git checkout SHA_final -- .aether/research/` 恢复的 state.json 包含 `phase_commits.phase_analysis = SHA_final`
-- checkout 后的 state.json 与磁盘内容一致（SHA_final 对应磁盘上恢复的内容）
-- 回滚时无需额外步骤修正 SHA 记录
+如果当前 state.json 不可用（例如在崩溃恢复中），使用 `git log --grep` 作为 fallback。
 
-**审计影响**：
+#### 与自引用方案（旧方案）的对比
 
-| 场景                           | 影响                                                                             | 严重度                                     |
-| ------------------------------ | -------------------------------------------------------------------------------- | ------------------------------------------ |
-| 正常 `git log` 检查            | 只看到 SHA_final，state.json 中 SHA_final 自引用正确                             | 无影响                                     |
-| reflog 检查 SHA_pre            | state.json 中无本阶段 SHA 记录，看起来像"阶段未完成"但 commit message 显示已完成 | 低 — reflog 是高级调试工具，正常审计不涉及 |
-| `git log --grep` 回滚 fallback | 搜索 `research: phase_analysis` 返回 SHA_final（正确）                           | 无影响                                     |
-
-**孤儿 SHA_pre 的处理**：不主动清理 reflog。SHA_pre 是无害的：
-
-- 不会被 phase_commits 引用
-- 不会被 `git log --grep` 找到
-- checkout SHA_pre 虽然缺少 SHA 记录但内容与 SHA_final 减去 SHA 记录部分完全相同
-
-**结论**：自引用不变量在功能上完全正确，对回滚无影响。唯一的审计混淆来自 reflog 中的孤儿 commit，这是 git amend 的固有特性，不影响正常操作。
+| 维度                          | 自引用不变量（旧方案）                                             | 延迟记录（新方案）                                             |
+| ----------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------- |
+| amend 次数                    | 需要 2+ 次 amend（commit → SHA → amend → SHA 变化 → 需再次 amend） | 0 次 amend 用于 SHA 记录                                       |
+| SHA 稳定性                    | 不稳定（amend 改变 SHA，产生 SHA_pre → SHA_final 问题）            | 稳定（SHA 来自最终 commit，不在 git log 中变动）               |
+| 实现复杂度                    | 高（amend 循环 + 崩溃恢复 + reflog 孤儿 SHA）                      | 低（commit → 记录 → 下次 commit）                              |
+| checkout 后 state.json 完整性 | 自引用 SHA 正确                                                    | 当前 phase 的 SHA 记录可能缺失（在下一个 commit 中）           |
+| 回滚 SHA 来源                 | phase_commits（依赖 reflog，可被 GC）                              | 优先从当前 state.json 读取（git log 稳定），fallback 用 --grep |
+| 崩溃恢复复杂度                | 高（需区分 SHA_pre/SHA_final + 补写 amend）                        | 低（见 §6.8）                                                  |
 
 ### 6.4 Commit Message 格式
 
@@ -557,21 +620,26 @@ research: phase_[phase_name] (plan [plan_number])
 
 ### 6.5 Commit SHA 记录
 
-每次 phase commit 后，将 SHA 写入 state.json 的 `phase_commits` 字段。此记录遵循自引用不变量（见 §6.3）：
+每次 phase commit 后，将 SHA 写入 state.json 的 `phase_commits` 字段。采用延迟记录策略（见 §6.3）— SHA 在工作区更新，随下一个 phase 的 commit 入库。
 
 ```json
 {
   "phase_commits": {
-    "phase_analysis": "SHA_final",
-    "phase_landscape": "SHA_final_2",
-    "phase_framing": "SHA_final_3"
+    "phase_analysis": "SHA_A",
+    "phase_landscape": "SHA_L",
+    "phase_framing": "SHA_F"
   }
 }
 ```
 
-**自引用不变量**：`phase_commits[phase_name]` 的值等于该 phase commit 的自身 SHA（SHA_final，而非 amend 前的 SHA_pre）。这意味着 checkout 任意 phase_commits 中记录的 SHA 恢复的 state.json 中，该 SHA 值与恢复后的 commit 一致。
+**重要特性**：
 
-此字段通过 §6.2 的三步序列写入：commit → 获取 SHA → amend。回滚时从 `phase_commits[目标阶段]` 直接获取 SHA，无需 `git log --grep`。
+- `phase_commits[phase_name]` 的值是该 phase commit 的实际 SHA（在 git log 中稳定可见，非 reflog）
+- SHA 在 amend 全部完成后获取（`git rev-parse HEAD`），保证是最终 SHA
+- checkout `phase_commits[target_phase]` 恢复的 state.json 中，该 phase 的 SHA 记录可能不存在（因为该记录在下一个 phase 的 commit 中），但其他状态字段（phase, plan_number, progress）均正确
+- 回滚时优先从当前（未覆盖的）state.json 读取 SHA，确保能找到目标 commit
+
+此字段通过 §6.2 的流程写入：commit + clean check → 获取 SHA → 更新 state.json（工作区修改）。回滚时首选 `phase_commits[目标阶段]`（从当前 state.json 读取），Fallback 使用 `git log --grep`。
 
 ### 6.6 Entry Gate Commit
 
@@ -592,42 +660,36 @@ Path 2 (Literature review): 每个内部状态转换完成后提交，格式 `re
 
 ### 6.8 Phase Commit 崩溃恢复
 
-§6.2 的三步序列（commit → 获取 SHA → amend）在步骤 2 和步骤 4 之间存在脆弱窗口：agent 崩溃后，commit 存在但 state.json 无本阶段 SHA 记录。
+采用延迟记录策略后，崩溃恢复大大简化 — 不存在 SHA_pre/SHA_final 的区分问题。
 
-**检测**：SESSION RECOVERY 的 git consistency check（§8.1）会发现 `git log --oneline -1` 的 commit message 标明阶段完成，但 `state.json.phase_commits[current_phase]` 无值 — 这是不一致状态。
+**场景 1：commit 成功但 SHA 未记录到 state.json**
 
-**诊断逻辑**：
+- `git log --oneline -1` 显示阶段完成
+- state.json.phase_commits[current_phase] 为空
+- **修复**：获取 `SHA=$(git rev-parse HEAD)`，写入 state.json.phase_commits[current_phase]
+- 这正是正常的延迟记录流程，无需特殊处理
 
-```
-1. 读取 git log 最新 commit message
-2. 如果 message 匹配 "research: phase_[phase_name] (plan [plan_number])":
-   a. 读取 state.json.phase_commits[phase_name]
-   b. 如果值为空/null → 中间崩溃状态
-   c. 如果值存在且与 git rev-parse HEAD 一致 → 正常状态
-   d. 如果值存在但不一致 → 未知异常，人工介入
-3. 中间崩溃状态处理:
-   a. SHA = git rev-parse HEAD（获取 SHA_final，注意 amend 可能未执行）
-   b. 检查 git status .aether/research/ — 是否有未 amend 的 state.json 变更
-   c. 如果有变更（state.json 比 commit 中的版本新）→ SHA_final 尚未生成
-     · 手动完成 amend 序列:
-       git add .aether/research/persistence/state.json
-       SHA=$(git rev-parse HEAD)
-       # 写入 state.json.phase_commits[phase_name] = SHA（通过 MCP 或 bash）
-       git add .aether/research/persistence/state.json
-       git commit --amend --no-edit
-       SHA_final=$(git rev-parse HEAD)
-       # 更新 state.json.phase_commits[phase_name] = SHA_final
-       git add .aether/research/persistence/state.json
-       git commit --amend --no-edit
-     · 完成后 clean check
-   d. 如果无变更 → commit 后崩溃（SHA_pre 存在，无 SHA 记录）
-     · 检查是否是 SHA_pre（reflog 中）
-     · 从 commit tree 中恢复 state.json → 此版本不含 SHA 记录
-     · 手动写入 SHA: 获取当前 HEAD SHA，写入 state.json.phase_commits，
-       然后 amend（同上步骤）
-```
+**场景 2：commit 未完成（工作区有未提交修改）**
 
-**关键原则**：崩溃恢复选择 **补写 SHA** 而非 **rollback**，因为 commit message 标明阶段已完成 — rollback 会丢失已完成的工作。只有当 commit 内容本身有错误（不是 SHA 记录缺失）时才 rollback。
+- `git status .aether/research/` 显示修改
+- state.json.phase 与 STATE.md 不匹配
+- **处理**：检查修改内容
+  - 如果修改是完整的阶段输出 → 完成遗漏的 `git add + commit`
+  - 如果修改不完整 → 丢弃或 rollback
+
+**场景 3：state.json 损坏**
+
+- 使用 `git checkout HEAD -- .aether/research/persistence/state.json` 恢复到最近 commit 的版本
+- 然后 MCP `_read_state_safe` 的 fill-missing-keys 补齐缺失字段
+- 手动补录当前 phase 的 SHA（场景 1 的流程）
+
+**场景 4：连续崩溃导致多个 phase 未记录 SHA**
+
+- 使用 `git log --grep="research: phase_" --oneline` 列出所有 phase commit
+- 逐个补录到 state.json.phase_commits
+- 这等效于批量执行场景 1 的修复流程
+
+**关键原则**：崩溃恢复优先选择**补全缺失信息**而非 rollback，因为 commit 存在意味着阶段工作已完成。只有当 commit 内容本身有错误（不是 SHA 记录缺失）时才 rollback。
 
 ---
 
@@ -660,21 +722,16 @@ def _default_state() -> dict:
 
 `_read_state_safe` 的 fill-missing-keys 逻辑会自动补齐新字段。
 
-**同步修改**: `server.py:372-374` `run_health_check` 中 `"exploration"` 硬编码需改为 `"gate"`：
+**同步修改**: `run_health_check` → `_check_runtime()` 中 `"exploration"` 硬编码改为 `"gate"`：
 
 ```python
-# 当前
-checks["state_phase_in_roadmap"] = current_phase in phase_names or current_phase == "exploration"
-if current_phase not in phase_names and current_phase != "exploration":
-    issues.append(...)
-
-# 修改后
-checks["state_phase_in_roadmap"] = current_phase in phase_names or current_phase == "gate"
-if current_phase not in phase_names and current_phase != "gate":
-    issues.append(...)
+# _check_runtime() 中（原 server.py:372，重构后约 server.py:728）
+orig_phase = original_state.get("phase", "gate")  # 原 "exploration"
 ```
 
-同样，`get_phase_info`（server.py:394）中 `current = state.get("phase", "exploration")` 改为 `current = state.get("phase", "gate")`。
+`state_phase_in_roadmap` 检查已在之前的重构中移除（`_check_runtime` 不再包含此逻辑），无需修改。
+
+同样，`get_phase_info`（server.py:907）中 `current = state.get("phase", "gate")`（原 `"exploration"`）。
 
 ### 7.2 修复 `advance_plan` 自动推进
 
@@ -693,9 +750,11 @@ VALID_PHASES = [
 
 自动推进 fallback 链:
 
-1. ROADMAP.md 解析（现有逻辑）
-2. 硬编码 VALID_PHASES 列表 — 按 plan_number 索引
+1. ROADMAP.md 解析（现有逻辑）— 如果 name 提取失败则返回空字符串，不再使用 `phase-{N}` 占位名
+2. 硬编码 VALID_PHASES 列表 — 按 plan_number 索引（ROADMAP.md 不存在或 name 为空时生效）
 3. 如果都不匹配 — 返回错误，要求 agent 显式传 phase/plan_number
+
+> **实现优于原始设计**：原设计允许 ROADMAP.md 解析失败时使用 `phase-{N}` 占位名，与合法阶段名不一致。实际实现改为：ROADMAP.md name 为空时直接进入 VALID_PHASES fallback，完全消除 `phase-{N}` 占位名。
 
 ### 7.3 扩展 `advance_plan` — 记录 commit SHA 和 execution_cycle
 
@@ -793,11 +852,12 @@ If digest YAML parsing fails or worker didn't output a digest:
    git commit -m "research: phase_[phase_name] (plan [plan_number])"
 6. Clean check:
    git status .aether/research/ → must be clean
-   If not clean → git add + commit --amend
-7. Record commit SHA:
+   If not clean → git add + commit --amend --no-edit → re-check
+7. Record commit SHA (延迟记录 — 工作区修改，不立即提交):
    Obtain SHA via: git rev-parse HEAD
    Call advance_plan with commit_sha parameter, or
    Directly update state.json.phase_commits[phase] via bash
+   (This change will be committed as part of the next phase's git add + commit)
 ```
 
 ### 8.4 phase_checkpoint — 增加回滚协议
@@ -849,17 +909,19 @@ Git rollback 统一处理不一致情况，不再需要 advance_plan 的假想 r
 - [ ] 回滚后 state.json.phase 与 STATE.md Current Phase 一致（原子恢复验证）
 - [ ] `env_scope.denied_commands` 在代码层阻断 `git push --force*` 等破坏性命令（DeniedError）
 - [ ] `Permission.intersection()` 将 denied_commands deny 规则传播给 research-worker subagent
+- [ ] **[P0 阻塞项]** `agent.ts` 编译条件改为 `allowed_commands || denied_commands`，仅配置 `denied_commands` 的 agent 正确编译 deny 规则
 
 ### P1 修复验收
 
 - [ ] 每个 phase 完成后存在对应的 git commit
 - [ ] commit 后 `git status .aether/research/` 显示干净
-- [ ] state.json.phase_commits 记录了每个 phase 的 commit SHA
+- [ ] state.json.phase_commits 记录了每个 phase 的 commit SHA（延迟记录：当前 phase 的 SHA 在下一个 phase 的 commit 中入库）
 - [ ] Digest fallback 不再将"文件存在"直接判定为完成 — incomplete/missing 需用户决策
 
 ### P2 修复验收
 
 - [ ] `advance_plan` 自动推进 fallback 使用硬编码 VALID_PHASES 列表
+- [ ] ROADMAP.md name 提取失败时不使用 `phase-{N}` 占位名，直接进入 VALID_PHASES fallback
 - [ ] state.json 包含 `execution_cycle` 字段
 - [ ] plan_number 在 state.json 中统一为字符串类型
 - [ ] recovery 时 phase_execution 子阶段从 state.json.execution_cycle 读取 cycle 号，不依赖 DIGESTS.md 解析
@@ -884,10 +946,19 @@ Git rollback 统一处理不一致情况，不再需要 advance_plan 的假想 r
 - [ ] `config.ts` env_scope schema 包含 `denied_commands` 字段
 - [ ] `agent.ts` 编译条件改为 `allowed_commands || denied_commands`
 - [ ] 仅配置 `env_scope.denied_commands`（无 `allowed_commands`）的 agent 正确编译 deny 规则
-- [ ] `run_health_check` 和 `get_phase_info` 中 `"exploration"` 引用改为 `"gate"`
+- [ ] `_check_runtime` 和 `get_phase_info` 中 `"exploration"` 引用改为 `"gate"`（`state_phase_in_roadmap` 检查已在重构中移除，无需修改）
+
+### Phase Commit 验收
+
+- [ ] Phase commit 流程不使用 amend 记录 SHA（延迟记录策略）
+- [ ] SHA 在 amend 全部完成后获取（`git rev-parse HEAD`），保证稳定
+- [ ] phase_commits 中的 SHA 在 git log 中可见（非 reflog 孤儿）
+- [ ] 回滚时优先从当前（未覆盖的）state.json 读取 phase_commits SHA
+- [ ] 回滚 Fallback 使用 `git log --grep` 可找到目标 commit
 
 ### 崩溃恢复验收
 
-- [ ] Phase commit 三步序列崩溃后，SESSION RECOVERY 能检测中间状态（commit message 标明完成但 state.json 无 SHA）
-- [ ] 崩溃恢复选择补写 SHA 而非 rollback（不丢失已完成工作）
-- [ ] 补写 SHA 后自引用不变量恢复（phase_commits[phase] == SHA_final）
+- [ ] commit 成功但 SHA 未记录 → 获取 HEAD SHA 补录到 state.json（正常延迟记录流程）
+- [ ] commit 未完成（工作区有修改）→ 检查内容后完成 commit 或 rollback
+- [ ] state.json 损坏 → `git checkout HEAD -- state.json` + fill-missing-keys 修复
+- [ ] 连续崩溃多 phase 未记录 SHA → `git log --grep` 批量补录

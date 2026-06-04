@@ -7,6 +7,7 @@ export namespace Discipline {
     env_scope: z
       .object({
         allowed_commands: z.string().array().optional(),
+        denied_commands: z.string().array().optional(),
       })
       .optional(),
     file_scope: z.string().array().optional(),
@@ -36,6 +37,12 @@ export namespace Discipline {
       rules.push({ permission: "bash", pattern: "*", action: "deny" })
       for (const cmd of d.env_scope.allowed_commands) {
         rules.push({ permission: "bash", pattern: cmd + "*", action: "allow" })
+      }
+    }
+
+    if (d.env_scope?.denied_commands) {
+      for (const cmd of d.env_scope.denied_commands) {
+        rules.push({ permission: "bash", pattern: cmd, action: "deny" })
       }
     }
 

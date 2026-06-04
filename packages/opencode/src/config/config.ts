@@ -894,7 +894,12 @@ export namespace Config {
           ]),
         )
         .optional(),
-      env_scope: z.object({ allowed_commands: z.string().array().optional() }).optional(),
+      env_scope: z
+        .object({
+          allowed_commands: z.string().array().optional(),
+          denied_commands: z.string().array().optional(),
+        })
+        .optional(),
       mcp: z
         .record(z.string(), z.boolean())
         .optional()

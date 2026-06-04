@@ -50,11 +50,13 @@ def _state_path(project_dir: Path) -> Path:
 
 def _default_state() -> dict:
     return {
-        "phase": "exploration",
+        "phase": "gate",
         "plan_number": "0",
         "conventions": {},
         "project_contract": {},
         "progress": {"completed_plans": [], "total_plans": 0},
+        "phase_commits": {},
+        "execution_cycle": 0,
     }
 
 
@@ -93,6 +95,8 @@ def _read_state_safe(project_dir: Path) -> dict:
 def _write_state(project_dir: Path, state: dict) -> None:
     sp = _state_path(project_dir)
     sp.parent.mkdir(parents=True, exist_ok=True)
+    state["plan_number"] = str(state["plan_number"]) if state["plan_number"] is not None else "0"
+    state["phase"] = str(state["phase"]) if state["phase"] is not None else "gate"
     lock = FileLock(str(sp) + ".lock")
     with lock:
         sp.write_text(json.dumps(state, indent=2))
@@ -226,23 +230,48 @@ def get_state(project_dir: str) -> dict[str, Any]:
     })
 
 
+VALID_PHASES = [
+    "gate", "phase_analysis", "phase_landscape",
+    "phase_framing", "phase_checkpoint", "phase_execution", "completed",
+]
+
+
 @mcp.tool(annotations=MUTATING_NON_DESTRUCTIVE)
-def advance_plan(phase: str, plan_number: str, project_dir: str) -> dict[str, Any]:
+def advance_plan(
+    phase: str,
+    plan_number: str,
+    project_dir: str,
+    commit_sha: str = "",
+    execution_cycle: int = 0,
+) -> dict[str, Any]:
     """Atomically advance project to next plan in state.json.
-    If phase and plan_number are empty, attempts auto-advance from ROADMAP.md."""
+    If phase and plan_number are empty, attempts auto-advance from ROADMAP.md
+    then falls back to VALID_PHASES list."""
     pd = _resolve_project_dir(project_dir)
+    plan_number = str(plan_number)
 
     if not phase or not plan_number:
         roadmap_path = pd / DEFAULT_STATE_DIR / "ROADMAP.md"
         phases = _parse_roadmap_phases(roadmap_path)
+        current_state = _read_state_safe(pd)
+        current_plan = int(current_state.get("plan_number", "0"))
+
         if phases:
-            current_state = _read_state_safe(pd)
-            current_plan = int(current_state.get("plan_number", "0"))
             next_idx = min(current_plan, len(phases) - 1)
             if not phase:
-                phase = phases[next_idx].get("name", f"phase-{next_idx}")
+                phase = phases[next_idx].get("name", "")
             if not plan_number:
                 plan_number = str(next_idx + 1)
+        if not phase:
+            if current_plan < len(VALID_PHASES):
+                phase = VALID_PHASES[current_plan]
+            else:
+                return _stable_error(
+                    f"Cannot auto-advance: plan_number {current_plan} exceeds VALID_PHASES. "
+                    "Please provide explicit phase and plan_number."
+                )
+            if not plan_number:
+                plan_number = str(current_plan + 1)
 
     state = _read_state_safe(pd)
     old_phase = state.get("phase", "")
@@ -252,6 +281,14 @@ def advance_plan(phase: str, plan_number: str, project_dir: str) -> dict[str, An
     state["progress"]["completed_plans"].append({"phase": old_phase, "plan": old_plan})
     state["phase"] = phase
     state["plan_number"] = plan_number
+
+    if commit_sha:
+        state.setdefault("phase_commits", {})
+        state["phase_commits"][phase] = commit_sha
+
+    if phase == "phase_execution" and execution_cycle:
+        state["execution_cycle"] = execution_cycle
+
     _write_state(pd, state)
     return _stable_response({
         "previous": {"phase": old_phase, "plan": old_plan},
@@ -688,7 +725,7 @@ def _check_runtime(project_dir: Path) -> dict:
         original_content = sp.read_text()
         backup_path.write_text(original_content)
         original_state = json.loads(original_content) if original_content else _default_state()
-        orig_phase = original_state.get("phase", "exploration")
+        orig_phase = original_state.get("phase", "gate")
         orig_plan = original_state.get("plan_number", "0")
 
         advance_result = advance_plan(phase="health_test", plan_number="0", project_dir=str(project_dir))
@@ -867,7 +904,7 @@ def get_phase_info(project_dir: str) -> dict[str, Any]:
     roadmap_path = pd / DEFAULT_STATE_DIR / "ROADMAP.md"
     phases = _parse_roadmap_phases(roadmap_path)
     state = _read_state_safe(pd)
-    current = state.get("phase", "exploration")
+    current = state.get("phase", "gate")
     current_plan = int(state.get("plan_number", "0"))
     completed = state.get("progress", {}).get("completed_plans", [])
 

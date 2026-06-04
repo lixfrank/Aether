@@ -24,7 +24,14 @@ permission:
 mcp:
   research-conventions: true
   research-state: true
-
+env_scope:
+  denied_commands:
+    - "git push --force*"
+    - "git push -f*"
+    - "git reset --hard*"
+    - "git rebase -i*"
+    - "git clean -fd"
+    - "git checkout * -- ."
 output_dir: ".aether/research"
 file_scope:
   - ".aether/research/**"
@@ -208,6 +215,17 @@ Every phase MUST follow this protocol:
 2. Update STATE.md with: current_phase (from mapping table), key decisions, blockers, next_action
 3. Call advance_plan via research-state MCP with the exact phase string from the mapping table
 4. Proceed to next phase — FORBIDDEN to skip
+5. Git commit:
+   git add .aether/research/
+   git commit -m "research: phase\_[phase_name] (plan [plan_number])"
+6. Clean check:
+   git status .aether/research/ → must be clean
+   If not clean → git add .aether/research/ + git commit --amend --no-edit → re-check
+7. Record commit SHA (delayed recording — workspace modification, not immediately committed):
+   Obtain SHA via: git rev-parse HEAD
+   Call advance_plan with commit_sha parameter, or
+   Directly update state.json.phase_commits[phase] via bash
+   (This change will be committed as part of the next phase's git add + commit)
 
 ### Phase Skip Rules:
 
@@ -284,8 +302,15 @@ After processing each worker digest, check consistency:
 
 1. Read `state.json` via research-state MCP — get current phase
 2. Read `DIGESTS.md` — get last digest's phase
-3. If state.json.phase is ahead of DIGESTS.md (worker called advance_plan but didn't output digest): call advance_plan to roll back state.json to DIGESTS.md's last phase
-4. If DIGESTS.md is ahead of state.json (impossible normally, but check): call advance_plan to advance state.json to match
+3. If state.json.phase does not match DIGESTS.md last phase:
+   - Read state.json.phase_commits for DIGESTS.md last phase → get commit SHA
+   - Git rollback to that commit:
+     git checkout <target*sha> -- .aether/research/
+     git clean -fd .aether/research/
+     git add .aether/research/
+     git commit -m "research: rollback to phase*[target] (plan [N])"
+   - This restores both state.json and STATE.md atomically
+   - Re-dispatch worker for the restored phase
 
 ### phase_checkpoint (NO subagent dispatch)
 
@@ -301,12 +326,17 @@ After processing each worker digest, check consistency:
 4. Use question tool: "Based on the analysis, here is the research plan: [summary]. Shall I proceed with execution?"
 5. MUST NOT proceed without user confirmation
 6. If user rejects:
-   - Coordinator calls advance_plan via MCP to roll back state.json to the correction phase
-   - Coordinator updates STATE.md Current Phase to the correction phase
-   - Then re-dispatch worker to the correction phase:
-     - If research questions wrong → re-dispatch worker with phase=framing + revised scope
-     - If entire direction wrong → re-dispatch worker with phase=analysis + revised scope
-     - If literature coverage insufficient → re-dispatch worker with phase=landscape + revised scope
+   - Determine rollback target phase from user feedback
+   - Read state.json.phase*commits[target_phase] → get commit SHA
+     Fallback: git log --oneline --grep="research: phase*[target]" -5
+   - Git rollback:
+     git checkout <target*sha> -- .aether/research/
+     git clean -fd .aether/research/
+     git add .aether/research/
+     git commit -m "research: rollback to phase*[target] (plan [N])"
+   - Clean check: git status .aether/research/ must be clean
+   - Verify MCP state consistency: get_state → phase must match STATE.md
+   - Re-dispatch worker to target phase with revised scope
 
 ### Execution Loop (phase_execution)
 
@@ -407,9 +437,18 @@ When verification shows all claims verified:
 If digest YAML parsing fails or worker didn't output a digest:
 
 1. Check STATE.md Current Phase — confirm worker wrote files
-2. Check worker's expected output files exist (ROADMAP.md, PLAN.md, EXECUTION.md, etc.)
-3. If files exist: infer phase completed, construct fallback digest, continue routing
-4. If files don't exist: treat as worker failure, retry (max 2 retries) or report to user
+2. Check worker's expected output files:
+   - All expected files exist and non-empty → INCOMPLETE (files exist but no digest, phase may not be complete)
+   - All expected files exist and non-empty + STATE.md shows phase advanced → COMPLETED_FALLBACK (infer completion)
+   - Some/none files exist → MISSING (phase not completed)
+3. INCOMPLETE or MISSING:
+   - Report to user: "Phase [name] did not produce a valid digest."
+   - Present: files found, STATE.md phase, last DIGESTS.md entry
+   - Ask: retry / rollback / skip (only for landscape)?
+4. COMPLETED_FALLBACK:
+   - Construct fallback digest from file evidence
+   - Append to DIGESTS.md with flag: `status: completed_fallback`
+   - Proceed to next phase with caution
 
 ### Task Dispatch Failure
 
@@ -426,6 +465,8 @@ If coordinator dispatch worker fails:
 # ═══════════════════════════════════════════════════════════
 
 On session start:
+
+**Step A: Health Check Bootstrap (mandatory prerequisite)**
 
 1. **Tier 0: LLM Bootstrap** — bash: `uv --version`
    - If uv available → proceed to Tier 0.5
@@ -462,7 +503,21 @@ On session start:
 
 7. Write STATE.md Health Status section (per-layer pass/fail/degraded + pointers to global_health.json and network_status.md)
 
-8. (Existing flow continues: Read STATE.md, state.json, DIGESTS.md, ENVIRONMENT.md...)
+**Step B: Session State Recovery**
+
+8. Read .aether/research/persistence/STATE.md, state.json (via MCP get_state), DIGESTS.md, ENVIRONMENT.md
+9. If an active project exists (phase ≠ "gate" or "not yet started"):
+   - Resume from the current phase
+   - Do NOT re-run the gate
+   - Read DIGESTS.md for completed phase summaries
+   - If ENVIRONMENT.md exists: note venv_state
+   - If current phase is phase_execution: check state.json.execution_cycle + DIGESTS.md for cycle status
+   - Git consistency check: git log --oneline -5 → verify last commit matches state.json.phase_commits[current_phase]
+   - If git commit SHA mismatch: git checkout state.json.phase_commits[current_phase] -- .aether/research/ → git add + commit
+   - Dispatch research-worker for current phase
+10. If no active project (phase = "gate" or "not yet started" and DIGESTS.md empty):
+
+- Run Entry Gate for first user prompt
 
 On user requests "检查环境" or "health check" (during active workflow):
 
