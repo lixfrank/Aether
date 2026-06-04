@@ -150,7 +150,7 @@ phase_execution    ─── Coordinator-managed execution loop:
                        │                                     │
                        │  dispatch worker (sub_phase=         │
                        │    execution_cycle, cycle=1)         │
-                       │    → sandbox-executor → EXECUTION.md │
+                       │    → sandbox-executor/local-executor → EXECUTION.md │
                        │    → execution_cycle_digest          │
                        │                                     │
                        │  [tests_passed] → dispatch worker    │
@@ -224,12 +224,12 @@ Every phase MUST follow this protocol:
 
 ### Phase Dispatch Table
 
-| Phase           | Execution method                                                    | Worker dispatch parameters                         |
-| --------------- | ------------------------------------------------------------------- | -------------------------------------------------- |
-| phase_analysis  | Worker invokes /deep-research skill                                 | phase=analysis                                     |
-| phase_landscape | Worker invokes /literature-landscape-scan skill                     | phase=landscape                                    |
-| phase_framing   | Worker invokes /research-question-framing skill                     | phase=framing                                      |
-| phase_execution | Worker uses built-in sub-phase procedures (NOT /autoresearch skill) | sub_phase=execution_cycle or verification, cycle=N |
+| Phase           | Execution method                                | Worker dispatch parameters                         |
+| --------------- | ----------------------------------------------- | -------------------------------------------------- |
+| phase_analysis  | Worker invokes /deep-research skill             | phase=analysis                                     |
+| phase_landscape | Worker invokes /literature-landscape-scan skill | phase=landscape                                    |
+| phase_framing   | Worker invokes /research-question-framing skill | phase=framing                                      |
+| phase_execution | Worker invokes /autoresearch skill              | sub_phase=execution_cycle or verification, cycle=N |
 
 ### Dispatch Procedure (phase 1-3)
 
@@ -297,6 +297,7 @@ After processing each worker digest, check consistency:
    - Methodology to use
    - Expected deliverables
    - Verification criteria
+   - Environment requirements: [from PLAN.md environment_requirements or framing digest]
 4. Use question tool: "Based on the analysis, here is the research plan: [summary]. Shall I proceed with execution?"
 5. MUST NOT proceed without user confirmation
 6. If user rejects:
@@ -320,8 +321,9 @@ task(
   description: "execution cycle 1",
   subagent_type: "research-worker",
   prompt: "Execute execution_cycle (cycle 1) of phase_execution.
-Read PLAN.md contract, prepare execution, dispatch sandbox-executor.
+Invoke /autoresearch skill. Read PLAN.md contract, probe environment, classify isolation strategy, dispatch executors.
 Domain: [from framing digest verification_approach].
+Cycle: 1.
 After completing, output execution_cycle_digest as your final message."
 )
 ```
@@ -369,9 +371,10 @@ task(
   description: "execution cycle [N+1] (retry)",
   subagent_type: "research-worker",
   prompt: "Execute execution_cycle (cycle [N+1]) of phase_execution — RETRY.
-Previous cycle [N] failed on: [tests_failed from previous execution_cycle_digest].
+Invoke /autoresearch skill. Previous cycle [N] failed on: [tests_failed from previous execution_cycle_digest].
 Suggested revision: [revision_needed from previous execution_cycle_digest].
-Apply revision and re-dispatch sandbox-executor.
+Cycle: [N+1].
+Apply revision and re-dispatch executors.
 After completing, output execution_cycle_digest as your final message."
 )
 ```
@@ -391,6 +394,7 @@ When verification shows all claims verified:
 3. Read final verification digest from DIGESTS.md
 4. Optionally read VERIFICATION.md for detail (grep key sections, NOT full read)
 5. Present results summary to user based on digest
+6. Inform user: "Research project completed. You may clean up .aether/research/.venv/ if no longer needed."
 
 ### Phase Skip Rules (unchanged from original)
 
@@ -423,11 +427,12 @@ If coordinator dispatch worker fails:
 
 On session start:
 
-1. Read `.aether/research/persistence/STATE.md`, `state.json`, and `DIGESTS.md`
+1. Read `.aether/research/persistence/STATE.md`, `state.json`, `DIGESTS.md`, and `ENVIRONMENT.md` (if exists)
 2. If an active project exists (phase ≠ "not yet started"):
    - Resume from the current phase
    - Do NOT re-run the gate
    - Read DIGESTS.md to understand completed phases' summaries (NOT full output files)
+   - If ENVIRONMENT.md exists: note venv_state for reuse in next cycle
    - If current phase is phase_execution: check DIGESTS.md for execution_cycle and verification digests to determine current cycle number and status
    - Dispatch research-worker for the current phase or next execution sub-phase based on STATE.md and digests
    - Perform consistency check: verify state.json.phase matches DIGESTS.md's last digest phase; if mismatch, reconcile via advance_plan
@@ -453,7 +458,7 @@ Workflow for modifying project files:
 ## Subagent Dispatch Rules
 
 - FORBIDDEN: Dispatching explore, general, research-explorer, sandbox-executor, gpd-verifier, or research-verifier directly for Path 3 phase work. All Path 3 phases and sub-phases are dispatched via research-worker subagent.
-- Allowed for Path 3: research-worker only. Worker internally dispatches research-explorer/sandbox-executor/verifiers with delegation_depth: 0.
+- Allowed for Path 3: research-worker only. Worker internally dispatches research-explorer/sandbox-executor/local-executor/verifiers with delegation_depth: 0.
 - Allowed for Path 2: literature-review skill handles its own subagent dispatch internally
 - explore/general: ONLY for non-research auxiliary tasks
 

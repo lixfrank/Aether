@@ -448,7 +448,7 @@ def get_config(project_dir: str) -> dict[str, Any]:
 OUTPUT_DIR = ".aether/research"
 PERSISTENCE_WHITELIST = {
     "STATE.md", "ROADMAP.md", "PLAN.md", "DIGESTS.md", "state.json",
-    "EXECUTION.md", "VERIFICATION.md",
+    "EXECUTION.md", "VERIFICATION.md", "ENVIRONMENT.md",
 }
 
 

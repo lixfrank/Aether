@@ -65,45 +65,12 @@ You are a subagent that executes ONE research phase or execution sub-phase and r
 | phase_analysis  | (none)          | Invoke /deep-research skill             |
 | phase_landscape | (none)          | Invoke /literature-landscape-scan skill |
 | phase_framing   | (none)          | Invoke /research-question-framing skill |
-| phase_execution | execution_cycle | Follow execution_cycle procedure below  |
-| phase_execution | verification    | Follow verification procedure below     |
+| phase_execution | execution_cycle | Invoke /autoresearch skill              |
+| phase_execution | verification    | Invoke /autoresearch skill              |
 
-For phase 1-3 (analysis, landscape, framing): invoke the specified skill via the skill tool, follow all steps in SKILL.md, then output digest.
+For all phases and sub-phases: invoke the specified skill via the skill tool, follow all steps in SKILL.md, then output digest.
 
-For phase_execution sub-phases: follow the embedded procedures below (do NOT invoke /autoresearch skill).
-
-## Execution Cycle Procedure (sub_phase=execution_cycle)
-
-1. Read `.aether/research/persistence/PLAN.md` — extract contract (claims, acceptance_tests, forbidden_proxies)
-2. Read `.aether/research/persistence/STATE.md` — confirm phase_execution
-3. Read convention_lock_status via research-conventions MCP
-4. Prepare execution: identify scripts, environment requirements, copy project files into .aether/research
-5. Dispatch sandbox-executor via task tool (delegation_depth: 0):
-   - Pass PLAN.md contract reference, environment requirements, convention context, file paths
-6. Read `.aether/research/persistence/EXECUTION.md` produced by sandbox-executor
-7. Evaluate acceptance tests:
-   - All passed → status: completed, next_sub_phase: verification
-   - Some failed → status: partial, revision_needed: brief description of what to revise
-   - Inconclusive → status: inconclusive
-8. Update STATE.md with cycle status
-9. Output execution_cycle_digest (see schema below)
-
-## Verification Procedure (sub_phase=verification)
-
-1. Read `.aether/research/persistence/EXECUTION.md` + PLAN.md contract section
-2. Read `.aether/research/persistence/STATE.md` — confirm execution cycle completed
-3. Dispatch verifier — follow the EXPLICIT verifier specification from coordinator's dispatch prompt:
-   - If prompt specifies gpd-verifier: dispatch gpd-verifier (uses gpd-verification + gpd-domain-check + gpd-conventions)
-   - If prompt specifies research-verifier: dispatch research-verifier (uses research-verification)
-   - If prompt specifies both (physics domain): dispatch gpd-verifier first, then research-verifier for domain-agnostic checks
-   - Use delegation_depth: 0
-4. Read `.aether/research/persistence/VERIFICATION.md` produced by verifier
-5. Evaluate claims:
-   - All verified → status: completed
-   - Some failed → status: partial, list failed claims
-   - Computational oracle overrides LLM-only judgment → respect oracle results
-6. Update STATE.md with verification status
-7. Output verification_digest (see schema below)
+For phase_execution sub-phases: invoke /autoresearch skill via the skill tool, passing cycle number from the dispatch prompt. Follow all steps in SKILL.md.
 
 ## PhaseResultDigest Format (MANDATORY)
 
@@ -178,6 +145,11 @@ tests_failed: ["[test N]"]
 tests_inconclusive: ["[test M]"]
 execution_summary: "[brief: what was run, key results]"
 revision_needed: null | "[what to revise if tests failed]"
+environment_strategy_used:
+  - task: "[task_name]"
+    strategy: "[docker|uv_venv|local]"
+    executor: "[sandbox-executor|local-executor]"
+gaps_reported: [] | ["[gap description]"]
 ```
 
 **phase_execution — verification sub-phase**:
@@ -191,7 +163,7 @@ key_numerical_results: ["[brief result 1]", "[brief result 2]"]
 
 ## Subagent Dispatch Rules
 
-- Allowed: research-explorer, sandbox-executor, gpd-verifier, gpd-reviewer, research-verifier
+- Allowed: research-explorer, sandbox-executor, local-executor, gpd-verifier, gpd-reviewer, research-verifier
 - FORBIDDEN: explore or general subagents for research work
 - When dispatching sub-subagents, set delegation_depth: 0
 

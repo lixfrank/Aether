@@ -2,114 +2,241 @@
 name: autoresearch
 description: |
   Phase 5 (phase_execution) of the Path 3 research state machine.
-  Autonomous research loop — plan, execute, verify, advance.
-  Invoked by the research agent ONLY after phase_checkpoint (user confirmed execution).
-  Executes PLAN.md via sandbox-executor, verifies via gpd-verifier/research-verifier,
-  writes VERIFICATION.md. Background execution loops deferred to Layer 5.
+  Environment-aware execution — probe host, classify isolation strategy,
+  dispatch multi-executor (sandbox-executor for Docker, local-executor for uv venv/local),
+  collect results, evaluate acceptance tests, output digest.
+  Invoked by research-worker via skill tool (unified invocation pattern).
 ---
 
-> **NOTE**: This skill is retained as a reference document describing the overall execution-verification flow.
-> In the Layer 3.3 context isolation architecture, the worker does NOT invoke this skill via the skill tool.
-> Instead, phase_execution is split into two sub-phases (execution_cycle + verification) with coordinator-managed retry loops.
-> The execution_cycle and verification procedures are embedded in the research-worker agent definition (see .aether/agent/research-worker.md).
-> This SKILL.md is useful for understanding the intended flow but is NOT invoked at runtime.
+# AutoResearch — phase_execution (Environment-Aware)
 
-# AutoResearch — phase_execution
-
-This skill implements **Phase 5** of the Path 3 research state machine. It is invoked by the research agent ONLY after the user has confirmed execution at phase_checkpoint.
+This skill implements phase_execution of the Path 3 research state machine. It is invoked by the research-worker via the skill tool, receiving cycle number and sub_phase from the dispatch prompt.
 
 ## Lifecycle Contract
 
-**Input**: PLAN.md (contract with claims, deliverables, acceptance_tests) + ROADMAP.md + user confirmation from phase_checkpoint
+**Input**: PLAN.md contract + STATE.md + ENVIRONMENT.md (may not exist on cycle 1) + cycle number from dispatch prompt
 
 **Output** (MUST write all of these):
 
-1. `.aether/research/persistence/EXECUTION.md` — Execution results (written by sandbox-executor)
-2. `.aether/research/persistence/VERIFICATION.md` — Verification report (appended, never overwritten)
-3. `.aether/research/persistence/STATE.md` — Updated with phase=phase_execution completed → completed
+1. `.aether/research/persistence/ENVIRONMENT.md` — Host probe results + isolation strategy decisions
+2. `.aether/research/persistence/EXECUTION.md` — Execution results (appended sections from executors)
+3. `.aether/research/persistence/STATE.md` — Updated with cycle status
 
-**State transition**: phase_execution → completed
+**State transition**: phase_execution → completed (managed by coordinator, NOT by this skill)
 
 **Precondition**: User must have confirmed execution at phase_checkpoint. MUST NOT invoke this skill without user confirmation.
 
-**MUST NOT**: Modify PLAN.md claims/deliverables during execution. If acceptance tests fail, report to user, do not silently adjust criteria.
+**MUST NOT**: Modify PLAN.md claims/deliverables during execution. Call advance_plan (coordinator manages state transitions). Skip environment verification. Fall back to host execution when Docker isolation is required.
 
-## Procedure
+## Procedure — Execution Cycle (sub_phase=execution_cycle)
 
 ### Step 1: Read Current State
 
-1. Read `.aether/research/persistence/STATE.md` — confirm phase_checkpoint was passed with user_decision=confirmed
-2. Read `.aether/research/persistence/PLAN.md` — extract contract (claims, deliverables, acceptance_tests, forbidden_proxies)
-3. Read `.aether/research/persistence/ROADMAP.md` — understand overall project context
-4. Read state.json via research-state MCP (`get_state`)
-5. Check `convention_lock_status` via research-conventions MCP
+1. Read `.aether/research/persistence/STATE.md` — confirm phase_execution
+2. Read `.aether/research/persistence/PLAN.md` — extract contract (claims, acceptance_tests, forbidden_proxies, **environment_requirements**)
+3. Read convention_lock_status via research-conventions MCP
+4. Read cycle number from dispatch prompt (e.g., "cycle=1", "cycle=2 (retry)")
 
-### Step 2: Prepare Execution
+### Step 2: Environment Probe
 
-1. Read PLAN.md contract section to extract:
-   - Execution commands and scripts to run
-   - Acceptance tests to verify
-   - Deliverables expected
-   - Environment requirements (Python version, dependencies, Docker setup)
-   - Convention context (from research-conventions MCP — sandbox-executor reads but never writes)
-2. Identify local resources needed:
-   - Code files referenced in PLAN.md (e.g., dct_nis_python, amflow)
-   - Data files needed for computation
-   - Copy any required project files into output_dir for sandbox access
+Probe the host system for available software:
 
-### Step 3: Dispatch sandbox-executor
+```bash
+python3 --version 2>/dev/null || echo "python: not available"
+uv --version 2>/dev/null || echo "uv: not available"
+docker --version 2>/dev/null || echo "docker: not available"
+wolframscript --version 2>/dev/null || echo "wolframscript: not available"
+nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null || echo "gpu: not available"
+```
 
-Via task tool, pass:
+Record results for ENVIRONMENT.md host_system section.
 
-- PLAN.md contract reference (commands, acceptance tests, deliverables)
-- Environment requirements (Python version, GPU, dependencies)
-- Convention context
-- File paths for execution scripts and data
+### Step 3: Classify Isolation Strategy
 
-### Step 4: Read Execution Report
+For each task derived from PLAN.md contract:
 
-1. Read `.aether/research/persistence/EXECUTION.md` produced by sandbox-executor
-2. Decision:
-   - All acceptance tests passed → proceed to verification
-   - Some acceptance tests failed → investigate root cause, may need to revise execution setup
-   - Inconclusive results → may need alternative approach
+1. Extract software requirements from PLAN.md `environment_requirements` field
+2. Apply classification rules:
 
-### Step 5: Verify Results
+| Condition                                                                             | Strategy                               |
+| ------------------------------------------------------------------------------------- | -------------------------------------- |
+| Licensed/self-contained software (Mathematica, MATLAB, Stata), host available         | `local`                                |
+| Pure Python + wheel-installable packages (numpy, scipy, sympy, pandas), uv available  | `uv_venv`                              |
+| C/C++ compilation needed (pybind11 development, Cython C extension), Docker available | `docker`                               |
+| GPU workloads (PyTorch/TensorFlow training), Docker + GPU available                   | `docker`                               |
+| Untrusted external repo code, Docker available                                        | `docker`                               |
+| Mixed (Python + Mathematica)                                                          | Split into separate tasks per strategy |
 
-1. **Dispatch verifier** based on domain:
-   - General research: delegate to `research-verifier` subagent (uses research-verification skill)
-   - Physics domain: delegate to `gpd-verifier` subagent (uses gpd-verification + gpd-domain-check + gpd-conventions)
-2. Pass PLAN.md contract and EXECUTION.md results to verifier
-3. Read `VERIFICATION.md` produced by verifier
-4. Decision:
-   - All claims verified → proceed to completion
-   - Some claims failed → investigate, may need revised execution
+3. For each task, write `isolation_strategy` entry in ENVIRONMENT.md
+4. Identify gaps: critical software that is unavailable on host
+
+### Step 4: Write ENVIRONMENT.md
+
+Write `.aether/research/persistence/ENVIRONMENT.md` with:
+
+- `probe_timestamp`: ISO 8601 timestamp
+- `cycle`: cycle number from dispatch prompt
+- `host_system`: probe results
+- `plan_requirements`: from PLAN.md environment_requirements
+- `isolation_strategy`: per-task classification decisions
+- `venv_state`: reuse check from previous cycle if .aether/research/.venv exists
+- `gaps`: missing critical software
+
+### Step 5: Gap Check
+
+If any gap has `critical: true`:
+
+- Do NOT dispatch any executor for tasks that depend on the missing software
+- Set `status: failed` in digest with `reason: "Critical software unavailable: [gap description]"`
+- The coordinator will report to the user and wait for decision
+
+If gaps exist but are non-critical:
+
+- Proceed with available tasks
+- Mark affected acceptance tests as `inconclusive` in digest
+
+### Step 6: Dispatch Executors
+
+For each task in isolation_strategy:
+
+**strategy=docker → dispatch sandbox-executor**:
+
+```
+task(
+  description: "[task_name] (docker)",
+  subagent_type: "sandbox-executor",
+  prompt: "Execute [task_name] in Docker sandbox.
+  Task: [description from PLAN.md]
+  Isolation strategy: docker
+  Base image: [from ENVIRONMENT.md]
+  Commands: [from PLAN.md]
+  Acceptance tests: [relevant tests from PLAN.md]
+  Convention context: [summary]
+  Read ENVIRONMENT.md for strategy details.
+  Write results to .aether/research/persistence/EXECUTION.md (append section)."
+)
+```
+
+**strategy=uv_venv or strategy=local → dispatch local-executor**:
+
+```
+task(
+  description: "[task_name] ([strategy])",
+  subagent_type: "local-executor",
+  prompt: "Execute [task_name] in local environment.
+  Task: [description from PLAN.md]
+  Isolation strategy: [uv_venv|local]
+  Commands: [from PLAN.md]
+  Setup commands: [from ENVIRONMENT.md]
+  Run prefix: [from ENVIRONMENT.md]
+  Acceptance tests: [relevant tests from PLAN.md]
+  Convention context: [summary]
+  Read ENVIRONMENT.md for venv state and strategy details.
+  Write results to .aether/research/persistence/EXECUTION.md (append section)."
+)
+```
+
+**Parallel dispatch**: When multiple tasks have different strategies and no inter-task dependencies, dispatch them in parallel using multiple task tool calls in a single message.
+
+**Sequential dispatch**: When tasks depend on each other's output, dispatch sequentially.
+
+### Step 7: Collect Results
+
+1. Read `.aether/research/persistence/EXECUTION.md` — collect sections written by each executor
+2. For each task, check:
+   - Did the executor write its section? If missing → that task failed
+   - Are all output files present? Check deliverables from PLAN.md
+3. Aggregate results across all tasks
+
+### Step 8: Evaluate Acceptance Tests
+
+Evaluate each acceptance_test from PLAN.md against aggregated execution results:
+
+- All passed → status: completed
+- Some failed → status: partial, revision_needed: brief description
+- Inconclusive → status: inconclusive
+- If gap prevented a test → mark as skipped with reason
+
+### Step 9: Update STATE.md
+
+Update `.aether/research/persistence/STATE.md` with cycle status:
+
+- current_phase: phase_execution (cycle N status)
+- key decisions: [execution results summary]
+- blockers: [any gaps or failures]
+- next_action: [verification or retry]
+
+### Step 10: Output PhaseResultDigest
+
+Output execution_cycle_digest as FINAL message:
+
+```yaml
+phase_result_digest:
+  phase: phase_execution
+  sub_phase: execution_cycle
+  cycle: [N from dispatch prompt]
+  status: completed | partial | failed | inconclusive
+  tests_passed: ["[test 1]", "[test 2]"]
+  tests_failed: ["[test N]"]
+  tests_inconclusive: ["[test M]"]
+  execution_summary: "[brief: what was run, which executors used, key results]"
+  revision_needed: null | "[what to revise if tests failed]"
+  environment_strategy_used:
+    - task: "[task_name]"
+      strategy: "[docker|uv_venv|local]"
+      executor: "[sandbox-executor|local-executor]"
+  gaps_reported: [] | ["[gap description]"]
+  output_paths:
+    environment: persistence/ENVIRONMENT.md
+    execution: persistence/EXECUTION.md
+  next_phase: null
+```
+
+MUST NOT output any other text after this YAML block.
+
+## Procedure — Verification (sub_phase=verification)
+
+When invoked with sub_phase=verification:
+
+1. Read `.aether/research/persistence/EXECUTION.md` + PLAN.md contract section
+2. Read `.aether/research/persistence/STATE.md` — confirm execution cycle completed
+3. Dispatch verifier — follow EXPLICIT specification from coordinator dispatch prompt:
+   - If prompt specifies gpd-verifier: dispatch gpd-verifier (uses gpd-verification + gpd-domain-check + gpd-conventions)
+   - If prompt specifies research-verifier: dispatch research-verifier (uses research-verification)
+   - If prompt specifies both (physics domain): dispatch gpd-verifier first, then research-verifier for domain-agnostic checks
+   - Use delegation_depth: 0
+4. Read `.aether/research/persistence/VERIFICATION.md` produced by verifier
+5. Evaluate claims:
+   - All verified → status: completed
+   - Some failed → status: partial, list failed claims
    - Computational oracle overrides LLM-only judgment → respect oracle results
+6. Update STATE.md with verification status
+7. Output verification_digest:
 
-### Step 6: Update State → Completed
-
-1. Update `.aether/research/persistence/STATE.md`:
-   - phase: completed
-   - key decisions: [final verification results]
-   - blockers: [any remaining issues]
-   - next_action: present results to user
-2. Call `advance_plan` via research-state MCP (set phase to completed)
-3. Present final results summary to user
-
-## State Machine (Internal to this skill)
-
+```yaml
+phase_result_digest:
+  phase: phase_execution
+  sub_phase: verification
+  cycle: [N from dispatch prompt]
+  status: completed | partial | failed
+  claims_verified: ["[claim 1]", "[claim 2]"]
+  claims_failed: ["[claim N]"]
+  claims_inconclusive: ["[claim M]"]
+  key_numerical_results: ["[brief result 1]", "[brief result 2]"]
+  output_paths:
+    verification: persistence/VERIFICATION.md
+  next_phase: null
 ```
-reading_state → preparing_execution → dispatching_executor → reading_report →
-  [all passed] → dispatching_verifier → reading_verification → completed
-  [some failed] → investigating → [may revise] → re-dispatching_executor
-```
+
+MUST NOT output any other text after this YAML block.
 
 ## Subagent Dispatch
 
-- sandbox-executor: For Docker-isolated execution of PLAN.md commands
+- sandbox-executor: For Docker-isolated tasks (strategy=docker)
+- local-executor: For uv venv and host tool tasks (strategy=uv_venv or local)
 - gpd-verifier / research-verifier: For verification of results
 - FORBIDDEN: Dispatching explore or general subagents for execution or verification work
 
 ## Integrity
 
-Never fabricate sources. Never claim verification without evidence. Never override computational oracle results with LLM-only reasoning. Never silently adjust acceptance criteria when tests fail.
+Never fabricate sources. Never claim verification without evidence. Never override computational oracle results with LLM-only reasoning. Never silently adjust acceptance criteria when tests fail. Never skip environment verification. Never fall back to host execution when Docker isolation is required.

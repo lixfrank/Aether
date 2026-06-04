@@ -131,8 +131,24 @@ Write to `.aether/research/persistence/PLAN.md`:
 
 - Method: [Python/C++/Mathematica/etc.]
 - Tools: [Specific software packages — e.g., amflow, dct_nis_python]
-- Environment: [Docker/local/remote]
 - Verification approach: [gpd-verifier / research-verifier]
+
+### Environment Requirements
+
+- requirement_1:
+  software: "[e.g., Python 3.11]"
+  packages: ["numpy", "scipy", "sympy"]
+  purpose: "[e.g., numerical simulation]"
+  critical: true
+- requirement_2:
+  software: "[e.g., Mathematica 13+]"
+  packages: []
+  purpose: "[e.g., symbolic verification]"
+  critical: true
+- requirement_3:
+  software: "[e.g., Docker]"
+  purpose: "[e.g., C++ compilation isolation — only if needed]"
+  critical: false
 ```
 
 ### Step 7: Check Conventions
@@ -173,7 +189,15 @@ phase_result_digest:
   forbidden_proxies:
     - "[proxy 1 description]"
     - "[proxy 2 description]"
-  execution_method: "[Python | C++ | Mathematica | theoretical derivation]"
+  execution_method: "[Python | C++ | Mathematica | mixed]"
+  environment_requirements:
+    - software: "[Python 3.11]"
+      packages: ["numpy", "scipy"]
+      purpose: "[numerical simulation]"
+      critical: true
+    - software: "[Mathematica 13+]"
+      purpose: "[symbolic verification]"
+      critical: true
   verification_approach: [gpd-verifier | research-verifier]
   output_paths:
     plan: persistence/PLAN.md
