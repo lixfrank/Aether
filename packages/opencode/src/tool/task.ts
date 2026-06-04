@@ -11,6 +11,8 @@ import { iife } from "@/util/iife"
 import { defer } from "@/util/defer"
 import { Config } from "../config/config"
 import { Permission } from "@/permission"
+import { Discipline } from "@/session/discipline"
+import { Provider } from "../provider/provider"
 
 const parameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
@@ -23,6 +25,13 @@ const parameters = z.object({
     )
     .optional(),
   command: z.string().describe("The command that triggered this task").optional(),
+  mode: z.enum(["serial", "concurrent", "background"]).optional(),
+  permission_override: z.record(z.string(), z.string().array().optional()).optional(),
+  file_scope: z.string().array().optional(),
+  delegation_depth: z.number().int().min(0).max(3).optional(),
+  max_steps: z.number().int().min(1).max(50).optional(),
+  timeout_seconds: z.number().int().min(30).max(600).optional(),
+  category: z.string().optional(),
 })
 
 export const TaskTool = Tool.define("task", async (ctx) => {
@@ -63,12 +72,25 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       const agent = await Agent.get(params.subagent_type)
       if (!agent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
 
+      const callerAgent = ctx.agent ? await Agent.get(ctx.agent) : undefined
+
       const hasTaskPermission = agent.permission.some((rule) => rule.permission === "task")
       const hasTodoWritePermission = agent.permission.some((rule) => rule.permission === "todowrite")
 
-      const callerAgent = ctx.agent ? await Agent.get(ctx.agent) : undefined
+      const discipline = {
+        permission_override: params.permission_override,
+        file_scope: params.file_scope,
+        delegation_depth: params.delegation_depth,
+        max_steps: params.max_steps,
+        timeout_seconds: params.timeout_seconds,
+      }
+      const disciplineRules = Discipline.compile(discipline)
 
-      const sessionPermission = Permission.intersection(callerAgent?.permission ?? [], agent.permission)
+      const sessionPermission = Permission.intersection(
+        callerAgent?.permission ?? [],
+        agent.permission,
+        disciplineRules,
+      )
 
       // v0.6.0 fallback: deny task/todowrite for agents without explicit rules.
       // Intersection only propagates existing deny rules — it doesn't create new ones.
@@ -103,13 +125,17 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           permission: finalPermission,
         })
       })
+
       const msg = await MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID })
       if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
 
-      const model = agent.model ?? {
-        modelID: msg.info.modelID,
-        providerID: msg.info.providerID,
-      }
+      const categoryConfig = params.category ? config.category?.[params.category] : undefined
+      const categoryModel = categoryConfig?.model ? Provider.parseModel(categoryConfig.model) : undefined
+      const model = categoryModel ??
+        agent.model ?? {
+          modelID: msg.info.modelID,
+          providerID: msg.info.providerID,
+        }
 
       ctx.metadata({
         title: params.description,

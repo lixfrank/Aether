@@ -14,6 +14,7 @@ import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import { Permission } from "@/permission"
+import { Discipline } from "@/session/discipline"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@/global"
 import path from "path"
@@ -47,6 +48,44 @@ export namespace Agent {
       options: z.record(z.string(), z.any()),
       steps: z.number().int().positive().optional(),
       mcp: z.record(z.string(), z.boolean()).optional(),
+      skillRefs: z.array(z.string()).optional(),
+      delegationDepth: z.number().int().min(0).optional(),
+      fileScope: z.string().array().optional(),
+      maxSteps: z.number().int().positive().optional(),
+      fallbackModels: z
+        .array(
+          z.union([
+            z.string(),
+            z.object({
+              model: z.string(),
+              variant: z.string().optional(),
+              temperature: z.number().optional(),
+              topP: z.number().optional(),
+            }),
+          ]),
+        )
+        .optional(),
+      envScope: z
+        .object({
+          allowed_commands: z.string().array().optional(),
+        })
+        .optional(),
+      scaleDecision: z
+        .object({
+          direct_threshold: z.number().optional(),
+          never_spawn_for: z.string().array().optional(),
+          rules: z
+            .array(
+              z.object({
+                condition: z.string(),
+                subagent_count: z.number(),
+                subagent_type: z.string(),
+                mode: z.enum(["serial", "concurrent", "background"]),
+              }),
+            )
+            .optional(),
+        })
+        .optional(),
     })
     .meta({
       ref: "Agent",
@@ -262,6 +301,17 @@ export namespace Agent {
             item.options = mergeDeep(item.options, value.options ?? {})
             item.permission = Permission.merge(item.permission, Permission.fromConfig(value.permission ?? {}))
             item.mcp = value.mcp ?? item.mcp
+            item.skillRefs = value.skill_refs ?? item.skillRefs
+            item.delegationDepth = value.delegation_depth ?? item.delegationDepth
+            item.fileScope = value.file_scope ?? item.fileScope
+            item.maxSteps = value.max_steps ?? item.maxSteps ?? item.steps
+            item.fallbackModels = value.fallback_models ?? item.fallbackModels
+            item.envScope = value.env_scope ?? item.envScope
+            item.scaleDecision = value.scale_decision ?? item.scaleDecision
+            if (value.env_scope?.allowed_commands) {
+              const envRules = Discipline.compile({ env_scope: value.env_scope })
+              item.permission = Permission.merge(item.permission, envRules)
+            }
           }
 
           // Ensure Truncate.GLOB is allowed unless explicitly configured
@@ -339,7 +389,11 @@ export namespace Agent {
 
           const system = [PROMPT_GENERATE]
           yield* Effect.promise(() =>
-            Plugin.trigger("experimental.chat.system.transform", { model: resolved, purpose: "agent_generation" }, { system }),
+            Plugin.trigger(
+              "experimental.chat.system.transform",
+              { model: resolved, purpose: "agent_generation" },
+              { system },
+            ),
           )
           const existing = yield* InstanceState.useEffect(state, (s) => s.list())
 

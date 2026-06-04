@@ -331,11 +331,7 @@ export namespace SessionPrompt {
       }
 
       if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
-      if (
-        lastAssistant?.finish &&
-        !["tool-calls"].includes(lastAssistant.finish) &&
-        lastUser.id < lastAssistant.id
-      ) {
+      if (lastAssistant?.finish && !["tool-calls"].includes(lastAssistant.finish) && lastUser.id < lastAssistant.id) {
         _finalResponse = true
         log.info("exiting loop", { sessionID })
         break
@@ -676,9 +672,11 @@ export namespace SessionPrompt {
       // Build system prompt, adding structured output instruction if needed
       if (step === 1) _cachedSkills = (await SystemPrompt.skills(agent)) ?? undefined
       const skills = _cachedSkills
+      const sd = SystemPrompt.scaleDecision(agent)
       const system = [
         ...(await SystemPrompt.environment(model)),
         ...(skills ? [skills] : []),
+        ...(sd ? [sd] : []),
         ...(await InstructionPrompt.system()),
       ]
       const format = lastUser.format ?? { type: "text" }

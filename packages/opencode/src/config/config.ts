@@ -877,6 +877,40 @@ export namespace Config {
         .describe(
           "MCP servers whose tools should be visible to this agent. Keys are MCP server names; true = visible. When any server is enabled here, only those servers' tools are exposed (others hidden); when absent, all connected MCP tools are exposed (default behavior).",
         ),
+      skill_refs: z.array(z.string()).optional(),
+      delegation_depth: z.number().int().min(0).max(3).optional(),
+      file_scope: z.string().array().optional(),
+      max_steps: z.number().int().positive().optional(),
+      fallback_models: z
+        .array(
+          z.union([
+            z.string(),
+            z.object({
+              model: z.string(),
+              variant: z.string().optional(),
+              temperature: z.number().optional(),
+              topP: z.number().optional(),
+            }),
+          ]),
+        )
+        .optional(),
+      env_scope: z.object({ allowed_commands: z.string().array().optional() }).optional(),
+      scale_decision: z
+        .object({
+          direct_threshold: z.number().optional(),
+          never_spawn_for: z.string().array().optional(),
+          rules: z
+            .array(
+              z.object({
+                condition: z.string(),
+                subagent_count: z.number(),
+                subagent_type: z.string(),
+                mode: z.enum(["serial", "concurrent", "background"]),
+              }),
+            )
+            .optional(),
+        })
+        .optional(),
     })
     .catchall(z.any())
     .transform((agent, ctx) => {
@@ -898,6 +932,13 @@ export namespace Config {
         "disable",
         "tools",
         "mcp",
+        "skill_refs",
+        "delegation_depth",
+        "file_scope",
+        "max_steps",
+        "fallback_models",
+        "env_scope",
+        "scale_decision",
       ])
 
       // Extract unknown properties into options
@@ -1410,6 +1451,17 @@ export namespace Config {
             .optional()
             .describe("Timeout in milliseconds for model context protocol (MCP) requests"),
         })
+        .optional(),
+      category: z
+        .record(
+          z.string(),
+          z.object({
+            model: z.string().optional(),
+            variant: z.string().optional(),
+            temperature: z.number().optional(),
+            description: z.string().optional(),
+          }),
+        )
         .optional(),
     })
     .strict()
