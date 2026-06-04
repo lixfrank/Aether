@@ -295,12 +295,7 @@ async function copySpecial(state: State) {
       path.join(platformDir("feishu"), "hidden_projects.json"),
       "feishu/hidden_projects.json",
     ),
-    copyDir(
-      state,
-      legacyPlatformDir("wechat-bridge"),
-      platformDir("wechat-bridge"),
-      "wechat-bridge",
-    ),
+    copyDir(state, legacyPlatformDir("wechat-bridge"), platformDir("wechat-bridge"), "wechat-bridge"),
   ])
 }
 
@@ -398,8 +393,14 @@ export function reset() {
   project.clear()
 }
 
-const SEED_VERSION_FILE = "seed-version.txt"
+const SEED_STATE_FILE = "seed-state.json"
+const LEGACY_SEED_FILE = "seed-version.txt"
 const CURRENT_SEED_VERSION = "1"
+
+type SeedState = {
+  version: string
+  seeded: string[]
+}
 
 function findServerProjectDir(): string | undefined {
   const binaryDir = path.dirname(process.execPath)
@@ -424,6 +425,14 @@ function findServerProjectDir(): string | undefined {
   return undefined
 }
 
+async function readSeedState(): Promise<SeedState> {
+  const statePath = path.join(AETHER_HOME, SEED_STATE_FILE)
+  const state = await Filesystem.readJson<SeedState>(statePath).catch(() => undefined)
+  if (state && Array.isArray(state.seeded)) return state
+  await fs.rm(path.join(AETHER_HOME, LEGACY_SEED_FILE), { force: true }).catch(() => {})
+  return { version: "", seeded: [] }
+}
+
 export async function seedDefaultAssets(): Promise<void> {
   const sourceDir = findServerProjectDir()
   if (!sourceDir) {
@@ -431,21 +440,30 @@ export async function seedDefaultAssets(): Promise<void> {
     return
   }
 
-  const versionFile = path.join(AETHER_HOME, SEED_VERSION_FILE)
-  const existingVersion = await Filesystem.readText(versionFile).catch(() => "")
-  if (existingVersion === CURRENT_SEED_VERSION) {
-    log.info("default assets already seeded, skipping")
-    return
-  }
+  const state = await readSeedState()
 
   const subdirs = ["agent", "mcp"]
   const skillsDir = path.join(sourceDir, "skills")
   if (existsSync(skillsDir)) subdirs.push("skills")
 
+  const toSeed: string[] = []
   for (const subdir of subdirs) {
     const src = path.join(sourceDir, subdir)
-    const dest = path.join(AETHER_HOME, subdir)
     if (!(await Filesystem.isDir(src))) continue
+    const dest = path.join(AETHER_HOME, subdir)
+    if (!state.seeded.includes(subdir) || !(await Filesystem.isDir(dest))) {
+      toSeed.push(subdir)
+    }
+  }
+
+  if (toSeed.length === 0 && state.version === CURRENT_SEED_VERSION) {
+    log.info("default assets already seeded, skipping")
+    return
+  }
+
+  for (const subdir of toSeed) {
+    const src = path.join(sourceDir, subdir)
+    const dest = path.join(AETHER_HOME, subdir)
     await fs.mkdir(dest, { recursive: true })
     const entries = await fs.readdir(src, { withFileTypes: true }).catch(() => [])
     for (const entry of entries) {
@@ -467,7 +485,11 @@ export async function seedDefaultAssets(): Promise<void> {
     }
   }
 
+  const newState: SeedState = {
+    version: CURRENT_SEED_VERSION,
+    seeded: [...new Set([...state.seeded, ...toSeed])],
+  }
   await fs.mkdir(AETHER_HOME, { recursive: true })
-  await Filesystem.write(versionFile, CURRENT_SEED_VERSION)
-  log.info("default assets seeded to ~/.aether/")
+  await Filesystem.writeJson(path.join(AETHER_HOME, SEED_STATE_FILE), newState)
+  log.info(`default assets seeded to ~/.aether/ (subdirs: ${toSeed.join(", ")})`)
 }
