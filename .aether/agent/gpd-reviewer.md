@@ -7,6 +7,7 @@ permission:
   grep: allow
   glob: allow
   read: allow
+  bash: allow
 skill_refs:
   - gpd-errors
   - gpd-conventions

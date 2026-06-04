@@ -40,6 +40,7 @@ import {
 } from "./cron"
 import { MemoryForgetTool, MemoryReflectTool, MemoryRememberTool, MemorySearchTool } from "./memory"
 import { Glob } from "../util/glob"
+import { Wildcard } from "../util/wildcard"
 import { pathToFileURL } from "url"
 import { Effect, Layer, ServiceMap } from "effect"
 import { InstanceState } from "@/effect/instance-state"
@@ -185,9 +186,16 @@ export namespace ToolRegistry {
           Promise.all(
             allTools
               .filter((tool) => {
-                // Enable websearch/codesearch for zen users OR via enable flag
+                // Enable websearch/codesearch for zen users OR via enable flag OR when agent explicitly allows them
                 if (tool.id === "codesearch" || tool.id === "websearch") {
-                  return model.providerID === ProviderID.opencode || Flag.OPENCODE_ENABLE_EXA
+                  const agentAllows = agent?.permission?.findLast(
+                    (rule) => Wildcard.match(tool.id, rule.permission) && rule.pattern === "*",
+                  )
+                  return (
+                    model.providerID === ProviderID.opencode ||
+                    Flag.OPENCODE_ENABLE_EXA ||
+                    agentAllows?.action === "allow"
+                  )
                 }
 
                 // use apply tool in same format as codex

@@ -21,14 +21,7 @@ skill_refs:
 mcp:
   research-conventions: true
   research-state: true
-env_scope:
-  allowed_commands:
-    - docker
-    - uv
-    - python
-    - pip
-    - curl
-    - git
+
 output_dir: ".aether/research"
 file_scope:
   - ".aether/research/**"
