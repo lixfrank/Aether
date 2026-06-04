@@ -14,8 +14,8 @@ permission:
   webfetch: allow
   external_directory: ask
   research_conventions_*: allow
-  skill_refs:
-    - docker
+skill_refs:
+  - docker
 mcp:
   research-conventions: true
 
