@@ -18,6 +18,8 @@ permission:
   research_state_*: allow
 skill_refs:
   - research-verification
+file_scope:
+  - ".aether/research/**"
 mcp:
   research-conventions: true
   research-state: true

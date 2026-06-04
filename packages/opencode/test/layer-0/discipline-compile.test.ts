@@ -12,15 +12,20 @@ describe("Discipline.compile — research agent constraint shortcuts", () => {
     expect(Permission.evaluate("bash", "rm -rf /", rules).action).toBe("deny")
   })
 
-  test("file_scope compiles deny-before-allow for file tool restriction", () => {
+  test("file_scope compiles deny-before-allow for write tool restriction only (read tools unaffected)", () => {
     const rules = Discipline.compile({
       file_scope: ["src/**", "test/**"],
     })
-    expect(Permission.evaluate("read", "src/main.ts", rules).action).toBe("allow")
-    expect(Permission.evaluate("read", "test/foo.test.ts", rules).action).toBe("allow")
     expect(Permission.evaluate("edit", "src/main.ts", rules).action).toBe("allow")
-    expect(Permission.evaluate("read", "secrets/credentials.json", rules).action).toBe("deny")
+    expect(Permission.evaluate("write", "src/main.ts", rules).action).toBe("allow")
+    expect(Permission.evaluate("apply_patch", "src/main.ts", rules).action).toBe("allow")
+    expect(Permission.evaluate("multiedit", "src/main.ts", rules).action).toBe("allow")
     expect(Permission.evaluate("edit", "secrets/credentials.json", rules).action).toBe("deny")
+    expect(Permission.evaluate("write", "secrets/credentials.json", rules).action).toBe("deny")
+    expect(Permission.evaluate("read", "src/main.ts", rules).action).not.toBe("deny")
+    expect(Permission.evaluate("read", "secrets/credentials.json", rules).action).not.toBe("deny")
+    expect(Permission.evaluate("glob", "*", rules).action).not.toBe("deny")
+    expect(Permission.evaluate("grep", "*", rules).action).not.toBe("deny")
   })
 
   test("delegation_depth=0 denies task, undefined produces no rule", () => {

@@ -22,6 +22,8 @@ skill_refs:
   - gpd-errors
   - gpd-domain-check
   - gpd-conventions
+file_scope:
+  - ".aether/research/**"
 mcp:
   research-conventions: true
   research-state: true

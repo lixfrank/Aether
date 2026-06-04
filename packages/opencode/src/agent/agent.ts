@@ -296,9 +296,12 @@ export namespace Agent {
 
             item.mcp = value.mcp ?? item.mcp
             item.outputDir = value.output_dir ?? item.outputDir
-            if (value.env_scope?.allowed_commands) {
-              const envRules = Discipline.compile({ env_scope: value.env_scope })
-              item.permission = Permission.merge(item.permission, envRules)
+            const compileInput: z.infer<typeof Discipline.Schema> = {}
+            if (value.env_scope?.allowed_commands) compileInput.env_scope = value.env_scope
+            if (value.file_scope) compileInput.file_scope = value.file_scope
+            if (Object.keys(compileInput).length > 0) {
+              const compiled = Discipline.compile(compileInput)
+              item.permission = Permission.merge(item.permission, compiled)
             }
           }
 

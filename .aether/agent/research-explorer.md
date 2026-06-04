@@ -17,6 +17,8 @@ skill_refs:
   - alpha-research
 fallback_models:
   - anthropic/claude-sonnet-4-5
+file_scope:
+  - ".aether/research/**"
 mcp:
   research-state: true
 ---

@@ -40,12 +40,12 @@ export namespace Discipline {
     }
 
     if (d.file_scope) {
-      const FILE_TOOLS = ["read", "edit", "write", "glob", "grep", "apply_patch", "multiedit"]
-      for (const tool of FILE_TOOLS) {
+      const WRITE_TOOLS = ["edit", "write", "apply_patch", "multiedit"]
+      for (const tool of WRITE_TOOLS) {
         rules.push({ permission: tool, pattern: "*", action: "deny" })
       }
       for (const scopePattern of d.file_scope) {
-        for (const tool of FILE_TOOLS) {
+        for (const tool of WRITE_TOOLS) {
           rules.push({ permission: tool, pattern: scopePattern, action: "allow" })
         }
       }

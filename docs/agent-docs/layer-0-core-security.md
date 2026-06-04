@@ -86,7 +86,7 @@ export function intersection(parent: Ruleset, child: Ruleset, override?: Ruleset
 | bash, \*, **allow** | bash, \*, **allow**        | bash, "alpha*", **allow** + bash, *, **deny**    | bash, _, allow → bash, alpha_, allow → bash, \*, deny | findLast → **deny**                                                              | discipline deny-before-allow：特定 allow 覆盖 blanket deny |
 | bash, \*, **deny**  | bash, "alpha\*", **allow** | 无 override                                      | bash, alpha\*, allow                                  | **deny**                                                                         | parent deny 覆盖 child allow（安全修复）                   |
 | bash, \*, **allow** | bash, "secret\*", **deny** | 无 override                                      | bash, secret\*, deny                                  | **deny**                                                                         | child deny 不被 parent allow 覆盖                          |
-| edit, \*, **allow** | 无 edit 规则               | edit, \*, **deny** + edit, "src/**", **allow\*\* | edit, \*, deny → edit, src/\*\*, allow                | evaluate("edit","src/foo") → **allow**; evaluate("edit","secret/foo") → **deny** | file_scope 精细限制                                        |
+| edit, \*, **allow** | 无 edit 规则               | edit, \*, **deny** + edit, "src/**", **allow\*\* | edit, \*, deny → edit, src/\*\*, allow                | evaluate("edit","src/foo") → **allow**; evaluate("edit","secret/foo") → **deny** | file_scope 限制写操作（读工具不受限制）                    |
 | task, \*, **allow** | 无 task 规则               | task, \*, **deny**                               | task, \*, deny                                        | **deny**                                                                         | delegation_depth=0                                         |
 | _, _, **allow**     | _, _, **allow**            | todowrite, \*, **deny**                          | todowrite, \*, deny                                   | **deny**                                                                         | 禁止子代理 todowrite                                       |
 | _, _, **allow**     | _, _, **allow**            | 无 override                                      | \*, allow                                             | **allow**                                                                        | 无限制                                                     |
@@ -175,13 +175,13 @@ export namespace Discipline {
     }
 
     if (d.file_scope) {
-      const FILE_TOOLS = ["read", "edit", "write", "glob", "grep", "apply_patch", "multiedit"]
+      const WRITE_TOOLS = ["edit", "write", "apply_patch", "multiedit"]
       // deny-before-allow: blanket deny first, scope-specific allows after
-      for (const tool of FILE_TOOLS) {
+      for (const tool of WRITE_TOOLS) {
         rules.push({ permission: tool, pattern: "*", action: "deny" })
       }
       for (const scopePattern of d.file_scope) {
-        for (const tool of FILE_TOOLS) {
+        for (const tool of WRITE_TOOLS) {
           rules.push({ permission: tool, pattern: scopePattern, action: "allow" })
         }
       }
@@ -197,15 +197,18 @@ export namespace Discipline {
 }
 ```
 
-### Agent 级 env_scope 编译（统一入口）
+### Agent 级 env_scope/file_scope 编译（统一入口）
 
-env_scope 的编译**只在 `agent.ts` 中进行**，不在 `task.ts` 的 discipline 参数中重复编译。编译后的规则作为 agent.permission 的一部分，在 task.ts 的 `intersection()` 中自然参与权限计算。
+env_scope 和 file_scope 的编译**只在 `agent.ts` 中进行**，不在 `task.ts` 的 discipline 参数中重复编译。编译后的规则作为 agent.permission 的一部分，在 task.ts 的 `intersection()` 中自然参与权限计算。
 
 ```ts
 // agent.ts merge 循环中新增（在 value.permission 处理之后）
-if (value.env_scope?.allowed_commands) {
-  const envRules = Discipline.compile({ env_scope: value.env_scope })
-  item.permission = Permission.merge(item.permission, envRules)
+const compileInput: z.infer<typeof Discipline.Schema> = {}
+if (value.env_scope?.allowed_commands) compileInput.env_scope = value.env_scope
+if (value.file_scope) compileInput.file_scope = value.file_scope
+if (Object.keys(compileInput).length > 0) {
+  const compiled = Discipline.compile(compileInput)
+  item.permission = Permission.merge(item.permission, compiled)
 }
 ```
 
@@ -213,7 +216,7 @@ if (value.env_scope?.allowed_commands) {
 
 ```
 T0.6: compile({env_scope:{allowed_commands:["alpha","docker"]}}) 生成 [{bash,"*",deny}, {bash,"alpha*",allow}, {bash,"docker*",allow}]
-T0.7: compile({file_scope:["src/**","test/**"]}) 生成 每个 FILE_TOOL 一条 blanket deny + 每个 scope 一条 allow
+T0.7: compile({file_scope:["src/**","test/**"]}) 生成 每个 WRITE_TOOL 一条 blanket deny + 每个 scope 一条 allow（read/glob/grep 不受限）
 T0.8: compile({delegation_depth:0}) 包含 [{task,"*",deny}]
 T0.9: compile({delegation_depth:undefined}) 不产生任何 task 规则（与 v0.6.0 一致）
 T0.10: compile({permission_override:{edit:["allow"],bash:["allow","docker*"]}}) 生成正确的 allow/pattern 规则
@@ -351,7 +354,7 @@ T0.13: 不传任何新参数时，task tool 行为与 v0.6.0 一致（permission
 T0.14: 传 permission_override: {bash:["allow","docker*"]} 时，子代理只有 docker* bash 权限
 T0.15: 传 delegation_depth:0 时，子代理的 task 工具被 deny
 T0.16: 传 delegation_depth:undefined（或不传）时，task 权限取决于 agent 自身（与 v0.6.0 一致）
-T0.17: 传 file_scope:["src/**"] 时，子代理的文件操作工具被限制在 src/** 范围
+T0.17: 传 file_scope:["src/**"] 时，子代理的写操作工具被限制在 src/** 范围（read/glob/grep 不受限）
 T0.20: sessionPermission 通过 Session.create({permission}) 传递后，运行时 Permission.disabled 正确硬删除 denied 工具
 T0.21: bun typecheck 通过
 ```

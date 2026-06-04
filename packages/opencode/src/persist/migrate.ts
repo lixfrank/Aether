@@ -425,12 +425,41 @@ function findServerProjectDir(): string | undefined {
   return undefined
 }
 
-async function readSeedState(): Promise<SeedState> {
-  const statePath = path.join(AETHER_HOME, SEED_STATE_FILE)
-  const state = await Filesystem.readJson<SeedState>(statePath).catch(() => undefined)
-  if (state && Array.isArray(state.seeded)) return state
-  await fs.rm(path.join(AETHER_HOME, LEGACY_SEED_FILE), { force: true }).catch(() => {})
-  return { version: "", seeded: [] }
+async function syncDir(src: string, dest: string, backup: string): Promise<number> {
+  await fs.mkdir(dest, { recursive: true })
+  const entries = await fs.readdir(src, { withFileTypes: true }).catch(() => [])
+  let count = 0
+  for (const entry of entries) {
+    if (
+      entry.name.startsWith(".") ||
+      entry.name === "package.json" ||
+      entry.name === "bun.lock" ||
+      entry.name === "node_modules"
+    )
+      continue
+    const s = path.join(src, entry.name)
+    const d = path.join(dest, entry.name)
+    const b = path.join(backup, entry.name)
+    if (entry.isDirectory()) {
+      count += await syncDir(s, d, b)
+    } else {
+      const destExists = await exists(d)
+      if (!destExists) {
+        await fs.copyFile(s, d)
+        count++
+      } else {
+        const srcBuf = await fs.readFile(s)
+        const destBuf = await fs.readFile(d)
+        if (!srcBuf.equals(destBuf)) {
+          await fs.mkdir(path.dirname(b), { recursive: true })
+          await fs.copyFile(d, b)
+          await fs.copyFile(s, d)
+          count++
+        }
+      }
+    }
+  }
+  return count
 }
 
 export async function seedDefaultAssets(): Promise<void> {
@@ -440,56 +469,36 @@ export async function seedDefaultAssets(): Promise<void> {
     return
   }
 
-  const state = await readSeedState()
+  await fs.rm(path.join(AETHER_HOME, LEGACY_SEED_FILE), { force: true }).catch(() => {})
+
+  const ts = new Date().toISOString().slice(0, 19).replace("T", "_").replace(/:/g, "-")
+  const backupRoot = path.join(AETHER_HOME, "backup", `backup_${ts}`)
 
   const subdirs = ["agent", "mcp"]
   const skillsDir = path.join(sourceDir, "skills")
   if (existsSync(skillsDir)) subdirs.push("skills")
 
-  const toSeed: string[] = []
+  let updated = 0
+  const seeded: string[] = []
   for (const subdir of subdirs) {
     const src = path.join(sourceDir, subdir)
     if (!(await Filesystem.isDir(src))) continue
     const dest = path.join(AETHER_HOME, subdir)
-    if (!state.seeded.includes(subdir) || !(await Filesystem.isDir(dest))) {
-      toSeed.push(subdir)
-    }
+    const n = await syncDir(src, dest, path.join(backupRoot, subdir))
+    updated += n
+    seeded.push(subdir)
+    if (n > 0) log.info(`updated ${n} files in ~/.aether/${subdir}/`)
   }
 
-  if (toSeed.length === 0 && state.version === CURRENT_SEED_VERSION) {
-    log.info("default assets already seeded, skipping")
-    return
-  }
-
-  for (const subdir of toSeed) {
-    const src = path.join(sourceDir, subdir)
-    const dest = path.join(AETHER_HOME, subdir)
-    await fs.mkdir(dest, { recursive: true })
-    const entries = await fs.readdir(src, { withFileTypes: true }).catch(() => [])
-    for (const entry of entries) {
-      if (
-        entry.name.startsWith(".") ||
-        entry.name === "package.json" ||
-        entry.name === "bun.lock" ||
-        entry.name === "node_modules"
-      )
-        continue
-      const entrySrc = path.join(src, entry.name)
-      const entryDest = path.join(dest, entry.name)
-      if (await Filesystem.isDir(entryDest)) continue
-      if (entry.isDirectory()) {
-        await fs.cp(entrySrc, entryDest, { recursive: true })
-      } else {
-        await fs.copyFile(entrySrc, entryDest)
-      }
-    }
-  }
-
-  const newState: SeedState = {
-    version: CURRENT_SEED_VERSION,
-    seeded: [...new Set([...state.seeded, ...toSeed])],
-  }
   await fs.mkdir(AETHER_HOME, { recursive: true })
-  await Filesystem.writeJson(path.join(AETHER_HOME, SEED_STATE_FILE), newState)
-  log.info(`default assets seeded to ~/.aether/ (subdirs: ${toSeed.join(", ")})`)
+  await Filesystem.writeJson(path.join(AETHER_HOME, SEED_STATE_FILE), {
+    version: CURRENT_SEED_VERSION,
+    seeded,
+  })
+
+  if (updated === 0) {
+    log.info("default assets already up-to-date")
+  } else {
+    log.info(`seeded/updated ${updated} files in ~/.aether/`)
+  }
 }

@@ -36,14 +36,28 @@ env_scope:
     - git
     - docker
 output_dir: ".aether/research"
+file_scope:
+  - ".aether/research/**"
 ---
 
 <system-reminder>
 # Research Mode — HARD CONSTRAINTS
 
-PERMITTED: read/glob/grep any file; edit/write within output_dir; websearch/webfetch; knowledge_search; question; todowrite; task (research-explorer/gpd-verifier/gpd-reviewer/sandbox-executor); skill; bash (alpha/curl/rg/grep/git/docker only via env_scope); MCP (research-conventions, research-state).
+PERMITTED: read/glob/grep any file; edit/write within output_dir (enforced by file_scope); websearch/webfetch; knowledge_search; question; todowrite; task (research-explorer/gpd-verifier/gpd-reviewer/sandbox-executor); skill; bash (alpha/uv/curl/rg/grep/git/docker only via env_scope); MCP (research-conventions, research-state).
 
-FORBIDDEN: edit/write outside output_dir; bash commands not in env_scope.allowed_commands.
+FORBIDDEN: edit/write outside output_dir (enforced by file_scope — permission system blocks these operations); bash commands not in env_scope.allowed_commands.
+
+## Output Directory Self-Containment
+
+output_dir is a self-contained workspace. All modifications (edit, write, apply_patch, multiedit) are restricted to output_dir by the permission system. When you need to modify a project file, first copy it into output_dir, then modify the copy. The original project files remain untouched. This prevents accidental overwrites of user code or data.
+
+Workflow for modifying project files:
+
+1. Copy the target file into output_dir: `bash: cp <source_path> <output_dir>/<filename>`
+2. Modify the copy in output_dir using edit/write tools
+3. Reference the modified copy in your findings
+
+This ensures output_dir is an isolated sandbox — all research artifacts live there, and project source files are never altered.
 
 ## Mode Routing
 

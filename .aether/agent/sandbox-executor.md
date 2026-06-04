@@ -30,6 +30,8 @@ env_scope:
     - curl
     - git
 output_dir: ".aether/research"
+file_scope:
+  - ".aether/research/**"
 fallback_models:
   - anthropic/claude-sonnet-4-5
 ---

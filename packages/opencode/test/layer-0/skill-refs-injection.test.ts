@@ -48,28 +48,21 @@ Conduct comprehensive research with citations.
       },
     })
 
-    const home = process.env.OPENCODE_TEST_HOME
-    process.env.OPENCODE_TEST_HOME = tmp.path
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const general = await Agent.get("general")
+        const output = await SystemPrompt.skills(general!)
 
-    try {
-      await Instance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const general = await Agent.get("general")
-          const output = await SystemPrompt.skills(general!)
+        expect(output).toContain("Skills (mandatory)")
+        expect(output).toContain("Skill: arxiv-search")
+        expect(output).toContain("Skill: deep-research")
+        expect(output).toContain("# ArXiv Search")
+        expect(output).toContain("# Deep Research")
 
-          expect(output).toContain("Skills (mandatory)")
-          expect(output).toContain("Skill: arxiv-search")
-          expect(output).toContain("Skill: deep-research")
-          expect(output).toContain("# ArXiv Search")
-          expect(output).toContain("# Deep Research")
-
-          expect(output).not.toContain("<available_skills>")
-        },
-      })
-    } finally {
-      process.env.OPENCODE_TEST_HOME = home
-    }
+        expect(output).not.toContain("<available_skills>")
+      },
+    })
   })
 
   test("agent without skillRefs gets only broadcast (v0.6.0 unchanged)", async () => {
@@ -90,23 +83,16 @@ description: Search arXiv papers.
       },
     })
 
-    const home = process.env.OPENCODE_TEST_HOME
-    process.env.OPENCODE_TEST_HOME = tmp.path
-
-    try {
-      await Instance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const build = await Agent.get("build")
-          const output = await SystemPrompt.skills(build!)
-          expect(output).toContain("<available_skills>")
-          expect(output).not.toContain("Skills (mandatory)")
-          expect(output).not.toContain("Skill: arxiv-search")
-        },
-      })
-    } finally {
-      process.env.OPENCODE_TEST_HOME = home
-    }
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const build = await Agent.get("build")
+        const output = await SystemPrompt.skills(build!)
+        expect(output).toContain("<available_skills>")
+        expect(output).toContain("arxiv-search")
+        expect(output).not.toContain("Skills (mandatory)")
+      },
+    })
   })
 
   test("skillRefs referencing nonexistent skill shows warning", async () => {
@@ -121,21 +107,14 @@ description: Search arXiv papers.
       },
     })
 
-    const home = process.env.OPENCODE_TEST_HOME
-    process.env.OPENCODE_TEST_HOME = tmp.path
-
-    try {
-      await Instance.provide({
-        directory: tmp.path,
-        fn: async () => {
-          const general = await Agent.get("general")
-          const output = await SystemPrompt.skills(general!)
-          expect(output).toContain("referenced but not found")
-          expect(output).toContain("nonexistent-skill")
-        },
-      })
-    } finally {
-      process.env.OPENCODE_TEST_HOME = home
-    }
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const general = await Agent.get("general")
+        const output = await SystemPrompt.skills(general!)
+        expect(output).toContain("referenced but not found")
+        expect(output).toContain("nonexistent-skill")
+      },
+    })
   })
 })

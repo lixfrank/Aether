@@ -32,11 +32,15 @@ describe("Subagent session permission flow — Layer 2 research agent scenario",
 
     expect(Permission.evaluate("read", "src/main.ts", sessionPerm).action).toBe("allow")
     expect(Permission.evaluate("read", "docs/README.md", sessionPerm).action).toBe("allow")
-    expect(Permission.evaluate("read", "secrets/.env", sessionPerm).action).toBe("deny")
+    expect(Permission.evaluate("read", "secrets/.env", sessionPerm).action).toBe("allow")
+    expect(Permission.evaluate("edit", "src/main.ts", sessionPerm).action).toBe("allow")
+    expect(Permission.evaluate("edit", "docs/README.md", sessionPerm).action).toBe("allow")
+    expect(Permission.evaluate("write", "secrets/.env", sessionPerm).action).toBe("deny")
+
     expect(Permission.evaluate("grep", "src/**", sessionPerm).action).toBe("allow")
     expect(Permission.evaluate("grep", "docs/**", sessionPerm).action).toBe("allow")
-    expect(Permission.evaluate("grep", "*", sessionPerm).action).toBe("deny")
-    expect(Permission.evaluate("glob", "*", sessionPerm).action).toBe("deny")
+    expect(Permission.evaluate("grep", "secrets/**", sessionPerm).action).toBe("allow")
+    expect(Permission.evaluate("glob", "secrets/**", sessionPerm).action).toBe("allow")
 
     expect(Permission.evaluate("task", "*", sessionPerm).action).toBe("deny")
     expect(Permission.evaluate("todowrite", "*", sessionPerm).action).toBe("deny")
