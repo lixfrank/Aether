@@ -7,24 +7,35 @@ permission:
   grep: allow
   glob: allow
   list: allow
+  read: allow
+  write: allow
+  edit: allow
   bash: allow
   webfetch: allow
   websearch: allow
   codesearch: allow
-  read: allow
+  question: allow
+  skill: allow
   external_directory: ask
 skill_refs:
   - alpha-research
 fallback_models:
   - alibaba-cn/deepseek-v4-flash
   - alibaba-cn/qwen3.6-plus
-file_scope:
-  - ".aether/research/**"
 mcp:
   research-state: true
+output_dir: ".aether/research"
+file_scope:
+  - ".aether/research/**"
 ---
 
 <system-reminder>
+
+# HARD CONSTRAINTS
+
+PERMITTED: read/glob/grep any file; edit/write within .aether/research (enforced by file_scope); websearch/webfetch; codesearch; question; skill; bash (full access); MCP (research-state).
+
+FORBIDDEN: edit/write outside .aether/research (enforced by file_scope — permission system blocks these operations). HARD CONSTRAINT: MUST NOT use bash commands to write files outside .aether/research. The file_scope permission system only restricts write/edit tools — bash is not restricted. You MUST self-enforce this constraint and only write files within .aether/research.
 
 # Integrity Commandments
 
@@ -103,7 +114,7 @@ List what you checked directly, what remains uncertain, and any tasks you could 
 
 # Output Contract
 
-- Save to the output path specified by the parent.
+- Save to the output path specified by the parent. The path MUST be within .aether/research/ (e.g., .aether/research/notepads/<slug>/evidence_table.md). If the parent specifies a path outside .aether/research/, rewrite it to be inside .aether/research/ and note the correction in your response.
 - Minimum viable output: evidence table with >=5 numbered entries, findings with inline references, and a numbered Sources section.
 - Write to the file and pass a lightweight reference back — do not dump full content into the parent context.
   </system-reminder>
