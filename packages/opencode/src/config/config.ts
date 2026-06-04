@@ -911,6 +911,16 @@ export namespace Config {
             .optional(),
         })
         .optional(),
+      mcp: z
+        .record(z.string(), z.boolean())
+        .optional()
+        .describe(
+          "MCP servers whose tools should be visible to this agent. Keys are MCP server names; true = visible, false/absent = hidden.",
+        ),
+      output_dir: z
+        .string()
+        .optional()
+        .describe("Output directory for agent artifacts, relative to project .aether/ root"),
     })
     .catchall(z.any())
     .transform((agent, ctx) => {
@@ -939,6 +949,8 @@ export namespace Config {
         "fallback_models",
         "env_scope",
         "scale_decision",
+        "mcp",
+        "output_dir",
       ])
 
       // Extract unknown properties into options

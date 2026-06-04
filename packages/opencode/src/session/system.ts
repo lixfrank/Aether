@@ -1,6 +1,7 @@
 import { Ripgrep } from "../file/ripgrep"
 
 import { Instance } from "../project/instance"
+import path from "path"
 
 import PROMPT_ANTHROPIC from "./prompt/anthropic.txt"
 import PROMPT_DEFAULT from "./prompt/default.txt"
@@ -95,5 +96,16 @@ export namespace SystemPrompt {
       lines.push(`- ${rule.condition}: ${rule.subagent_count} ${rule.subagent_type} subagents (${rule.mode})`)
     }
     return lines.join("\n")
+  }
+
+  function normalizeOutputDir(dir: string): string {
+    const projectDir = Instance.worktree
+    const clean = dir.replace(/^\.aether\/+/, "")
+    return path.join(projectDir, ".aether", clean)
+  }
+
+  export function outputDir(agent: Agent.Info): string | undefined {
+    if (!agent.outputDir) return undefined
+    return `Your output directory is at ${normalizeOutputDir(agent.outputDir)}. Write findings to this directory.`
   }
 }

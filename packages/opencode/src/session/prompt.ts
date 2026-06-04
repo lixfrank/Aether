@@ -673,10 +673,12 @@ export namespace SessionPrompt {
       if (step === 1) _cachedSkills = (await SystemPrompt.skills(agent)) ?? undefined
       const skills = _cachedSkills
       const sd = SystemPrompt.scaleDecision(agent)
+      const od = SystemPrompt.outputDir(agent)
       const system = [
         ...(await SystemPrompt.environment(model)),
         ...(skills ? [skills] : []),
         ...(sd ? [sd] : []),
+        ...(od ? [od] : []),
         ...(await InstructionPrompt.system()),
       ]
       const format = lastUser.format ?? { type: "text" }
@@ -1002,6 +1004,13 @@ export namespace SessionPrompt {
         }
       }
       tools[key] = item
+    }
+
+    const effectivePermission = Permission.merge(input.agent.permission, input.session.permission ?? [])
+    for (const key of Object.keys(tools)) {
+      const permKey = Permission.EDIT_TOOLS.includes(key) ? "edit" : key
+      const rule = Permission.evaluate(permKey, "*", effectivePermission)
+      if (rule.action === "deny") delete tools[key]
     }
 
     return tools

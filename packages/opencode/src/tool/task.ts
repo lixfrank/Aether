@@ -13,6 +13,8 @@ import { Config } from "../config/config"
 import { Permission } from "@/permission"
 import { Discipline } from "@/session/discipline"
 import { Provider } from "../provider/provider"
+import { ProviderID, ModelID } from "../provider/schema"
+import { APICallError } from "@ai-sdk/provider"
 
 const parameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
@@ -33,6 +35,41 @@ const parameters = z.object({
   timeout_seconds: z.number().int().min(30).max(600).optional(),
   category: z.string().optional(),
 })
+
+async function promptWithFallback(input: {
+  sessionID: SessionID
+  messageID: MessageID
+  model: { modelID: ModelID; providerID: ProviderID }
+  agent: Agent.Info
+  promptParts: SessionPrompt.PromptInput["parts"]
+  fallbackModels: Agent.Info["fallbackModels"]
+}) {
+  type FallbackModel = NonNullable<Agent.Info["fallbackModels"]>[number]
+  const resolveModelID = (fm: FallbackModel): { modelID: ModelID; providerID: ProviderID } => {
+    const id = typeof fm === "string" ? fm : fm.model
+    return Provider.parseModel(id)
+  }
+  const modelsToTry: { modelID: ModelID; providerID: ProviderID }[] = [
+    input.model,
+    ...(input.fallbackModels ?? []).map(resolveModelID),
+  ].slice(0, 4)
+
+  for (const m of modelsToTry) {
+    try {
+      return await SessionPrompt.prompt({
+        messageID: input.messageID,
+        sessionID: input.sessionID,
+        model: { modelID: m.modelID, providerID: m.providerID },
+        agent: input.agent.name,
+        parts: input.promptParts,
+      })
+    } catch (e) {
+      const isRetryable = (e as APICallError)?.isRetryable ?? false
+      if (!isRetryable || m === modelsToTry[modelsToTry.length - 1]) throw e
+    }
+  }
+  throw new Error("Unreachable")
+}
 
 export const TaskTool = Tool.define("task", async (ctx) => {
   const agents = await Agent.list().then((x) => x.filter((a) => a.mode !== "primary"))
@@ -161,15 +198,16 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       // silently clobber the intersection-derived finalPermission. task.ts
       // intentionally keeps permission on the session so the intersection results
       // survive.
-      const result = await SessionPrompt.prompt({
-        messageID,
+      const result = await promptWithFallback({
         sessionID: session.id,
+        messageID,
         model: {
           modelID: model.modelID,
           providerID: model.providerID,
         },
-        agent: agent.name,
-        parts: promptParts,
+        agent,
+        promptParts,
+        fallbackModels: agent.fallbackModels ?? [],
       })
 
       const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""

@@ -86,6 +86,8 @@ export namespace Agent {
             .optional(),
         })
         .optional(),
+      mcp: z.record(z.string(), z.boolean()).optional(),
+      outputDir: z.string().optional(),
     })
     .meta({
       ref: "Agent",
@@ -308,6 +310,8 @@ export namespace Agent {
             item.fallbackModels = value.fallback_models ?? item.fallbackModels
             item.envScope = value.env_scope ?? item.envScope
             item.scaleDecision = value.scale_decision ?? item.scaleDecision
+            item.mcp = value.mcp ?? item.mcp
+            item.outputDir = value.output_dir ?? item.outputDir
             if (value.env_scope?.allowed_commands) {
               const envRules = Discipline.compile({ env_scope: value.env_scope })
               item.permission = Permission.merge(item.permission, envRules)

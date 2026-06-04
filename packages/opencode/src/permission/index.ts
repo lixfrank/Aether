@@ -319,7 +319,7 @@ export namespace Permission {
     return result
   }
 
-  const EDIT_TOOLS = ["edit", "write", "apply_patch", "multiedit"]
+  export const EDIT_TOOLS = ["edit", "write", "apply_patch", "multiedit"]
 
   export function disabled(tools: string[], ruleset: Ruleset): Set<string> {
     const result = new Set<string>()
