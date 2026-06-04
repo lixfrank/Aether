@@ -34,6 +34,7 @@ import { JsonMigration } from "./storage/json-migration"
 import { Database } from "./storage/db"
 import { Global } from "./global"
 import { ensureUser, seedDefaultAssets } from "./persist/migrate"
+import { aetherBin, findOrInstallUv } from "./util/python"
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -70,6 +71,13 @@ let cli = yargs(hideBin(process.argv))
     await seedDefaultAssets().catch((err) => {
       Log.Default.warn("failed to seed default assets", { error: err instanceof Error ? err.message : String(err) })
     })
+
+    const aetherBinDir = aetherBin()
+    if (!process.env.PATH?.includes(aetherBinDir)) {
+      process.env.PATH = `${aetherBinDir}:${process.env.PATH ?? ""}`
+    }
+    await findOrInstallUv().catch(() => {})
+
     await Log.init({
       print: process.argv.includes("--print-logs"),
       dev: Installation.isLocal(),

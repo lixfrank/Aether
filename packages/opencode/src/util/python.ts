@@ -8,6 +8,9 @@ const AETHER_BIN = path.join(AETHER_HOME, "bin")
 const UV_BINARY = path.join(AETHER_BIN, process.platform === "win32" ? "uv.exe" : "uv")
 
 const UV_RELEASES_URL = "https://github.com/astral-sh/uv/releases/latest/download"
+const UV_MIRROR_URLS = ["https://ghp.ci/" + UV_RELEASES_URL, "https://ghfast.top/" + UV_RELEASES_URL, UV_RELEASES_URL]
+
+const DOWNLOAD_TIMEOUT_MS = 10_000
 
 function platformArchive(): { name: string; extract: (archive: Buffer, dest: string) => Promise<void> } | null {
   const arch = process.arch
@@ -99,16 +102,28 @@ export async function findOrInstallUv(): Promise<string | null> {
 
   try {
     await fs.mkdir(AETHER_BIN, { recursive: true })
-    const url = `${UV_RELEASES_URL}/${platform.name}`
-    const response = await fetch(url)
-    if (!response.ok) return null
-    const archive = Buffer.from(await response.arrayBuffer())
+    const archive = await downloadWithMirrors(platform.name)
+    if (!archive) return null
     await platform.extract(archive, AETHER_BIN)
     if (await executable(UV_BINARY)) return UV_BINARY
     return null
   } catch {
     return null
   }
+}
+
+async function downloadWithMirrors(archiveName: string): Promise<Buffer | null> {
+  for (const base of UV_MIRROR_URLS) {
+    const url = `${base}/${archiveName}`
+    try {
+      const response = await fetch(url, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) })
+      if (!response.ok) continue
+      return Buffer.from(await response.arrayBuffer())
+    } catch {
+      continue
+    }
+  }
+  return null
 }
 
 export function aetherHome(): string {
