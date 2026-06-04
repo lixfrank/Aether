@@ -23,9 +23,9 @@ This skill implements **Phase 3** of the Path 3 research state machine. It conve
 
 **Downstream note**: The `environment_requirements` field in PLAN.md is NOT just informational — it is consumed by the `/autoresearch` skill during execution_cycle to probe the host system and write `.aether/research/persistence/ENVIRONMENT.md`. ENVIRONMENT.md contains: (1) host_system probe results (what software is actually available), (2) plan_requirements (what was declared), (3) isolation_strategy (per-task decisions: docker/uv_venv/local), (4) gaps (missing critical software). The coordinator uses gaps to inform the user about unavailable software. **You MUST write environment_requirements with enough specificity for the execution phase to classify each requirement into an isolation strategy (docker/uv_venv/local).**
 
-**State transition**: phase_framing → phase_checkpoint (user confirmation)
+**State transition**: phase_framing → phase_debate (multi-agent debate)
 
-**MUST NOT**: Execute experiments (that is phase_execution). Skip to phase_execution without phase_checkpoint.
+**MUST NOT**: Execute experiments (that is phase_execution). Skip to phase_execution without phase_debate and phase_checkpoint.
 
 ## Procedure
 
@@ -177,9 +177,9 @@ Before finalizing for physics domains:
    - phase: phase_framing completed
    - key decisions: [research questions chosen, framework selected]
    - blockers: [any]
-   - next_action: enter phase_checkpoint (present plan to user for confirmation)
+   - next_action: enter phase_debate (multi-agent debate)
 2. Call `advance_plan` via research-state MCP
-3. Output a PhaseResultDigest as your final message (see Step 9). The coordinator will enter phase_checkpoint based on the digest.
+3. Output a PhaseResultDigest as your final message (see Step 9). The coordinator will enter phase_debate based on the digest.
 
 ### Step 9: Output PhaseResultDigest
 
@@ -216,7 +216,7 @@ phase_result_digest:
   output_paths:
     plan: persistence/PLAN.md
     research_questions: notepads/[slug]/research_questions.md
-  next_phase: phase_checkpoint
+  next_phase: phase_debate
 ```
 
 MUST NOT output any other text after this YAML block.

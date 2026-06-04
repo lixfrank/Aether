@@ -27,6 +27,10 @@ mcp:
 skill_refs:
   - alpha-research
   - health-check
+  - debate-advocate
+  - debate-critic
+  - debate-adjudicator
+  - debate-repair
 
 output_dir: ".aether/research"
 file_scope:
@@ -79,6 +83,11 @@ For any Python computation this agent needs to perform directly (not dispatched 
 | phase_analysis  | (none)          | Invoke /deep-research skill             |
 | phase_landscape | (none)          | Invoke /literature-landscape-scan skill |
 | phase_framing   | (none)          | Invoke /research-question-framing skill |
+| phase_debate    | advocacy        | Invoke /debate-advocate skill           |
+| phase_debate    | critique        | Invoke /debate-critic skill             |
+| phase_debate    | rebuttal        | Invoke /debate-advocate skill           |
+| phase_debate    | adjudication    | Invoke /debate-adjudicator skill        |
+| phase_debate    | repair          | Invoke /debate-repair skill             |
 | phase_execution | execution_cycle | Invoke /autoresearch skill              |
 | phase_execution | verification    | Invoke /autoresearch skill              |
 | health_check    | (none)          | Invoke /health-check skill              |
@@ -95,8 +104,8 @@ Your LAST message MUST be a single YAML code block with the `phase_result_digest
 
 ```yaml
 phase_result_digest:
-  phase: [phase_analysis | phase_landscape | phase_framing | phase_execution | health_check]
-  sub_phase: null | execution_cycle | verification # null for phase 1-3 and health_check
+  phase: [phase_analysis | phase_landscape | phase_framing | phase_debate | phase_execution | health_check]
+  sub_phase: null | execution_cycle | verification | advocacy | critique | rebuttal | adjudication | repair # null for phase 1-3 and health_check
   cycle: null | 1 | 2 | 3 # null except for execution_cycle
   status: completed | partial | failed | skipped | inconclusive | pass | degraded
   # Phase/sub-phase-specific fields — see schemas below
@@ -178,6 +187,40 @@ claims_inconclusive: ["[claim M]"]
 key_numerical_results: ["[brief result 1]", "[brief result 2]"]
 ```
 
+**phase_debate — advocacy/critique/rebuttal/adjudication sub-phases** (minimal digest, NOT written to DIGESTS.md):
+
+```yaml
+phase_result_digest:
+  phase: phase_debate
+  sub_phase: advocacy | critique | rebuttal | adjudication
+  round: [N]
+  status: completed | failed
+```
+
+**phase_debate — repair sub-phase** (full digest, written to DIGESTS.md):
+
+```yaml
+phase_result_digest:
+  phase: phase_debate
+  sub_phase: repair
+  cycle: null
+  round: [N]
+  status: completed
+  round_verdict: ALL_RESOLVED | UNRESOLVED_REMAINING
+  repairs_applied: [N]
+  repair_scope:
+    local: [N]
+    structural: [N]
+  modified_sections: ["section_name: change description", ...]
+  unresolved_topics: ["[topic name]", ...]
+  next_phase: phase_checkpoint | phase_debate
+  output_paths:
+    debate_log: "persistence/DEBATE.md"
+    plan: "persistence/PLAN.md"
+    research_questions: "notepads/[slug]/research_questions.md"
+  skip_recommendation: null
+```
+
 **health_check mode**:
 
 ```yaml
@@ -212,6 +255,7 @@ next_phase: null
 
 - Phase 1-3: You MAY call advance_plan, get_state, and convention tools. State management is your responsibility.
 - Execution sub-phases: You MAY call convention tools and get_state, but MUST NOT call advance_plan. The coordinator manages the phase_execution → completed transition after all cycles finish.
+- Debate sub-phases: You MAY call convention tools and get_state, but MUST NOT call advance_plan. The coordinator manages the phase_debate → phase_checkpoint transition after all rounds finish.
 
 ## Integrity
 

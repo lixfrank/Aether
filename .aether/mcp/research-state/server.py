@@ -80,7 +80,10 @@ def _read_state_safe(project_dir: Path) -> dict:
     try:
         state = json.loads(raw)
     except json.JSONDecodeError:
-        return {**_default_state(), "_warning": "state.json was corrupted, using defaults"}
+        return {
+            **_default_state(),
+            "_warning": "state.json was corrupted, using defaults",
+        }
     defaults = _default_state()
     for key in defaults:
         if key not in state:
@@ -95,7 +98,9 @@ def _read_state_safe(project_dir: Path) -> dict:
 def _write_state(project_dir: Path, state: dict) -> None:
     sp = _state_path(project_dir)
     sp.parent.mkdir(parents=True, exist_ok=True)
-    state["plan_number"] = str(state["plan_number"]) if state["plan_number"] is not None else "0"
+    state["plan_number"] = (
+        str(state["plan_number"]) if state["plan_number"] is not None else "0"
+    )
     state["phase"] = str(state["phase"]) if state["phase"] is not None else "gate"
     lock = FileLock(str(sp) + ".lock")
     with lock:
@@ -128,8 +133,8 @@ def _read_project_config(project_dir: Path) -> dict:
                 pass
             try:
                 if name.endswith(".jsonc"):
-                    cleaned = re.sub(r'//.*$', '', raw, flags=re.MULTILINE)
-                    cleaned = re.sub(r'/\*.*?\*/', '', cleaned, flags=re.MULTILINE)
+                    cleaned = re.sub(r"//.*$", "", raw, flags=re.MULTILINE)
+                    cleaned = re.sub(r"/\*.*?\*/", "", cleaned, flags=re.MULTILINE)
                     return json.loads(cleaned)
                 return json.loads(raw)
             except json.JSONDecodeError:
@@ -140,8 +145,8 @@ def _read_project_config(project_dir: Path) -> dict:
             raw = cfg_path.read_text()
             try:
                 if name.endswith(".jsonc"):
-                    cleaned = re.sub(r'//.*$', '', raw, flags=re.MULTILINE)
-                    cleaned = re.sub(r'/\*.*?\*/', '', cleaned, flags=re.MULTILINE)
+                    cleaned = re.sub(r"//.*$", "", raw, flags=re.MULTILINE)
+                    cleaned = re.sub(r"/\*.*?\*/", "", cleaned, flags=re.MULTILINE)
                     return json.loads(cleaned)
                 return json.loads(raw)
             except json.JSONDecodeError:
@@ -192,19 +197,28 @@ def _tighten_tool_contracts() -> None:
         except Exception:
             continue
         original_fn = tool.fn
+
         def make_strict(fn, schema_model):
             async def strict_fn(**kwargs):
                 try:
                     schema_model(**kwargs)
                 except ValidationError as e:
-                    return _stable_error(f"Unsupported arguments: {_format_pydantic_errors(e)}")
+                    return _stable_error(
+                        f"Unsupported arguments: {_format_pydantic_errors(e)}"
+                    )
                 return fn(**kwargs)
+
             return strict_fn
+
         tool.fn = make_strict(original_fn, model)
 
 
-READ_ONLY = ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True)
-MUTATING_NON_DESTRUCTIVE = ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False)
+READ_ONLY = ToolAnnotations(
+    readOnlyHint=True, destructiveHint=False, idempotentHint=True
+)
+MUTATING_NON_DESTRUCTIVE = ToolAnnotations(
+    readOnlyHint=False, destructiveHint=False, idempotentHint=False
+)
 
 
 @mcp.tool(annotations=READ_ONLY)
@@ -223,16 +237,24 @@ def get_state(project_dir: str) -> dict[str, Any]:
             contract_status = "partial"
         else:
             contract_status = "empty"
-    return _stable_response({
-        **state,
-        "project_contract_status": contract_status,
-        "project_dir": str(pd),
-    })
+    return _stable_response(
+        {
+            **state,
+            "project_contract_status": contract_status,
+            "project_dir": str(pd),
+        }
+    )
 
 
 VALID_PHASES = [
-    "gate", "phase_analysis", "phase_landscape",
-    "phase_framing", "phase_checkpoint", "phase_execution", "completed",
+    "gate",
+    "phase_analysis",
+    "phase_landscape",
+    "phase_framing",
+    "phase_debate",
+    "phase_checkpoint",
+    "phase_execution",
+    "completed",
 ]
 
 
@@ -289,12 +311,83 @@ def advance_plan(
     if phase == "phase_execution" and execution_cycle:
         state["execution_cycle"] = execution_cycle
 
+    if phase == "phase_debate":
+        state.setdefault(
+            "debate",
+            {
+                "rounds_completed": 0,
+                "unresolved_topics": [],
+                "current_sub_phase": None,
+            },
+        )
+
     _write_state(pd, state)
-    return _stable_response({
-        "previous": {"phase": old_phase, "plan": old_plan},
-        "current": {"phase": phase, "plan": plan_number},
-        "progress": state["progress"],
-    })
+    return _stable_response(
+        {
+            "previous": {"phase": old_phase, "plan": old_plan},
+            "current": {"phase": phase, "plan": plan_number},
+            "progress": state["progress"],
+        }
+    )
+
+
+VALID_DEBATE_SUB_PHASES = {
+    "advocacy",
+    "critique",
+    "rebuttal",
+    "adjudication",
+    "repair",
+    "null",
+}
+
+
+@mcp.tool(annotations=MUTATING_NON_DESTRUCTIVE)
+def update_debate_state(
+    project_dir: str,
+    rounds_completed: int | None = None,
+    unresolved_topics: list[str] | None = None,
+    current_sub_phase: str | None = None,
+) -> dict[str, Any]:
+    """Update debate-specific fields in state.json.
+    Only callable during phase_debate.
+    All parameters are optional — only provided fields are updated.
+    current_sub_phase accepts: advocacy, critique, rebuttal, adjudication, repair, null."""
+    pd = _resolve_project_dir(project_dir)
+    state = _read_state_safe(pd)
+
+    if state.get("phase") != "phase_debate":
+        return _stable_error("update_debate_state only callable during phase_debate")
+
+    if current_sub_phase is not None:
+        sub = str(current_sub_phase)
+        if sub not in VALID_DEBATE_SUB_PHASES:
+            return _stable_error(
+                f"Invalid current_sub_phase: '{sub}'. Must be one of: {sorted(VALID_DEBATE_SUB_PHASES)}"
+            )
+
+    state.setdefault(
+        "debate",
+        {
+            "rounds_completed": 0,
+            "unresolved_topics": [],
+            "current_sub_phase": None,
+        },
+    )
+
+    if rounds_completed is not None:
+        state["debate"]["rounds_completed"] = int(rounds_completed)
+    if unresolved_topics is not None:
+        state["debate"]["unresolved_topics"] = list(unresolved_topics)
+    if current_sub_phase is not None:
+        sub = str(current_sub_phase)
+        state["debate"]["current_sub_phase"] = None if sub == "null" else sub
+
+    _write_state(pd, state)
+    return _stable_response(
+        {
+            "debate": state["debate"],
+        }
+    )
 
 
 @mcp.tool(annotations=READ_ONLY)
@@ -308,12 +401,16 @@ def validate_state(project_dir: str) -> dict[str, Any]:
     if not state.get("phase"):
         errors.append("missing phase")
     elif not re.match(r"^[a-z0-9_-]+$", state["phase"], re.IGNORECASE):
-        errors.append(f"invalid phase format: '{state['phase']}' (must be alphanumeric/hyphen)")
+        errors.append(
+            f"invalid phase format: '{state['phase']}' (must be alphanumeric/hyphen)"
+        )
 
     if not state.get("plan_number"):
         errors.append("missing plan_number")
     elif not re.match(r"^\d+$", state.get("plan_number", "")):
-        errors.append(f"invalid plan_number format: '{state['plan_number']}' (must be numeric)")
+        errors.append(
+            f"invalid plan_number format: '{state['plan_number']}' (must be numeric)"
+        )
 
     conventions = state.get("conventions", {})
     if not isinstance(conventions, dict):
@@ -330,12 +427,14 @@ def validate_state(project_dir: str) -> dict[str, Any]:
         if not contract.get("acceptance_tests"):
             warnings.append("project_contract has no acceptance_tests")
 
-    return _stable_response({
-        "valid": len(errors) == 0,
-        "errors": errors,
-        "warnings": warnings,
-        "state": state,
-    })
+    return _stable_response(
+        {
+            "valid": len(errors) == 0,
+            "errors": errors,
+            "warnings": warnings,
+            "state": state,
+        }
+    )
 
 
 @mcp.tool(annotations=READ_ONLY)
@@ -346,18 +445,24 @@ def get_progress(project_dir: str) -> dict[str, Any]:
     progress = state.get("progress", {})
     completed = progress.get("completed_plans", [])
     total = progress.get("total_plans", 0)
-    return _stable_response({
-        "completed_count": len(completed),
-        "total_plans": total,
-        "current_phase": state.get("phase", ""),
-        "current_plan": state.get("plan_number", ""),
-        "percentage": (len(completed) / max(total, 1)) * 100 if total else 0,
-    })
+    return _stable_response(
+        {
+            "completed_count": len(completed),
+            "total_plans": total,
+            "current_phase": state.get("phase", ""),
+            "current_plan": state.get("plan_number", ""),
+            "percentage": (len(completed) / max(total, 1)) * 100 if total else 0,
+        }
+    )
 
 
-def _run_cmd(cmd: list[str], timeout: int = 10, stdin: str | None = None) -> subprocess.CompletedProcess:
+def _run_cmd(
+    cmd: list[str], timeout: int = 10, stdin: str | None = None
+) -> subprocess.CompletedProcess:
     try:
-        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, input=stdin)
+        return subprocess.run(
+            cmd, capture_output=True, text=True, timeout=timeout, input=stdin
+        )
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return subprocess.CompletedProcess(cmd, 1, "", "")
 
@@ -366,17 +471,34 @@ def _check_network(url: str) -> dict:
     methods = [
         ("curl", ["curl", "-sL", "-o", "/dev/null", "-w", "%{http_code}", url]),
         ("wget", ["wget", "-q", "-O", "/dev/null", "--timeout=5", url]),
-        ("python", ["python3", "-c", f"import urllib.request; r=urllib.request.urlopen('{url}',timeout=5); print(r.status)"]),
+        (
+            "python",
+            [
+                "python3",
+                "-c",
+                f"import urllib.request; r=urllib.request.urlopen('{url}',timeout=5); print(r.status)",
+            ],
+        ),
     ]
     for name, cmd in methods:
         result = _run_cmd(cmd, timeout=15)
         if result.returncode == 0:
             code = result.stdout.strip()
             if code.startswith("2"):
-                return {"status": "pass", "method": name, "url": url, "http_code": int(code)}
+                return {
+                    "status": "pass",
+                    "method": name,
+                    "url": url,
+                    "http_code": int(code),
+                }
             if code == "429":
-                return {"status": "degraded", "method": name, "url": url, "http_code": 429,
-                        "note": "rate limited, endpoint reachable but throttled"}
+                return {
+                    "status": "degraded",
+                    "method": name,
+                    "url": url,
+                    "http_code": 429,
+                    "note": "rate limited, endpoint reachable but throttled",
+                }
     return {"status": "fail", "url": url, "attempts": [m[0] for m in methods]}
 
 
@@ -399,7 +521,10 @@ def _check_infrastructure(project_dir: Path) -> dict:
         versions = [l.strip() for l in result.stdout.strip().splitlines() if l.strip()]
         checks["uv_python_management"] = {"status": "pass", "versions": versions}
     else:
-        checks["uv_python_management"] = {"status": "fail", "failure_class": "not_configured"}
+        checks["uv_python_management"] = {
+            "status": "fail",
+            "failure_class": "not_configured",
+        }
 
     result = _run_cmd(["git", "--version"])
     if result.returncode == 0:
@@ -412,38 +537,62 @@ def _check_infrastructure(project_dir: Path) -> dict:
     if result.returncode == 0:
         checks["git_working_dir"] = {"status": "pass", "git_dir": result.stdout.strip()}
     else:
-        checks["git_working_dir"] = {"status": "fail", "failure_class": "not_initialized"}
+        checks["git_working_dir"] = {
+            "status": "fail",
+            "failure_class": "not_initialized",
+        }
         issues.append("not inside a git repository")
 
     result = _run_cmd(["docker", "version", "--format", "{{.Client.Version}}"])
     if result.returncode == 0:
-        checks["docker_cli"] = {"status": "pass", "client_version": result.stdout.strip()}
+        checks["docker_cli"] = {
+            "status": "pass",
+            "client_version": result.stdout.strip(),
+        }
     else:
         checks["docker_cli"] = {"status": "fail", "failure_class": "not_installed"}
         issues.append("docker CLI not installed")
 
     result = _run_cmd(["docker", "info", "--format", "{{.ServerVersion}}"])
     if result.returncode == 0:
-        checks["docker_daemon"] = {"status": "pass", "server_version": result.stdout.strip(), "running": True}
+        checks["docker_daemon"] = {
+            "status": "pass",
+            "server_version": result.stdout.strip(),
+            "running": True,
+        }
     else:
         if checks.get("docker_cli", {}).get("status") == "pass":
-            checks["docker_daemon"] = {"status": "fail", "failure_class": "daemon_not_running"}
+            checks["docker_daemon"] = {
+                "status": "fail",
+                "failure_class": "daemon_not_running",
+            }
             issues.append("docker CLI available but daemon not running")
         else:
-            checks["docker_daemon"] = {"status": "fail", "failure_class": "not_installed"}
+            checks["docker_daemon"] = {
+                "status": "fail",
+                "failure_class": "not_installed",
+            }
 
     result = _run_cmd(["alpha", "status"])
     if result.returncode == 0:
-        authenticated = "account" in result.stdout.lower() or "logged" in result.stdout.lower()
+        authenticated = (
+            "account" in result.stdout.lower() or "logged" in result.stdout.lower()
+        )
         if authenticated:
             checks["alpha_cli"] = {"status": "pass", "authenticated": True}
         else:
-            checks["alpha_cli"] = {"status": "fail", "failure_class": "not_authenticated"}
+            checks["alpha_cli"] = {
+                "status": "fail",
+                "failure_class": "not_authenticated",
+            }
             issues.append("alpha CLI available but not authenticated")
     else:
         version_check = _run_cmd(["alpha", "--version"])
         if version_check.returncode == 0:
-            checks["alpha_cli"] = {"status": "fail", "failure_class": "not_authenticated"}
+            checks["alpha_cli"] = {
+                "status": "fail",
+                "failure_class": "not_authenticated",
+            }
             issues.append("alpha CLI available but not authenticated")
         else:
             checks["alpha_cli"] = {"status": "fail", "failure_class": "not_installed"}
@@ -453,7 +602,9 @@ def _check_infrastructure(project_dir: Path) -> dict:
     if checks["network_arxiv"]["status"] == "fail":
         issues.append("arXiv API unreachable")
 
-    checks["network_semantic_scholar"] = _check_network("https://api.semanticscholar.org")
+    checks["network_semantic_scholar"] = _check_network(
+        "https://api.semanticscholar.org"
+    )
     if checks["network_semantic_scholar"]["status"] == "fail":
         issues.append("Semantic Scholar API unreachable")
 
@@ -473,19 +624,34 @@ def _check_persistence(project_dir: Path) -> dict:
         persistence_dir.mkdir(parents=True, exist_ok=True)
         checks["persistence_dir_writable"] = {"status": "pass"}
     except OSError as e:
-        checks["persistence_dir_writable"] = {"status": "fail", "reason": str(e), "failure_class": "not_writable"}
+        checks["persistence_dir_writable"] = {
+            "status": "fail",
+            "reason": str(e),
+            "failure_class": "not_writable",
+        }
         issues.append(f"persistence directory not writable: {e}")
 
     sp = persistence_dir / "state.json"
     if sp.exists():
         try:
             data = json.loads(sp.read_text())
-            checks["state_json_valid"] = {"status": "pass", "phase": data.get("phase", "unknown")}
+            checks["state_json_valid"] = {
+                "status": "pass",
+                "phase": data.get("phase", "unknown"),
+            }
         except json.JSONDecodeError as e:
-            checks["state_json_valid"] = {"status": "fail", "reason": str(e), "failure_class": "corrupt"}
+            checks["state_json_valid"] = {
+                "status": "fail",
+                "reason": str(e),
+                "failure_class": "corrupt",
+            }
             issues.append(f"state.json corrupt: {e}")
     else:
-        checks["state_json_valid"] = {"status": "fail", "reason": "file not found", "failure_class": "missing"}
+        checks["state_json_valid"] = {
+            "status": "fail",
+            "reason": "file not found",
+            "failure_class": "missing",
+        }
         issues.append("state.json missing")
 
     state_md = persistence_dir / "STATE.md"
@@ -499,16 +665,36 @@ def _check_persistence(project_dir: Path) -> dict:
         checks["state_md_format"] = {"status": "fail", "failure_class": "missing"}
         issues.append("STATE.md missing")
 
-    convention_defaults = project_dir / ".aether" / "skills" / "plugins" / "gpd" / "gpd-conventions" / "references" / "convention_defaults.json"
+    convention_defaults = (
+        project_dir
+        / ".aether"
+        / "skills"
+        / "plugins"
+        / "gpd"
+        / "gpd-conventions"
+        / "references"
+        / "convention_defaults.json"
+    )
     if convention_defaults.exists():
         try:
             data = json.loads(convention_defaults.read_text())
-            checks["convention_defaults_readable"] = {"status": "pass", "keys_count": len(data)}
+            checks["convention_defaults_readable"] = {
+                "status": "pass",
+                "keys_count": len(data),
+            }
         except (json.JSONDecodeError, OSError) as e:
-            checks["convention_defaults_readable"] = {"status": "fail", "reason": str(e), "failure_class": "corrupt"}
+            checks["convention_defaults_readable"] = {
+                "status": "fail",
+                "reason": str(e),
+                "failure_class": "corrupt",
+            }
             issues.append(f"convention_defaults.json unreadable: {e}")
     else:
-        checks["convention_defaults_readable"] = {"status": "fail", "reason": "file not found", "failure_class": "missing"}
+        checks["convention_defaults_readable"] = {
+            "status": "fail",
+            "reason": "file not found",
+            "failure_class": "missing",
+        }
         issues.append("convention_defaults.json missing")
 
     return {"healthy": len(issues) == 0, "checks": checks, "issues": issues}
@@ -517,7 +703,13 @@ def _check_persistence(project_dir: Path) -> dict:
 def _find_skill_md(project_dir: Path, skill_name: str) -> Path | None:
     candidates = [
         project_dir / ".aether" / "skills" / skill_name / "SKILL.md",
-        project_dir / ".aether" / "skills" / "plugins" / "gpd" / skill_name / "SKILL.md",
+        project_dir
+        / ".aether"
+        / "skills"
+        / "plugins"
+        / "gpd"
+        / skill_name
+        / "SKILL.md",
     ]
     for p in candidates:
         if p.exists():
@@ -531,6 +723,10 @@ def _check_skill_chain(project_dir: Path) -> dict:
 
     skill_refs_map = {
         "research_worker_alpha_research": "alpha-research",
+        "research_worker_debate_advocate": "debate-advocate",
+        "research_worker_debate_critic": "debate-critic",
+        "research_worker_debate_adjudicator": "debate-adjudicator",
+        "research_worker_debate_repair": "debate-repair",
         "sandbox_executor_docker": "docker",
         "research_verifier_research_verification": "research-verification",
         "gpd_verifier_research_verification": "research-verification",
@@ -551,11 +747,25 @@ def _check_skill_chain(project_dir: Path) -> dict:
             issues.append(f"{skill_name} SKILL.md not found")
 
     gpd_verification_scripts = [
-        "dimensional_check", "spot_check", "limiting_case_check", "conservation_check",
-        "convergence_check", "ward_identity_check", "positivity_check",
-        "kramers_kronig_check", "symmetry_check",
+        "dimensional_check",
+        "spot_check",
+        "limiting_case_check",
+        "conservation_check",
+        "convergence_check",
+        "ward_identity_check",
+        "positivity_check",
+        "kramers_kronig_check",
+        "symmetry_check",
     ]
-    scripts_dir = project_dir / ".aether" / "skills" / "plugins" / "gpd" / "gpd-verification" / "scripts"
+    scripts_dir = (
+        project_dir
+        / ".aether"
+        / "skills"
+        / "plugins"
+        / "gpd"
+        / "gpd-verification"
+        / "scripts"
+    )
     found_scripts = []
     missing_scripts = []
     for s in gpd_verification_scripts:
@@ -574,9 +784,18 @@ def _check_skill_chain(project_dir: Path) -> dict:
         issues.append(f"gpd-verification scripts missing: {missing_scripts}")
 
     gpd_verification_refs = [
-        "check_registry.json", "contract_checks.json",
+        "check_registry.json",
+        "contract_checks.json",
     ]
-    refs_dir = project_dir / ".aether" / "skills" / "plugins" / "gpd" / "gpd-verification" / "references"
+    refs_dir = (
+        project_dir
+        / ".aether"
+        / "skills"
+        / "plugins"
+        / "gpd"
+        / "gpd-verification"
+        / "references"
+    )
     domain_checklists_dir = refs_dir / "domain_checklists"
     found_refs = []
     missing_refs = []
@@ -600,8 +819,20 @@ def _check_skill_chain(project_dir: Path) -> dict:
     if missing_refs:
         issues.append(f"gpd-verification references missing: {missing_refs}")
 
-    gpd_errors_refs = ["error_catalog.json", "traceability_matrix.json", "detection_strategies.json"]
-    errors_dir = project_dir / ".aether" / "skills" / "plugins" / "gpd" / "gpd-errors" / "references"
+    gpd_errors_refs = [
+        "error_catalog.json",
+        "traceability_matrix.json",
+        "detection_strategies.json",
+    ]
+    errors_dir = (
+        project_dir
+        / ".aether"
+        / "skills"
+        / "plugins"
+        / "gpd"
+        / "gpd-errors"
+        / "references"
+    )
     found_err = []
     missing_err = []
     for r in gpd_errors_refs:
@@ -620,7 +851,15 @@ def _check_skill_chain(project_dir: Path) -> dict:
         issues.append(f"gpd-errors references missing: {missing_err}")
 
     conv_refs = ["convention_defaults.json", "subfield_defaults/physics.json"]
-    conv_dir = project_dir / ".aether" / "skills" / "plugins" / "gpd" / "gpd-conventions" / "references"
+    conv_dir = (
+        project_dir
+        / ".aether"
+        / "skills"
+        / "plugins"
+        / "gpd"
+        / "gpd-conventions"
+        / "references"
+    )
     found_conv = []
     missing_conv = []
     for r in conv_refs:
@@ -638,8 +877,21 @@ def _check_skill_chain(project_dir: Path) -> dict:
     if missing_conv:
         issues.append(f"gpd-conventions references missing: {missing_conv}")
 
-    dc_protocols = ["renormalization_group.json", "dimensional_analysis.json", "limiting_cases.json", "perturbation_theory.json"]
-    dc_dir = project_dir / ".aether" / "skills" / "plugins" / "gpd" / "gpd-domain-check" / "references"
+    dc_protocols = [
+        "renormalization_group.json",
+        "dimensional_analysis.json",
+        "limiting_cases.json",
+        "perturbation_theory.json",
+    ]
+    dc_dir = (
+        project_dir
+        / ".aether"
+        / "skills"
+        / "plugins"
+        / "gpd"
+        / "gpd-domain-check"
+        / "references"
+    )
     dc_bundles_dir = dc_dir / "bundles"
     found_dc = []
     missing_dc = []
@@ -663,7 +915,12 @@ def _check_skill_chain(project_dir: Path) -> dict:
     if missing_dc:
         issues.append(f"gpd-domain-check references missing: {missing_dc}")
 
-    lit_review_scripts = ["download_paper.py", "search_databases.py", "verify_citations.py", "generate_pdf.py"]
+    lit_review_scripts = [
+        "download_paper.py",
+        "search_databases.py",
+        "verify_citations.py",
+        "generate_pdf.py",
+    ]
     lr_dir = project_dir / ".aether" / "skills" / "literature-review" / "scripts"
     found_lr = []
     missing_lr = []
@@ -682,11 +939,16 @@ def _check_skill_chain(project_dir: Path) -> dict:
     if missing_lr:
         issues.append(f"literature-review scripts missing: {missing_lr}")
 
-    alpha_script = project_dir / ".aether" / "skills" / "alpha-research" / "arxiv_search.py"
+    alpha_script = (
+        project_dir / ".aether" / "skills" / "alpha-research" / "arxiv_search.py"
+    )
     if alpha_script.exists():
         checks["alpha_research_scripts"] = {"status": "pass", "path": str(alpha_script)}
     else:
-        checks["alpha_research_scripts"] = {"status": "fail", "failure_class": "missing"}
+        checks["alpha_research_scripts"] = {
+            "status": "fail",
+            "failure_class": "missing",
+        }
         issues.append("alpha-research arxiv_search.py not found")
 
     return {"healthy": len(issues) == 0, "checks": checks, "issues": issues}
@@ -712,7 +974,10 @@ def _check_runtime(project_dir: Path) -> dict:
 
     state = _read_state_safe(project_dir)
     if state.get("phase") or state.get("phase") == "":
-        checks["research_state_mcp"] = {"status": "pass", "phase_returned": state.get("phase", "")}
+        checks["research_state_mcp"] = {
+            "status": "pass",
+            "phase_returned": state.get("phase", ""),
+        }
     else:
         checks["research_state_mcp"] = {"status": "fail"}
         issues.append("research-state MCP get_state returned no phase")
@@ -724,13 +989,19 @@ def _check_runtime(project_dir: Path) -> dict:
     if sp.exists():
         original_content = sp.read_text()
         backup_path.write_text(original_content)
-        original_state = json.loads(original_content) if original_content else _default_state()
+        original_state = (
+            json.loads(original_content) if original_content else _default_state()
+        )
         orig_phase = original_state.get("phase", "gate")
         orig_plan = original_state.get("plan_number", "0")
 
-        advance_result = advance_plan(phase="health_test", plan_number="0", project_dir=str(project_dir))
+        advance_result = advance_plan(
+            phase="health_test", plan_number="0", project_dir=str(project_dir)
+        )
         if advance_result.get("current", {}).get("phase") == "health_test":
-            rollback_result = advance_plan(phase=orig_phase, plan_number=orig_plan, project_dir=str(project_dir))
+            rollback_result = advance_plan(
+                phase=orig_phase, plan_number=orig_plan, project_dir=str(project_dir)
+            )
             if rollback_result.get("current", {}).get("phase") == orig_phase:
                 rollback_status = "success"
             else:
@@ -748,14 +1019,25 @@ def _check_runtime(project_dir: Path) -> dict:
     if rollback_status not in ("success", "skipped"):
         issues.append(f"advance_plan rollback issue: {rollback_status}")
 
-    scripts_dir = project_dir / ".aether" / "skills" / "plugins" / "gpd" / "gpd-verification" / "scripts"
+    scripts_dir = (
+        project_dir
+        / ".aether"
+        / "skills"
+        / "plugins"
+        / "gpd"
+        / "gpd-verification"
+        / "scripts"
+    )
     sympy_results = {}
     sympy_pass_count = 0
     first_script = True
     for script_name, dry_input in SYMPY_DRY_RUN_INPUTS.items():
         script_path = scripts_dir / f"{script_name}.py"
         if not script_path.exists():
-            sympy_results[script_name] = {"status": "fail", "reason": "script not found"}
+            sympy_results[script_name] = {
+                "status": "fail",
+                "reason": "script not found",
+            }
             continue
         timeout = 60 if first_script else 10
         first_script = False
@@ -770,15 +1052,27 @@ def _check_runtime(project_dir: Path) -> dict:
                 sympy_results[script_name] = {"status": "pass"}
                 sympy_pass_count += 1
             else:
-                sympy_results[script_name] = {"status": "fail", "reason": result.stderr[:200] if result.stderr else "unexpected output"}
+                sympy_results[script_name] = {
+                    "status": "fail",
+                    "reason": result.stderr[:200]
+                    if result.stderr
+                    else "unexpected output",
+                }
         except (json.JSONDecodeError, AttributeError):
-            sympy_results[script_name] = {"status": "fail", "reason": result.stderr[:200] if result.stderr else "no valid JSON output"}
+            sympy_results[script_name] = {
+                "status": "fail",
+                "reason": result.stderr[:200]
+                if result.stderr
+                else "no valid JSON output",
+            }
     checks["sympy_dry_run"] = sympy_results
     if sympy_pass_count < 9:
         failed_scripts = [k for k, v in sympy_results.items() if v["status"] != "pass"]
         issues.append(f"SymPy dry-run failures: {failed_scripts}")
 
-    alpha_script = project_dir / ".aether" / "skills" / "alpha-research" / "arxiv_search.py"
+    alpha_script = (
+        project_dir / ".aether" / "skills" / "alpha-research" / "arxiv_search.py"
+    )
     if alpha_script.exists():
         result = _run_cmd(
             ["uv", "run", str(alpha_script), "health test query", "--max-papers", "1"],
@@ -792,7 +1086,10 @@ def _check_runtime(project_dir: Path) -> dict:
             except json.JSONDecodeError:
                 checks["alpha_search"] = {"status": "pass", "results_count": 1}
         else:
-            checks["alpha_search"] = {"status": "fail", "reason": result.stderr[:200] if result.stderr else "no output"}
+            checks["alpha_search"] = {
+                "status": "fail",
+                "reason": result.stderr[:200] if result.stderr else "no output",
+            }
             issues.append("alpha-research arxiv_search failed")
     else:
         checks["alpha_search"] = {"status": "fail", "reason": "script not found"}
@@ -808,7 +1105,9 @@ def _check_runtime(project_dir: Path) -> dict:
 
 
 @mcp.tool(annotations=READ_ONLY)
-def run_health_check(project_dir: str, layers: list[str] | None = None) -> dict[str, Any]:
+def run_health_check(
+    project_dir: str, layers: list[str] | None = None
+) -> dict[str, Any]:
     """Full project health dashboard with 4-layer progressive detection.
 
     Layers:
@@ -843,7 +1142,11 @@ def run_health_check(project_dir: str, layers: list[str] | None = None) -> dict[
         if layer_name not in requested:
             continue
         if blocked:
-            layer_results[layer_name] = {"healthy": False, "checks": {}, "issues": [f"blocked_by: {blocked}"]}
+            layer_results[layer_name] = {
+                "healthy": False,
+                "checks": {},
+                "issues": [f"blocked_by: {blocked}"],
+            }
             continue
         if layer_name == "infrastructure":
             result = _check_infrastructure(pd)
@@ -883,18 +1186,20 @@ def run_health_check(project_dir: str, layers: list[str] | None = None) -> dict[
         if "cross_mcp_pending" in r:
             cross_mcp_pending_count = len(r["cross_mcp_pending"])
 
-    return _stable_response({
-        "healthy": overall_healthy,
-        "layers": layer_results,
-        "summary": {
-            "total_checks": total_checks,
-            "passed": passed,
-            "failed": failed,
-            "degradations": degradations,
-            "cross_mcp_pending_count": cross_mcp_pending_count,
-        },
-        "project_dir": str(pd),
-    })
+    return _stable_response(
+        {
+            "healthy": overall_healthy,
+            "layers": layer_results,
+            "summary": {
+                "total_checks": total_checks,
+                "passed": passed,
+                "failed": failed,
+                "degradations": degradations,
+                "cross_mcp_pending_count": cross_mcp_pending_count,
+            },
+            "project_dir": str(pd),
+        }
+    )
 
 
 @mcp.tool(annotations=READ_ONLY)
@@ -908,14 +1213,16 @@ def get_phase_info(project_dir: str) -> dict[str, Any]:
     current_plan = int(state.get("plan_number", "0"))
     completed = state.get("progress", {}).get("completed_plans", [])
 
-    return _stable_response({
-        "current_phase": current,
-        "current_plan_number": current_plan,
-        "total_phases": len(phases) if phases else 0,
-        "phases": phases or [],
-        "completed_plans": len(completed),
-        "roadmap_found": roadmap_path.exists(),
-    })
+    return _stable_response(
+        {
+            "current_phase": current,
+            "current_plan_number": current_plan,
+            "total_phases": len(phases) if phases else 0,
+            "phases": phases or [],
+            "completed_plans": len(completed),
+            "roadmap_found": roadmap_path.exists(),
+        }
+    )
 
 
 @mcp.tool(annotations=READ_ONLY)
@@ -934,34 +1241,50 @@ def get_config(project_dir: str) -> dict[str, Any]:
                 if end != -1:
                     try:
                         import yaml
+
                         fm = yaml.safe_load(content[3:end])
                     except Exception:
                         fm = {}
-                    agents.append({
-                        "name": f.stem,
-                        "description": fm.get("description", ""),
-                        "mode": fm.get("mode", ""),
-                        "mcp": fm.get("mcp", {}),
-                        "output_dir": fm.get("output_dir", ""),
-                        "skill_refs": fm.get("skill_refs", []),
-                    })
+                    agents.append(
+                        {
+                            "name": f.stem,
+                            "description": fm.get("description", ""),
+                            "mode": fm.get("mode", ""),
+                            "mcp": fm.get("mcp", {}),
+                            "output_dir": fm.get("output_dir", ""),
+                            "skill_refs": fm.get("skill_refs", []),
+                        }
+                    )
     mcp_config = cfg.get("mcp", {})
-    enabled_mcps = [name for name, conf in mcp_config.items() if isinstance(conf, dict) and conf.get("enabled", True)]
-    return _stable_response({
-        "agents": agents,
-        "mcp_servers": list(mcp_config.keys()),
-        "mcp_enabled": enabled_mcps,
-        "skills_paths": cfg.get("skills", {}).get("paths", []),
-        "output_dir_default": ".aether/research",
-        "project_dir": str(pd),
-        "config_found": bool(cfg),
-    })
+    enabled_mcps = [
+        name
+        for name, conf in mcp_config.items()
+        if isinstance(conf, dict) and conf.get("enabled", True)
+    ]
+    return _stable_response(
+        {
+            "agents": agents,
+            "mcp_servers": list(mcp_config.keys()),
+            "mcp_enabled": enabled_mcps,
+            "skills_paths": cfg.get("skills", {}).get("paths", []),
+            "output_dir_default": ".aether/research",
+            "project_dir": str(pd),
+            "config_found": bool(cfg),
+        }
+    )
 
 
 OUTPUT_DIR = ".aether/research"
 PERSISTENCE_WHITELIST = {
-    "STATE.md", "ROADMAP.md", "PLAN.md", "DIGESTS.md", "state.json",
-    "EXECUTION.md", "VERIFICATION.md", "ENVIRONMENT.md",
+    "STATE.md",
+    "ROADMAP.md",
+    "PLAN.md",
+    "DIGESTS.md",
+    "state.json",
+    "EXECUTION.md",
+    "VERIFICATION.md",
+    "ENVIRONMENT.md",
+    "DEBATE.md",
 }
 
 
@@ -1014,13 +1337,15 @@ def validate_file_locations(project_dir: str) -> dict[str, Any]:
     output_exists = output_root.exists()
 
     if not output_exists:
-        return _stable_response({
-            "compliant": True,
-            "violations": [],
-            "output_dir_exists": False,
-            "total_files_in_output_dir": 0,
-            "project_dir": str(pd),
-        })
+        return _stable_response(
+            {
+                "compliant": True,
+                "violations": [],
+                "output_dir_exists": False,
+                "total_files_in_output_dir": 0,
+                "project_dir": str(pd),
+            }
+        )
 
     all_output_files = _scan_output_dir(pd)
 
@@ -1028,12 +1353,16 @@ def validate_file_locations(project_dir: str) -> dict[str, Any]:
         rel = str(f.relative_to(pd))
         if _is_nested_output_dir(f, pd):
             nested_base_idx = rel.find(OUTPUT_DIR, len(OUTPUT_DIR) + 1)
-            correct_rel = rel[:nested_base_idx] + rel[nested_base_idx + len(OUTPUT_DIR) + 1:]
-            violations.append({
-                "path": rel,
-                "rule": "nested_output_dir",
-                "suggested_correction": f"remove nested {OUTPUT_DIR} prefix; correct path: {correct_rel}",
-            })
+            correct_rel = (
+                rel[:nested_base_idx] + rel[nested_base_idx + len(OUTPUT_DIR) + 1 :]
+            )
+            violations.append(
+                {
+                    "path": rel,
+                    "rule": "nested_output_dir",
+                    "suggested_correction": f"remove nested {OUTPUT_DIR} prefix; correct path: {correct_rel}",
+                }
+            )
 
     project_files_outside = []
     for f in pd.rglob("*"):
@@ -1044,9 +1373,19 @@ def validate_file_locations(project_dir: str) -> dict[str, Any]:
         if str(f).startswith(str(pd / ".git")):
             continue
         if f.parent == pd:
-            candidates = ["package.json", "tsconfig.json", "bun.lock", "bunfig.toml",
-                          "Cargo.toml", "pyproject.toml", "Makefile", ".gitignore",
-                          "README.md", "LICENSE", "AGENTS.md"]
+            candidates = [
+                "package.json",
+                "tsconfig.json",
+                "bun.lock",
+                "bunfig.toml",
+                "Cargo.toml",
+                "pyproject.toml",
+                "Makefile",
+                ".gitignore",
+                "README.md",
+                "LICENSE",
+                "AGENTS.md",
+            ]
             if f.name in candidates:
                 continue
         rel = str(f.relative_to(pd))
@@ -1066,29 +1405,35 @@ def validate_file_locations(project_dir: str) -> dict[str, Any]:
             recent_outside.append(rel)
 
     for rel in recent_outside:
-        violations.append({
-            "path": rel,
-            "rule": "outside_output_dir",
-            "suggested_correction": f"move into {OUTPUT_DIR}/notepads/<slug>/ or appropriate subdirectory",
-        })
+        violations.append(
+            {
+                "path": rel,
+                "rule": "outside_output_dir",
+                "suggested_correction": f"move into {OUTPUT_DIR}/notepads/<slug>/ or appropriate subdirectory",
+            }
+        )
 
     for f in all_output_files:
         rel = str(f.relative_to(pd))
         if _is_persistence_non_whitelisted(f, pd):
-            violations.append({
-                "path": rel,
-                "rule": "persistence_non_whitelisted",
-                "suggested_correction": f"move to {OUTPUT_DIR}/notepads/<slug>/ if it is research output, or remove if temporary",
-            })
+            violations.append(
+                {
+                    "path": rel,
+                    "rule": "persistence_non_whitelisted",
+                    "suggested_correction": f"move to {OUTPUT_DIR}/notepads/<slug>/ if it is research output, or remove if temporary",
+                }
+            )
 
-    return _stable_response({
-        "compliant": len(violations) == 0,
-        "violations": violations,
-        "output_dir_exists": output_exists,
-        "total_files_in_output_dir": len(all_output_files),
-        "persistence_whitelist": sorted(PERSISTENCE_WHITELIST),
-        "project_dir": str(pd),
-    })
+    return _stable_response(
+        {
+            "compliant": len(violations) == 0,
+            "violations": violations,
+            "output_dir_exists": output_exists,
+            "total_files_in_output_dir": len(all_output_files),
+            "persistence_whitelist": sorted(PERSISTENCE_WHITELIST),
+            "project_dir": str(pd),
+        }
+    )
 
 
 _tighten_tool_contracts()

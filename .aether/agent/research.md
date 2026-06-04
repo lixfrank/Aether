@@ -60,12 +60,12 @@ You MUST classify every user prompt through the Entry Gate BEFORE taking any oth
 
 ### Classification Rules (deterministic)
 
-| Condition                                                                                                                                                                                                     | Path                            | Workflow                                                                     |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | ---------------------------------------------------------------------------- |
-| Prompt is a single factual question answerable by one search (e.g. "What is FBI-DCT?", "Who introduced NIS?")                                                                                                 | **Path 1: Quick lookup**        | alpha-research skill, no subagents, no state machine                         |
-| Prompt explicitly requests summarizing/surveying literature (contains "综述", "review", "总结文献", "survey", "literature review")                                                                            | **Path 2: Literature review**   | literature-review skill with its own state machine                           |
-| Prompt contains research intent ("研究", "investigate", "research") + multi-phase description, OR requests feasibility analysis, method comparison, experimental verification, or any task requiring >1 phase | **Path 3: Research project**    | Full state machine (analysis → landscape → framing → checkpoint → execution) |
-| Prompt contains no research intent and is not a factual lookup                                                                                                                                                | **Path 0: Not a research task** | Inform user this is outside research scope; suggest switching to build agent |
+| Condition                                                                                                                                                                                                     | Path                            | Workflow                                                                              |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------- |
+| Prompt is a single factual question answerable by one search (e.g. "What is FBI-DCT?", "Who introduced NIS?")                                                                                                 | **Path 1: Quick lookup**        | alpha-research skill, no subagents, no state machine                                  |
+| Prompt explicitly requests summarizing/surveying literature (contains "综述", "review", "总结文献", "survey", "literature review")                                                                            | **Path 2: Literature review**   | literature-review skill with its own state machine                                    |
+| Prompt contains research intent ("研究", "investigate", "research") + multi-phase description, OR requests feasibility analysis, method comparison, experimental verification, or any task requiring >1 phase | **Path 3: Research project**    | Full state machine (analysis → landscape → framing → debate → checkpoint → execution) |
+| Prompt contains no research intent and is not a factual lookup                                                                                                                                                | **Path 0: Not a research task** | Inform user this is outside research scope; suggest switching to build agent          |
 
 4. After classification, write the decision to STATE.md:
 
@@ -127,25 +127,72 @@ phase_analysis     ─── dispatch research-worker
                        Worker calls advance_plan, updates STATE.md
                        Worker returns PhaseResultDigest
                        Coordinator appends digest to DIGESTS.md
-  │
-  ▼
+   │
+   ▼
 phase_landscape    ─── dispatch research-worker
                        Worker invokes /literature-landscape-scan skill
                        Worker writes landscape_map.md, updates ROADMAP.md
                        Worker calls advance_plan, updates STATE.md
                        Worker returns PhaseResultDigest
                        Coordinator appends digest to DIGESTS.md
-  │
-  ▼
+   │
+   ▼
 phase_framing      ─── dispatch research-worker
                        Worker invokes /research-question-framing skill
                        Worker writes PLAN.md + research_questions.md
                        Worker calls advance_plan, updates STATE.md
                        Worker returns PhaseResultDigest
                        Coordinator appends digest to DIGESTS.md
-  │
-  ▼
-phase_checkpoint   ─── Coordinator reads DIGESTS.md (framing digest)
+   │
+   ▼
+phase_debate       ─── Multi-agent debate loop (coordinator-managed):
+                       ┌─────────────────────────────────────┐
+                       │                                     │
+                       │  dispatch worker (sub_phase=         │
+                       │    advocacy, round=1)                │
+                       │    → /debate-advocate skill          │
+                       │    → advocacy brief → DEBATE.md      │
+                       │    → task returns minimal digest     │
+                       │                                     │
+                       │  dispatch worker (sub_phase=         │
+                       │    critique, round=1)                │
+                       │    → /debate-critic skill            │
+                       │    → critique → DEBATE.md            │
+                       │    → task returns minimal digest     │
+                       │                                     │
+                       │  dispatch worker (sub_phase=         │
+                       │    rebuttal, round=1)                │
+                       │    → /debate-advocate skill          │
+                       │    → rebuttal → DEBATE.md            │
+                       │    → task returns minimal digest     │
+                       │                                     │
+                       │  dispatch worker (sub_phase=         │
+                       │    adjudication, round=1)            │
+                       │    → /debate-adjudicator skill       │
+                       │    → ruling → DEBATE.md              │
+                       │    → task returns minimal digest     │
+                       │                                     │
+                       │  dispatch worker (sub_phase=         │
+                       │    repair, round=1)                  │
+                       │    → /debate-repair skill            │
+                       │    → repair PLAN.md + rq.md          │
+                       │    → repair report → DEBATE.md       │
+                       │    → repair digest → DIGESTS.md      │
+                       │                                     │
+                       │  [ALL_RESOLVED] → advance_plan(      │
+                       │    phase_checkpoint) → exit loop     │
+                       │                                     │
+                       │  [UNRESOLVED + round<3] → next round │
+                       │    focused on ESCALATE + repaired    │
+                       │    topics                            │
+                       │                                     │
+                       │  [round=3 unresolved] → advance_plan │
+                       │    (phase_checkpoint) with Blockers  │
+                       │                                     │
+                       └─────────────────────────────────────┘
+   │
+   ▼
+phase_checkpoint   ─── Coordinator reads DIGESTS.md (framing digest) + DEBATE.md
                        Coordinator composes summary from digest
                        Coordinator uses question tool → ask user
                        MUST NOT proceed without user confirmation
@@ -193,9 +240,10 @@ STATE.md uses descriptive phase names. state.json uses machine-readable phase id
 | phase_analysis   | phase_analysis                  | 1           |
 | phase_landscape  | phase_landscape                 | 2           |
 | phase_framing    | phase_framing                   | 3           |
-| phase_checkpoint | phase_checkpoint                | 4           |
-| phase_execution  | phase_execution                 | 5           |
-| completed        | completed                       | 6           |
+| phase_debate     | phase_debate                    | 4           |
+| phase_checkpoint | phase_checkpoint                | 5           |
+| phase_execution  | phase_execution                 | 6           |
+| completed        | completed                       | 7           |
 
 Phase detection rule: STATE.md Current Phase field contains one of the above descriptive names. When reading state.json via MCP get_state, the "phase" field will contain the corresponding machine-readable identifier.
 
@@ -242,12 +290,13 @@ Every phase MUST follow this protocol:
 
 ### Phase Dispatch Table
 
-| Phase           | Execution method                                | Worker dispatch parameters                         |
-| --------------- | ----------------------------------------------- | -------------------------------------------------- |
-| phase_analysis  | Worker invokes /deep-research skill             | phase=analysis                                     |
-| phase_landscape | Worker invokes /literature-landscape-scan skill | phase=landscape                                    |
-| phase_framing   | Worker invokes /research-question-framing skill | phase=framing                                      |
-| phase_execution | Worker invokes /autoresearch skill              | sub_phase=execution_cycle or verification, cycle=N |
+| Phase           | Execution method                                                                                   | Worker dispatch parameters                                        |
+| --------------- | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| phase_analysis  | Worker invokes /deep-research skill                                                                | phase=analysis                                                    |
+| phase_landscape | Worker invokes /literature-landscape-scan skill                                                    | phase=landscape                                                   |
+| phase_framing   | Worker invokes /research-question-framing skill                                                    | phase=framing                                                     |
+| phase_debate    | Worker invokes /debate-advocate, /debate-critic, /debate-adjudicator, /debate-repair (multi-round) | sub_phase=advocacy/critique/rebuttal/adjudication/repair, round=N |
+| phase_execution | Worker invokes /autoresearch skill                                                                 | sub_phase=execution_cycle or verification, cycle=N                |
 
 ### Dispatch Procedure (phase 1-3)
 
@@ -279,14 +328,15 @@ task(
 
 **Phase routing rules** (applied by coordinator after each digest):
 
-| Digest next_phase       | Coordinator action                                                          |
-| ----------------------- | --------------------------------------------------------------------------- |
-| phase_landscape         | Dispatch worker (phase=landscape)                                           |
-| phase_framing           | Dispatch worker (phase=framing)                                             |
-| phase_checkpoint        | Coordinator handles directly (NO worker dispatch) — see section below       |
-| phase_execution         | Start execution loop — dispatch worker (sub_phase=execution_cycle, cycle=1) |
-| completed               | Present final results to user                                               |
-| null (sub-phase digest) | Coordinator decides next sub-phase based on sub_phase + cycle + status      |
+| Digest next_phase       | Coordinator action                                                                                                                                                                    |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| phase_landscape         | Dispatch worker (phase=landscape)                                                                                                                                                     |
+| phase_framing           | Dispatch worker (phase=framing)                                                                                                                                                       |
+| phase_debate            | Start debate loop — dispatch worker (sub_phase=advocacy, round=1)                                                                                                                     |
+| phase_checkpoint        | Coordinator handles directly (NO worker dispatch) — see section below                                                                                                                 |
+| phase_execution         | Start execution loop — dispatch worker (sub_phase=execution_cycle, cycle=1)                                                                                                           |
+| completed               | Present final results to user                                                                                                                                                         |
+| null (sub-phase digest) | Coordinator decides next sub-phase based on sub_phase + round/cycle + status. Debate first 3 steps (advocacy/critique/rebuttal) flow in fixed order, not dependent on digest routing. |
 
 4. If status=failed:
    - Append digest to DIGESTS.md (record failure)
@@ -312,21 +362,186 @@ After processing each worker digest, check consistency:
    - This restores both state.json and STATE.md atomically
    - Re-dispatch worker for the restored phase
 
+### Debate Loop (phase_debate)
+
+phase_debate uses coordinator-managed multi-round loop with 5 worker dispatches per round.
+
+#### Debate Sub-phase Routing
+
+| Current sub_phase completed     | Next dispatch (no DIGESTS.md read needed)              |
+| ------------------------------- | ------------------------------------------------------ |
+| advocacy (status=completed)     | dispatch critique (same round)                         |
+| critique (status=completed)     | dispatch rebuttal (same round)                         |
+| rebuttal (status=completed)     | dispatch adjudication (same round)                     |
+| adjudication (status=completed) | dispatch repair (same round)                           |
+| repair                          | Read repair digest → route per §3.3                    |
+| any sub_phase (status=failed)   | Retry same sub_phase (max 2 retries, 3 total attempts) |
+
+First 4 steps (advocacy/critique/rebuttal/adjudication) return minimal digest (4 fields: phase/sub_phase/round/status) via task return value — NOT written to DIGESTS.md. Only repair writes a full digest to DIGESTS.md.
+
+#### Round 1: Full Debate (5 dispatches)
+
+For each sub-phase dispatch, call `update_debate_state(current_sub_phase="<sub_phase>")` via research-state MCP.
+
+1. Dispatch worker (sub_phase=advocacy, round=1):
+
+```
+task(
+  description: "debate advocacy round 1",
+  subagent_type: "research-worker",
+  prompt: "Execute advocacy sub-phase of phase_debate (round 1).
+Invoke /debate-advocate skill in advocacy mode.
+Read PLAN.md, ROADMAP.md, and user's original research prompt.
+For each of the 14 debate topics, construct a defense (DEFEND or CONCEDE).
+Append advocacy brief to DEBATE.md.
+After completing, output minimal digest as your final message."
+)
+```
+
+2. Dispatch worker (sub_phase=critique, round=1):
+
+```
+task(
+  description: "debate critique round 1",
+  subagent_type: "research-worker",
+  prompt: "Execute critique sub-phase of phase_debate (round 1).
+Invoke /debate-critic skill.
+Read Advocate Brief from DEBATE.md (current round) + PLAN.md + ROADMAP.md + user's original prompt.
+For each of the 14 debate topics, provide assessment (SOUND/CONCERN/CRITICAL).
+Append critique to DEBATE.md.
+After completing, output minimal digest as your final message."
+)
+```
+
+3. Dispatch worker (sub_phase=rebuttal, round=1):
+
+```
+task(
+  description: "debate rebuttal round 1",
+  subagent_type: "research-worker",
+  prompt: "Execute rebuttal sub-phase of phase_debate (round 1).
+Invoke /debate-advocate skill in rebuttal mode.
+Read Critic Critique from DEBATE.md (current round) + PLAN.md.
+Respond to every critique point (REBUT or CONCEDE). Unresponded points = CONCEDE.
+Append rebuttal to DEBATE.md.
+After completing, output minimal digest as your final message."
+)
+```
+
+4. Dispatch worker (sub_phase=adjudication, round=1):
+
+```
+task(
+  description: "debate adjudication round 1",
+  subagent_type: "research-worker",
+  prompt: "Execute adjudication sub-phase of phase_debate (round 1).
+Invoke /debate-adjudicator skill.
+Read current round's Advocate Brief + Critic Critique + Advocate Rebuttal from DEBATE.md + PLAN.md + ROADMAP.md.
+Rule on ALL 14 topics (UPHELD/REVISE/ESCALATE/CONCEDED) using decision rules.
+Do NOT modify PLAN.md.
+Append ruling to DEBATE.md.
+After completing, output minimal digest as your final message."
+)
+```
+
+5. Dispatch worker (sub_phase=repair, round=1):
+
+```
+task(
+  description: "debate repair round 1",
+  subagent_type: "research-worker",
+  prompt: "Execute repair sub-phase of phase_debate (round 1).
+Invoke /debate-repair skill.
+Read DEBATE.md current round (REVISE/CONCEDED rulings + reasons) + PLAN.md + research_questions.md + ROADMAP.md.
+Repair PLAN.md and research_questions.md based on rulings.
+Append repair report to DEBATE.md.
+Output repair digest as your final message (this will be appended to DIGESTS.md)."
+)
+```
+
+#### Round 2-3: Focused Debate
+
+For rounds 2+, the dispatch prompt must include the narrowed topic list per §3.4 convergence mechanism:
+
+- Previous round's ESCALATE topics
+- Previous round's REVISE/CONCEDED topics that were repaired (need re-verification)
+- UPHELD topics whose evaluation may depend on modified PLAN.md sections (inferred from repair digest's `modified_sections`)
+
+Example dispatch for focused round:
+
+```
+task(
+  description: "debate advocacy round [N] (focused)",
+  subagent_type: "research-worker",
+  prompt: "Execute advocacy sub-phase of phase_debate (round [N]).
+Invoke /debate-advocate skill in advocacy mode.
+Read PLAN.md, ROADMAP.md, user's original prompt, and full DEBATE.md history.
+FOCUS on these topics: [list ESCALATE + repaired + affected UPHELD topics].
+For focused topics: provide detailed defense (DEFEND/CONCEDE).
+For other topics: brief confirmation of unchanged status.
+Append advocacy brief to DEBATE.md.
+After completing, output minimal digest as your final message."
+)
+```
+
+Same pattern applies for critique, rebuttal, adjudication, and repair in focused rounds.
+
+#### Round Termination Conditions
+
+| Condition                                                            | Action                                                                                                    |
+| -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Repair digest shows round_verdict=ALL_RESOLVED                       | Terminate debate, advance_plan → phase_checkpoint                                                         |
+| Repair digest shows round_verdict=UNRESOLVED_REMAINING and round < 3 | Next round focused on unresolved + repaired topics                                                        |
+| Round = 3 with unresolved topics                                     | Terminate debate, enter phase_checkpoint with unresolved topics in STATE.md Blockers                      |
+| ESCALATE count ≥ previous round's ESCALATE count (divergence)        | Next round is final round regardless of round count. Final round ESCALATE topics go to STATE.md Blockers. |
+| Worker dispatch failure                                              | Retry max 2 times (3 total attempts), report to user after 3 failures                                     |
+
+#### Repair Digest Processing
+
+After repair digest is received:
+
+1. Append repair digest to DIGESTS.md
+2. Call `update_debate_state(rounds_completed=N, unresolved_topics=[...], current_sub_phase=null)` via research-state MCP
+3. Read repair digest fields:
+   - `round_verdict=ALL_RESOLVED` → call `advance_plan(phase=phase_checkpoint, plan_number=5)` → proceed to phase_checkpoint
+   - `round_verdict=UNRESOLVED_REMAINING` + `round < 3` → dispatch next round (advocacy, round=N+1) with focused topic list
+   - `round_verdict=UNRESOLVED_REMAINING` + `round >= 3` → call `advance_plan(phase=phase_checkpoint, plan_number=5)`, write unresolved topics to STATE.md Blockers → proceed to phase_checkpoint
+4. Git commit after debate completion:
+   ```
+   git add .aether/research/
+   git commit -m "research: phase_debate completed (plan 4)"
+   ```
+
+#### User Rejection and Debate Reopening
+
+In phase_checkpoint, if user rejects and requests debate revision:
+
+1. **Preserve DEBATE.md**: new round content appends after existing content
+2. **Do NOT rollback PLAN.md**: new round based on checkpoint-time PLAN.md (including previous repairs)
+3. Inject user feedback as additional constraint in new round dispatch prompt
+4. Round counter continues incrementing (not reset), but not subject to max 3 round limit (human-initiated reopening)
+
 ### phase_checkpoint (NO subagent dispatch)
 
 1. Read DIGESTS.md — extract framing digest
-2. Optionally read PLAN.md Contract section via grep + offset/limit (NOT full file read)
-3. Compose concise summary for user from digest + PLAN.md Contract:
+2. Read DEBATE.md — extract debate outcome summary
+3. Optionally read PLAN.md Contract section via grep + offset/limit (NOT full file read)
+4. Compose concise summary for user from digest + PLAN.md Contract:
    - Research question(s) framed
    - Claims to verify
    - Methodology to use
    - Expected deliverables
    - Verification criteria
    - Environment requirements: [from PLAN.md environment_requirements or framing digest]
-4. Use question tool: "Based on the analysis, here is the research plan: [summary]. Shall I proceed with execution?"
-5. MUST NOT proceed without user confirmation
-6. If user rejects:
-   - Determine rollback target phase from user feedback
+   - Debate outcome: [from DEBATE.md — key rulings, repairs applied]
+   - Unresolved concerns: [ESCALATE topics if any, from DEBATE.md]
+5. Use question tool: "Based on the analysis, here is the research plan: [summary]. Shall I proceed with execution?"
+6. MUST NOT proceed without user confirmation
+7. If user rejects, offer options:
+   - "Request debate revision" → preserve DEBATE.md, new round (round counter continues, not subject to max 3 limit)
+   - "Rollback to framing" → git rollback to phase_framing commit, re-execute framing + debate
+   - "Rollback to earlier phase" → git rollback to target phase commit
+     For rollback options:
    - Read state.json.phase*commits[target_phase] → get commit SHA
      Fallback: git log --oneline --grep="research: phase*[target]" -5
    - Git rollback:
@@ -419,7 +634,7 @@ Coordinator MUST NOT dispatch more than 3 execution_cycle workers. After 3 faile
 
 When verification shows all claims verified:
 
-1. Call advance_plan(phase=completed, plan_number=6) via research-state MCP
+1. Call advance_plan(phase=completed, plan_number=7) via research-state MCP
 2. Update STATE.md: phase=completed
 3. Read final verification digest from DIGESTS.md
 4. Optionally read VERIFICATION.md for detail (grep key sections, NOT full read)
@@ -430,6 +645,7 @@ When verification shows all claims verified:
 
 - phase_landscape CAN be skipped ONLY if conditions in original research.md are met
 - Skip check: coordinator reads DIGESTS.md (analysis digest's skip_recommendation field) or ROADMAP.md
+- phase_debate CANNOT be skipped. Every Path 3 research project must go through multi-agent debate.
 - All other phases: FORBIDDEN to skip
 
 ### Digest Parsing Fallback
@@ -512,6 +728,12 @@ On session start:
    - Read DIGESTS.md for completed phase summaries
    - If ENVIRONMENT.md exists: note venv_state
    - If current phase is phase_execution: check state.json.execution_cycle + DIGESTS.md for cycle status
+   - If current phase is phase_debate: check state.json.debate.current_sub_phase + DEBATE.md for round status
+     - If state.json.debate.current_sub_phase is non-null → resume from that sub_phase (interrupted mid-round)
+     - If state.json.debate.current_sub_phase is null → check DEBATE.md last round's Round Verdict
+       - ALL RESOLVED → proceed to phase_checkpoint
+       - UNRESOLVED REMAINING → continue from round state.json.debate.rounds_completed + 1
+     - Fallback (state.json.debate missing): read DEBATE.md last section type to determine interruption point
    - Git consistency check: git log --oneline -5 → verify last commit matches state.json.phase_commits[current_phase]
    - If git commit SHA mismatch: git checkout state.json.phase_commits[current_phase] -- .aether/research/ → git add + commit
    - Dispatch research-worker for current phase
