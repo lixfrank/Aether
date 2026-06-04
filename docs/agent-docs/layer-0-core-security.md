@@ -501,6 +501,8 @@ v0.6.0 的 skill 注入是广播式（列出所有 skill），对有明确 skill
 
 skill_refs 为**替换**而非追加广播。有 skillRefs 时，只注入 skillRefs 指定的 skill 完整内容，不再注入广播列表。原因：指定 skill_refs 的 agent 需要精确控制可见 skill 范围，广播列表会引入噪声并稀释 skillRefs 的信号强度。
 
+**关键改动**：skill_refs 注入现在**包含 skill 目录路径**（`file://` URL），使 agent 能解析 SKILL.md 中的相对路径引用（如 `references/error_catalog.json`），用 Read 工具读取 skill 的 bundled 数据文件。这是 Layer 3 的前置条件——没有 skill 目录路径，agent 无法访问 skill 的 references/ 和 scripts/ 文件。
+
 ```ts
 export async function skills(agent: Agent.Info) {
   if (Permission.disabled(["skill"], agent.permission).has("skill")) return
@@ -514,7 +516,11 @@ export async function skills(agent: Agent.Info) {
       "## Skills (mandatory)",
       "You MUST follow these skills' instructions for every task they cover.",
       "The following skills have been fully injected — do NOT use the skill tool to load them again.",
-      ...found.map((s) => [`### Skill: ${s.name}`, s.content].join("\n")),
+      ...found.map((s) =>
+        [`### Skill: ${s.name}`, `Skill directory: ${pathToFileURL(path.dirname(s.location)).href}`, s.content].join(
+          "\n",
+        ),
+      ),
       ...(missing.length ? [`Note: skills ${missing.join(", ")} referenced but not found.`] : []),
     ].join("\n")
   }
@@ -534,6 +540,7 @@ export async function skills(agent: Agent.Info) {
 - `Permission.disabled` 检查位置不变
 - 无 skillRefs 时输出与 v0.6.0 完全一致（广播路径不变）
 - 有 skillRefs 时输出只包含指定的 skill 内容，无广播噪声
+- skill 目录路径使 agent 能读取 skill 的 bundled references 和 scripts 文件
 - 减少 context window 占用
 
 ### 验收测试
@@ -543,7 +550,66 @@ T0.29: agent 无 skillRefs 时，skills() 输出与 v0.6.0 完全一致（广播
 T0.30: agent skillRefs=["alpha-research"] 时，输出仅包含 alpha-research 的完整内容（无广播列表）
 T0.31: agent skillRefs=["nonexistent"] 时，输出仅包含 "referenced but not found" 提示（无广播列表）
 T0.32: agent skillRefs 有值时，广播部分（Skill.fmt）不存在，只有注入内容
-T0.33: bun typecheck 通过
+T0.33: skill_refs 注入包含 Skill directory URL（file:// 格式），agent 可拼接 base_dir + relative_path 读取 references 文件
+T0.34: bun typecheck 通过
+```
+
+---
+
+## 改动 0.6: findOrInstallUv() — Python/uv 运行时自动安装
+
+### 问题
+
+Layer 3 的 Python scripts 和 MCP 服务器使用 `uv run` + PEP 723 执行。如果用户环境没有 `uv`，脚本和 MCP 服务器无法启动。
+
+### 文件
+
+`packages/opencode/src/util/python.ts`（**新增**独立模块）
+
+### 设计
+
+Aether 自动检测并安装 `uv` 单二进制到 `~/.aether/bin/uv`。uv 是 Astral 出品的 Python 包管理器（~10MB 单文件），可自动安装 Python、创建 venv、执行带 PEP 723 inline deps 的脚本。
+
+```ts
+export async function findOrInstallUv(): Promise<string | null> {
+  // 1. 检查 ~/.aether/bin/uv 是否存在
+  const homeUv = path.join(os.homedir(), ".aether", "bin", "uv")
+  if (await executable(homeUv)) return homeUv
+
+  // 2. 检查 PATH 中是否有 uv
+  const pathUv = which("uv")
+  if (pathUv) return pathUv
+
+  // 3. 下载 uv 到 ~/.aether/bin/uv
+  // 从 https://github.com/astral-sh/uv/releases 下载平台对应的单二进制
+  // macOS: uv-macos-latest.tar.gz → 解压 → ~/.aether/bin/uv
+  // Linux: uv-linux-latest.tar.gz → 解压 → ~/.aether/bin/uv
+  const downloaded = await downloadUv(homeUv)
+  return downloaded ? homeUv : null
+}
+```
+
+### 前置条件
+
+- `mkdir -p ~/.aether/bin` 在首次运行时创建
+- 下载失败（无网络）时返回 `null`，agent/MCP 退化为 `python3 -m` 方式
+- 与现有 LSP binary 安装模式类似（`Global.Path.bin` 已有类似逻辑）
+
+### 使用点
+
+- Layer 3 MCP 服务器启动前检测 uv
+- Layer 3 Python scripts 执行前检测 uv
+- 未来 Layer 5 background execution 也可使用
+
+### 验收测试
+
+```
+T0.35: PATH 中有 uv 时，findOrInstallUv() 返回 PATH 中的 uv 路径
+T0.36: PATH 中无 uv 但 ~/.aether/bin/uv 存在时，返回 ~/.aether/bin/uv
+T0.37: PATH 中无 uv 且 ~/.aether/bin/uv 不存在时，自动下载到 ~/.aether/bin/uv 并返回路径
+T0.38: 下载失败时返回 null（不抛异常）
+T0.39: uv run script.py 正常执行 PEP 723 声明依赖的 Python 脚本
+T0.40: bun typecheck 通过
 ```
 
 ---
@@ -571,4 +637,6 @@ T0.33: bun typecheck 通过
    k. sessionPermission + primary_tools deny 通过 Session.create({permission}) 传递后，Permission.disabled 正确硬删除 denied 工具
    l. primary_tools 子代理不可用（与 v0.6.0 行为一致）
    m. Tool.Context.agent 是 string，execute 中通过 Agent.get(ctx.agent) 获取 caller Agent.Info
+   n. skill_refs 注入包含 Skill directory URL，agent 可读取 skill bundled 文件
+   o. findOrInstallUv() 可自动安装 uv 到 ~/.aether/bin/uv
 ```
