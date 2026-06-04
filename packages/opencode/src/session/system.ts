@@ -2,6 +2,7 @@ import { Ripgrep } from "../file/ripgrep"
 
 import { Instance } from "../project/instance"
 import path from "path"
+import { pathToFileURL } from "url"
 
 import PROMPT_ANTHROPIC from "./prompt/anthropic.txt"
 import PROMPT_DEFAULT from "./prompt/default.txt"
@@ -64,7 +65,14 @@ export namespace SystemPrompt {
         "## Skills (mandatory)",
         "You MUST follow these skills' instructions for every task they cover.",
         "The following skills have been fully injected — do NOT use the skill tool to load them again.",
-        ...found.map((s) => [`### Skill: ${s.name}`, s.content].join("\n")),
+        ...found.map((s) =>
+          [
+            `### Skill: ${s.name}`,
+            `Skill directory: ${pathToFileURL(path.dirname(s.location)).href}`,
+            "Relative paths in this skill (e.g., scripts/, references/) are relative to this base directory.",
+            s.content,
+          ].join("\n"),
+        ),
         ...(missing.length ? [`Note: skills ${missing.join(", ")} referenced but not found.`] : []),
       ].join("\n")
     }
