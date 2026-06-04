@@ -1447,17 +1447,6 @@ export namespace Config {
             .describe("Timeout in milliseconds for model context protocol (MCP) requests"),
         })
         .optional(),
-      category: z
-        .record(
-          z.string(),
-          z.object({
-            model: z.string().optional(),
-            variant: z.string().optional(),
-            temperature: z.number().optional(),
-            description: z.string().optional(),
-          }),
-        )
-        .optional(),
     })
     .strict()
     .meta({

@@ -302,6 +302,16 @@ export namespace Agent {
             }
           }
 
+          // Promote first fallback to primary model when agent.model is absent
+          for (const name in agents) {
+            const agent = agents[name]
+            if (!agent.model && agent.fallbackModels?.length) {
+              const first = agent.fallbackModels[0]
+              agent.model = Provider.parseModel(typeof first === "string" ? first : first.model)
+              agent.fallbackModels = agent.fallbackModels.slice(1)
+            }
+          }
+
           // Ensure Truncate.GLOB is allowed unless explicitly configured
           for (const name in agents) {
             const agent = agents[name]

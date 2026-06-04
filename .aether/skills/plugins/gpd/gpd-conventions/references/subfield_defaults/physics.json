@@ -1,0 +1,826 @@
+{
+  "gpd_source": {
+    "repo": "psi-oss/get-physics-done",
+    "path": "gpd/specs/references/conventions/",
+    "commit": "to_be_pinned",
+    "cherry_pick_method": "semantic_equivalence"
+  },
+  "description": "Detailed convention configurations for 14 physics subfields — the default reference for physics convention locks",
+  "subfields": {
+    "qft": {
+      "primary_domain": "qft",
+      "conventions": {
+        "natural_units": {
+          "key": "natural_units",
+          "value": "natural",
+          "description": "ℏ = c = 1. All quantities expressed in powers of energy. Mass in GeV, length in GeV⁻¹, time in GeV⁻¹.",
+          "conversion_rules": {
+            "mass": "1 GeV = 1.783×10⁻²⁷ kg",
+            "length": "1 GeV⁻¹ = 0.197 fm",
+            "time": "1 GeV⁻¹ = 6.582×10⁻²⁵ s",
+            "cross_section": "1 GeV⁻² = 0.389 mb"
+          },
+          "incompatibilities": ["SI", "atomic", "geometric"]
+        },
+        "metric_signature": {
+          "key": "metric_signature",
+          "value": "mostly-minus",
+          "description": "g_μν = diag(+1, -1, -1, -1). Timelike vectors have positive norm. Used in Peskin & Schroeder, Weinberg QFT.",
+          "consequences": {
+            "contraction_sign": "g_μν g^μν = d (= 4 in 4D)",
+            "kinetic_term": "Positive kinetic energy: ∂_μ φ ∂^μ φ has correct sign",
+            "on_shell_condition": "p² = p_μ p^μ = m² > 0 for timelike",
+            "gamma_matrix_trace": "Tr(γ⁰γ¹γ²γ³) = -4i (with this signature)"
+          },
+          "incompatibilities": ["mostly-plus"]
+        },
+        "fourier_convention": {
+          "key": "fourier_convention",
+          "value": "physics",
+          "description": "Forward: f̃(k) = ∫ d⁴x f(x) exp(+ik·x). Inverse: f(x) = ∫ d⁴k/(2π)⁴ f̃(k) exp(-ik·x). The 2π factors all in the inverse transform.",
+          "consequences": {
+            "propagator": "Δ_F(x) = ∫ d⁴k/(2π)⁴ exp(-ik·x) / (k²-m²+iε)",
+            "normalization": "∫ d⁴x exp(+ik·x) = (2π)⁴ δ⁴(k)",
+            "delta_function": "δ⁴(x) = ∫ d⁴k/(2π)⁴ exp(-ik·x)"
+          },
+          "incompatibilities": ["mathematical"]
+        },
+        "renormalization_scheme": {
+          "key": "renormalization_scheme",
+          "value": "on-shell",
+          "description": "Renormalization conditions imposed at physical particle masses. Propagator pole at physical mass with residue 1. Used in Peskin & Schroeder Chapter 10.",
+          "consequences": {
+            "pole_condition": "Propagator pole at p² = m²_ph (physical mass)",
+            "residue_condition": "Residue = 1 at physical pole",
+            "counterterms": "Defined to cancel divergences at physical mass point"
+          },
+          "incompatibilities": ["MS", "MS-bar"]
+        },
+        "gauge_choice": {
+          "key": "gauge_choice",
+          "value": "Lorentz",
+          "description": "∂_μ A^μ = 0 gauge fixing. Propagator: D_μν(k) = -i(g_μν - k_μ k_ν/k²)/(k²+iε) + gauge terms. ξ parameter in general Lorentz gauge.",
+          "consequences": {
+            "propagator": "Transverse part: -i(g_μν - k_μk_ν/k²)/(k²+iε)",
+            "Ward_identity": "k_μ D_μν = 0 for transverse part",
+            "ghost_fields": "Required in non-Abelian Lorentz gauge (Faddeev-Popov)"
+          },
+          "incompatibilities": ["Coulomb", "axial", "temporal"]
+        },
+        "coordinate_system": {
+          "key": "coordinate_system",
+          "value": "Minkowski",
+          "description": "Flat spacetime with Cartesian coordinates. ds² = dt² - dx² - dy² - dz² (mostly-minus).",
+          "incompatibilities": ["Euclidean", "general"]
+        },
+        "spin_statistics": {
+          "key": "spin_statistics",
+          "value": "standard",
+          "description": "Integer spin → commutation relations → Bose-Einstein statistics. Half-integer spin → anticommutation relations → Fermi-Dirac statistics.",
+          "consequences": {
+            "boson_partition": "Z_B = [exp(-βE)]^{-1} for single boson mode",
+            "fermion_partition": "Z_F = 1 + exp(-βE) for single fermion mode"
+          },
+          "incompatibilities": ["wrong_assignment"]
+        },
+        "lagrangian_sign": {
+          "key": "lagrangian_sign",
+          "value": "positive_kinetic",
+          "description": "L = T - V with positive kinetic energy term. Standard convention in most QFT textbooks.",
+          "consequences": {
+            "scalar_lagrangian": "L = (1/2)(∂_μφ)² - (1/2)m²φ² - V(φ)",
+            "EOM_sign": "∂_μ∂_μφ + m²φ + V'(φ) = 0 (positive sign)",
+            "energy": "H = T + V (positive Hamiltonian)"
+          },
+          "incompatibilities": ["negative_kinetic"]
+        }
+      },
+      "cross_convention_rules": {
+        "mostly_minus_to_mostly_plus": {
+          "description": "To convert results from mostly-minus to mostly-plus signature",
+          "transformations": [
+            "g_μν → -g_μν (flip all metric components)",
+            "p² = m² → p² = -m² (on-shell condition flips)",
+            "γ matrices: γ^μ → same but contraction sign flips",
+            "Propagator numerator: -g_μν → +g_μν"
+          ]
+        },
+        "natural_to_SI": {
+          "description": "To convert from natural units (ℏ=c=1) to SI",
+          "transformations": [
+            "Mass: m [GeV] → m × 1.783×10⁻²⁷ kg",
+            "Length: L [GeV⁻¹] → L × 0.197 fm",
+            "Time: t [GeV⁻¹] → t × 6.582×10⁻²⁵ s",
+            "Energy: E [GeV] → E × 1.602×10⁻¹⁰ J",
+            "Cross section: σ [GeV⁻²] → σ × 0.389 mb",
+            "Restore ℏ, c factors by dimensional analysis"
+          ]
+        },
+        "physics_to_math_fourier": {
+          "description": "To convert between physics and mathematical Fourier conventions",
+          "transformations": [
+            "Physics → Math: multiply forward transform by (2π)^(d/2)",
+            "Math → Physics: divide forward transform by (2π)^(d/2)",
+            "Physics: 2π all in inverse transform",
+            "Math: 2π split symmetrically between forward and inverse"
+          ]
+        },
+        "on_shell_to_MS_bar": {
+          "description": "To convert between on-shell and MS-bar renormalization schemes",
+          "transformations": [
+            "m_OS² = m_MS_bar²(μ) × (1 + α/(4π) × C_m + ...)",
+            "Coupling: α_OS = α_MS_bar(μ) × (1 + α/(4π) × C_α + ...)",
+            "Finite parts differ; divergent parts same (both cancel poles)"
+          ]
+        }
+      }
+    },
+    "condensed_matter": {
+      "primary_domain": "condensed_matter",
+      "conventions": {
+        "natural_units": {
+          "key": "natural_units",
+          "value": "natural",
+          "description": "ℏ = 1 but c is often irrelevant (low-energy regime). Energy in eV or meV. Temperature in Kelvin with kB explicitly included or absorbed.",
+          "conversion_rules": {
+            "energy": "1 eV = 1.602×10⁻¹⁹ J",
+            "temperature": "kB × T: at 300K, kB T ≈ 25.8 meV"
+          },
+          "incompatibilities": ["SI"]
+        },
+        "metric_signature": {
+          "key": "metric_signature",
+          "value": "mostly-plus",
+          "description": "g_ij = diag(+1, +1, +1) for spatial metric in Euclidean formulation. Imaginary-time formalism: dt → i dτ, τ is real.",
+          "consequences": {
+            "euclidean_action": "S_E = ∫ dτ d³x [T + V] with positive real action",
+            "propagator": "G(τ) = ⟨O(τ)O(0)⟩, decays exponentially for gapped systems"
+          },
+          "incompatibilities": ["mostly-minus"]
+        },
+        "fourier_convention": {
+          "key": "fourier_convention",
+          "value": "physics",
+          "description": "Same as QFT physics convention but restricted to spatial+imaginary-time: f̃(k, iωn) = ∫ dτ d³x f(τ,x) exp(+ik·x - iωn τ).",
+          "incompatibilities": ["mathematical"]
+        },
+        "gauge_choice": {
+          "key": "gauge_choice",
+          "value": "Coulomb",
+          "description": "∇·A = 0 gauge. Separates longitudinal and transverse photon modes. Convenient for condensed matter where static Coulomb interaction dominates.",
+          "consequences": {
+            "coulomb_potential": "V(r) = e²/(4π r) from instantaneous Coulomb term",
+            "transverse_photon": "Only transverse photons propagate"
+          },
+          "incompatibilities": ["Lorentz"]
+        },
+        "matsubara": {
+          "key": "matsubara",
+          "value": "standard",
+          "description": "Bosonic: ωn = 2nπ/β. Fermionic: ωn = (2n+1)π/β. Standard finite-temperature imaginary-time formalism.",
+          "consequences": {
+            "boson_sum": "Σ_n for integer n (even spacing)",
+            "fermion_sum": "Σ_n for half-integer n (odd spacing)",
+            "contour": "Sum → contour integral via Matsubara poles"
+          },
+          "incompatibilities": ["real_time"]
+        },
+        "coordinate_system": {
+          "key": "coordinate_system",
+          "value": "Cartesian",
+          "description": "Euclidean 3D spatial coordinates. Most condensed matter calculations in flat space.",
+          "incompatibilities": ["general", "Minkowski"]
+        },
+        "spin_statistics": {
+          "key": "spin_statistics",
+          "value": "standard",
+          "description": "Standard spin-statistics: bosons (phonons, magnons) commute; fermions (electrons, holes) anticommute.",
+          "incompatibilities": ["wrong_assignment"]
+        },
+        "lagrangian_sign": {
+          "key": "lagrangian_sign",
+          "value": "positive_kinetic",
+          "description": "L = T - V. Positive kinetic energy for stable condensed matter systems.",
+          "incompatibilities": ["negative_kinetic"]
+        }
+      },
+      "cross_convention_rules": {}
+    },
+    "stat_mech": {
+      "primary_domain": "stat_mech",
+      "conventions": {
+        "natural_units": {
+          "key": "natural_units",
+          "value": "boltzmann",
+          "description": "kB = 1. Temperature in energy units. All thermodynamic quantities in units of kB or energy.",
+          "conversion_rules": {
+            "temperature": "T [K] → kB × T [energy]",
+            "entropy": "S in units of kB (dimensionless when kB=1)"
+          },
+          "incompatibilities": ["natural", "SI"]
+        },
+        "metric_signature": {
+          "key": "metric_signature",
+          "value": "mostly-minus",
+          "description": "Standard 4D signature when relativistic stat mech is needed (e.g., QFT thermal field theory).",
+          "incompatibilities": ["mostly-plus"]
+        },
+        "fourier_convention": {
+          "key": "fourier_convention",
+          "value": "physics",
+          "description": "Standard physics Fourier for partition functions and correlation functions.",
+          "incompatibilities": ["mathematical"]
+        },
+        "matsubara": {
+          "key": "matsubara",
+          "value": "standard",
+          "description": "Bosonic: ωn = 2nπ/β. Fermionic: ωn = (2n+1)π/β. Standard imaginary-time Matsubara formalism.",
+          "consequences": {
+            "partition_function": "Z = Σ_n exp(-βEn)",
+            "free_energy": "F = -kB T ln Z"
+          },
+          "incompatibilities": ["real_time"]
+        },
+        "coordinate_system": {
+          "key": "coordinate_system",
+          "value": "Cartesian",
+          "description": "Flat Euclidean space for most stat mech problems.",
+          "incompatibilities": ["general"]
+        },
+        "spin_statistics": {
+          "key": "spin_statistics",
+          "value": "standard",
+          "description": "Standard Bose-Einstein / Fermi-Dirac distributions.",
+          "incompatibilities": ["wrong_assignment"]
+        }
+      },
+      "cross_convention_rules": {}
+    },
+    "gr_cosmology": {
+      "primary_domain": "gr_cosmology",
+      "conventions": {
+        "natural_units": {
+          "key": "natural_units",
+          "value": "geometric",
+          "description": "G = c = 1. All quantities in units of length (or mass via Schwarzschild radius). Common in GR and cosmology.",
+          "conversion_rules": {
+            "mass": "M [m] → M × c²/G [kg], Schwarzschild radius rs = 2M",
+            "time": "t [m] → t/c [s]",
+            "cosmological_constant": "Λ in m⁻²"
+          },
+          "incompatibilities": ["natural", "SI"]
+        },
+        "metric_signature": {
+          "key": "metric_signature",
+          "value": "mostly-plus",
+          "description": "g_μν = diag(-1, +1, +1, +1). Spacelike vectors have positive norm. Used in MTW Gravitation, Carroll Spacetime & Geometry.",
+          "consequences": {
+            "contraction_sign": "g_μν g^μν = d (= 4 in 4D)",
+            "ricci_scalar": "R = g^μν R_μν with this sign convention",
+            "einstein_eq": "G_μν + Λg_μν = 8π T_μν (units: G=c=1)"
+          },
+          "incompatibilities": ["mostly-minus"]
+        },
+        "fourier_convention": {
+          "key": "fourier_convention",
+          "value": "physics",
+          "description": "Physics Fourier convention for cosmological perturbation analysis and mode expansions.",
+          "incompatibilities": ["mathematical"]
+        },
+        "gauge_choice": {
+          "key": "gauge_choice",
+          "value": "harmonic",
+          "description": "Harmonic/de Donder gauge: ∇_μ (∇^μ h^ν_ρ - 1/2 ∇^ρ h) = 0. Used for linearized GR and cosmological perturbation theory.",
+          "consequences": {
+            "linearized_gr": "Simplifies wave equation for metric perturbations",
+            "gravitational_waves": "TT gauge for transverse-traceless modes"
+          },
+          "incompatibilities": ["Lorentz"]
+        },
+        "coordinate_system": {
+          "key": "coordinate_system",
+          "value": "general",
+          "description": "General coordinates with arbitrary metric g_μν(x). Coordinate freedom is the gauge freedom in GR.",
+          "incompatibilities": ["Cartesian", "Minkowski"]
+        },
+        "lagrangian_sign": {
+          "key": "lagrangian_sign",
+          "value": "positive_kinetic",
+          "description": "Einstein-Hilbert action S = (1/16π) ∫ d⁴x √(-g) R + matter terms. Positive sign for GR.",
+          "incompatibilities": ["negative_kinetic"]
+        }
+      },
+      "cross_convention_rules": {
+        "mostly_plus_to_mostly_minus": {
+          "description": "To convert results from mostly-plus to mostly-minus signature",
+          "transformations": [
+            "g_μν → -g_μν (flip all metric components)",
+            "p² = -m² → p² = m² (on-shell condition flips)",
+            "Ricci scalar sign: R → -R (sign flip in some definitions)",
+            "Einstein tensor: sign conventions may differ"
+          ]
+        },
+        "geometric_to_SI": {
+          "description": "To convert from geometric units (G=c=1) to SI",
+          "transformations": [
+            "Mass: M [m] → M × c²/G [kg]",
+            "Time: t [m] → t/c [s]",
+            "Length: already in meters",
+            "Restore G, c factors by dimensional analysis"
+          ]
+        }
+      }
+    },
+    "amo": {
+      "primary_domain": "amo",
+      "conventions": {
+        "natural_units": {
+          "key": "natural_units",
+          "value": "atomic",
+          "description": "Hartree energy Eh = me e⁴/(4π ε₀)² ℏ² = 27.2 eV. Bohr radius a₀ = ℏ²/(me e²) = 0.529 Å. ℏ = 1, me = 1, e = 1, 4πε₀ = 1.",
+          "conversion_rules": {
+            "energy": "1 Hartree = 27.2 eV = 4.36×10⁻¹⁸ J",
+            "length": "1 Bohr = 0.529 Å = 5.29×10⁻¹¹ m",
+            "time": "1 Hartree/ℏ = 2.42×10⁻¹⁷ s"
+          },
+          "incompatibilities": ["natural", "SI", "geometric"]
+        },
+        "metric_signature": {
+          "key": "metric_signature",
+          "value": "mostly-minus",
+          "description": "Standard Minkowski signature for relativistic atomic calculations. Most AMO work uses non-relativistic Schrödinger (Euclidean).",
+          "incompatibilities": ["mostly-plus"]
+        },
+        "fourier_convention": {
+          "key": "fourier_convention",
+          "value": "physics",
+          "description": "Physics Fourier for transition amplitude calculations.",
+          "incompatibilities": ["mathematical"]
+        },
+        "gauge_choice": {
+          "key": "gauge_choice",
+          "value": "Coulomb",
+          "description": "∇·A = 0. The Coulomb gauge is natural for atomic physics — the Coulomb interaction is instantaneous and dominant.",
+          "consequences": {
+            "hamiltonian": "H = p²/(2m) + V(r) + (e/m)A·p + (e²/2m)A²",
+            "coulomb": "V(r) = Ze²/(4π ε₀ r) — instantaneous Coulomb potential"
+          },
+          "incompatibilities": ["Lorentz"]
+        },
+        "coordinate_system": {
+          "key": "coordinate_system",
+          "value": "Cartesian",
+          "description": "Cartesian coordinates for most atomic structure calculations. Spherical for angular momentum.",
+          "incompatibilities": ["general"]
+        },
+        "spin_statistics": {
+          "key": "spin_statistics",
+          "value": "standard",
+          "description": "Standard: electrons are fermions, photons are bosons.",
+          "incompatibilities": ["wrong_assignment"]
+        },
+        "lagrangian_sign": {
+          "key": "lagrangian_sign",
+          "value": "positive_kinetic",
+          "description": "L = T - V. Standard for atomic Hamiltonian with bound states.",
+          "incompatibilities": ["negative_kinetic"]
+        }
+      },
+      "cross_convention_rules": {
+        "atomic_to_SI": {
+          "description": "To convert from atomic units to SI",
+          "transformations": [
+            "Energy: Eh → 4.36×10⁻¹⁸ J",
+            "Length: a₀ → 5.29×10⁻¹¹ m",
+            "Mass: me → 9.11×10⁻³¹ kg",
+            "Restore me, e, ℏ, ε₀ by dimensional analysis"
+          ]
+        }
+      }
+    },
+    "nuclear_particle": {
+      "primary_domain": "nuclear_particle",
+      "conventions": {
+        "natural_units": {
+          "key": "natural_units",
+          "value": "natural",
+          "description": "ℏ = c = 1. Energy in GeV (particle physics) or MeV (nuclear physics). Standard HEP convention.",
+          "conversion_rules": {
+            "mass": "1 GeV = 1.783×10⁻²⁷ kg",
+            "length": "1 GeV⁻¹ = 0.197 fm",
+            "nuclear_mass": "1 MeV = 1.783×10⁻³⁰ kg"
+          },
+          "incompatibilities": ["SI", "atomic"]
+        },
+        "metric_signature": {
+          "key": "metric_signature",
+          "value": "mostly-minus",
+          "description": "g_μν = diag(+1, -1, -1, -1). Standard HEP convention (PDG, Peskin & Schroeder).",
+          "incompatibilities": ["mostly-plus"]
+        },
+        "fourier_convention": {
+          "key": "fourier_convention",
+          "value": "physics",
+          "description": "Physics Fourier. Standard in particle physics for amplitude calculations.",
+          "incompatibilities": ["mathematical"]
+        },
+        "renormalization_scheme": {
+          "key": "renormalization_scheme",
+          "value": "MS-bar",
+          "description": "Modified minimal subtraction. Subtract only divergent 1/ε poles plus universal constants (ln 4π - γE). Standard for collider phenomenology.",
+          "consequences": {
+            "running_coupling": "αs(μ) runs according to MS-bar β-function",
+            "scale_dependence": "Physical observables independent of μ after proper RG evolution",
+            "scheme_conversion": "MS-bar → on-shell: finite shift at each order"
+          },
+          "incompatibilities": ["on-shell", "MS"]
+        },
+        "gauge_choice": {
+          "key": "gauge_choice",
+          "value": "Lorentz",
+          "description": "∂_μ A^μ = 0. Standard for perturbative QCD calculations.",
+          "incompatibilities": ["Coulomb", "axial"]
+        },
+        "coordinate_system": {
+          "key": "coordinate_system",
+          "value": "Minkowski",
+          "description": "Flat Minkowski spacetime for collider physics. S-matrix defined asymptotically.",
+          "incompatibilities": ["general", "Euclidean"]
+        },
+        "spin_statistics": {
+          "key": "spin_statistics",
+          "value": "standard",
+          "description": "Standard spin-statistics for all particle species.",
+          "incompatibilities": ["wrong_assignment"]
+        },
+        "lagrangian_sign": {
+          "key": "lagrangian_sign",
+          "value": "positive_kinetic",
+          "description": "Standard L = T - V for QCD/QED Lagrangian.",
+          "incompatibilities": ["negative_kinetic"]
+        }
+      },
+      "cross_convention_rules": {
+        "MS_bar_to_on_shell": {
+          "description": "To convert between MS-bar and on-shell renormalization schemes",
+          "transformations": [
+            "m_MS_bar²(μ) → m_OS² via finite shift at each perturbative order",
+            "α_MS_bar(μ) → α_OS via scheme conversion factor",
+            "Different finite parts; same UV pole structure"
+          ]
+        }
+      }
+    },
+    "quantum_info": {
+      "primary_domain": "quantum_info",
+      "conventions": {
+        "natural_units": {
+          "key": "natural_units",
+          "value": "natural",
+          "description": "Dimensionless. Information-theoretic quantities (qubits, entropy) are naturally dimensionless.",
+          "incompatibilities": ["SI"]
+        },
+        "angular_momentum": {
+          "key": "angular_momentum",
+          "value": "computational_basis",
+          "description": "Spin-1/2 represented as |0⟩, |1⟩ qubit basis. No physical angular momentum units.",
+          "consequences": {
+            "qubit_encoding": "|↑⟩ = |0⟩, |↓⟩ = |1⟩",
+            "Pauli_matrices": "σz = |0⟩⟨0| - |1⟩⟨1|"
+          },
+          "incompatibilities": ["half-integer allowed", "abstract"]
+        },
+        "spin_statistics": {
+          "key": "spin_statistics",
+          "value": "qubit_convention",
+          "description": "Qubit convention: states labeled |0⟩ and |1⟩, NOT |↑⟩/|↓⟩. Computational basis preferred.",
+          "incompatibilities": ["standard"]
+        }
+      },
+      "cross_convention_rules": {}
+    },
+    "fluid_plasma": {
+      "primary_domain": "fluid_plasma",
+      "conventions": {
+        "natural_units": {
+          "key": "natural_units",
+          "value": "SI",
+          "description": "SI units required for fluid dynamics and plasma physics — dimensional quantities (viscosity ν, diffusivity D, plasma frequency ωp) must retain physical dimensions.",
+          "conversion_rules": {
+            "reynolds_number": "Re = ρUL/μ (dimensionless)",
+            "plasma_frequency": "ωp² = ne²/(me ε₀)"
+          },
+          "incompatibilities": ["natural"]
+        },
+        "metric_signature": {
+          "key": "metric_signature",
+          "value": "mostly-minus",
+          "description": "Standard for relativistic MHD and plasma calculations in Minkowski spacetime.",
+          "incompatibilities": ["mostly-plus"]
+        },
+        "fourier_convention": {
+          "key": "fourier_convention",
+          "value": "physics",
+          "description": "Physics Fourier for spectral decomposition of fluid fields.",
+          "incompatibilities": ["mathematical"]
+        },
+        "coordinate_system": {
+          "key": "coordinate_system",
+          "value": "Cartesian",
+          "description": "Cartesian coordinates for most fluid/plasma calculations. Curvilinear (cylindrical/spherical) for specific geometries.",
+          "incompatibilities": ["general"]
+        },
+        "lagrangian_sign": {
+          "key": "lagrangian_sign",
+          "value": "positive_kinetic",
+          "description": "Standard Lagrangian for fluid equations (Euler, Navier-Stokes).",
+          "incompatibilities": ["negative_kinetic"]
+        }
+      },
+      "cross_convention_rules": {}
+    },
+    "mathematical_physics": {
+      "primary_domain": "mathematical_physics",
+      "conventions": {
+        "natural_units": {
+          "key": "natural_units",
+          "value": "natural",
+          "description": "ℏ = c = 1. Common for algebraic and structural analysis where physical dimensions are secondary.",
+          "incompatibilities": ["SI"]
+        },
+        "metric_signature": {
+          "key": "metric_signature",
+          "value": "mostly-minus",
+          "description": "Standard physics signature for operator algebra and C*-algebraic QFT.",
+          "incompatibilities": ["mostly-plus"]
+        },
+        "fourier_convention": {
+          "key": "fourier_convention",
+          "value": "mathematical",
+          "description": "Mathematical Fourier: f̃(k) = (2π)^(-d/2) ∫ f(x) exp(-ik·x) dx. Symmetric normalization. Common in mathematical physics and analysis.",
+          "consequences": {
+            "normalization": "Both forward and inverse transform have (2π)^(-d/2) factor",
+            "plancherel": "‖f‖² = ‖f̃‖² (no extra 2π factors)"
+          },
+          "incompatibilities": ["physics"]
+        },
+        "coordinate_system": {
+          "key": "coordinate_system",
+          "value": "general",
+          "description": "General manifold coordinates. Mathematical physics often works on arbitrary manifolds.",
+          "incompatibilities": ["Cartesian", "Minkowski"]
+        },
+        "angular_momentum": {
+          "key": "angular_momentum",
+          "value": "abstract",
+          "description": "Abstract representation theory (Lie algebra su(2), Clebsch-Gordan coefficients as abstract operators). No specific physical realization.",
+          "incompatibilities": ["half-integer allowed", "computational_basis"]
+        },
+        "spin_statistics": {
+          "key": "spin_statistics",
+          "value": "standard",
+          "description": "Standard spin-statistics theorem (abstract algebraic proof).",
+          "incompatibilities": ["wrong_assignment"]
+        },
+        "lagrangian_sign": {
+          "key": "lagrangian_sign",
+          "value": "positive_kinetic",
+          "description": "Standard sign convention for variational formulations.",
+          "incompatibilities": ["negative_kinetic"]
+        }
+      },
+      "cross_convention_rules": {
+        "math_to_physics_fourier": {
+          "description": "To convert between mathematical and physics Fourier conventions",
+          "transformations": [
+            "Math → Physics: divide forward transform by (2π)^(d/2)",
+            "Physics → Math: multiply forward transform by (2π)^(d/2)",
+            "Consequence: Plancherel theorem differs by (2π)^d factor"
+          ]
+        }
+      }
+    },
+    "astrophysics": {
+      "primary_domain": "astrophysics",
+      "conventions": {
+        "natural_units": {
+          "key": "natural_units",
+          "value": "astronomical",
+          "description": "Solar mass M☉ = 1.978×10³⁰ kg. AU = 1.496×10¹¹ m. Year = 3.156×10⁷ s. Luminosity in L☉. G and c kept explicit.",
+          "conversion_rules": {
+            "mass": "M☉ = 1.978×10³⁰ kg",
+            "distance": "AU = 1.496×10¹¹ m, pc = 3.086×10¹⁶ m",
+            "luminosity": "L☉ = 3.828×10²⁶ W"
+          },
+          "incompatibilities": ["natural", "SI", "geometric"]
+        },
+        "metric_signature": {
+          "key": "metric_signature",
+          "value": "mostly-plus",
+          "description": "g_μν = diag(-1, +1, +1, +1). Common in astrophysics/GR literature (Carroll, MTW).",
+          "incompatibilities": ["mostly-minus"]
+        },
+        "fourier_convention": {
+          "key": "fourier_convention",
+          "value": "physics",
+          "description": "Physics Fourier for spectral analysis and cosmological perturbation theory.",
+          "incompatibilities": ["mathematical"]
+        },
+        "coordinate_system": {
+          "key": "coordinate_system",
+          "value": "general",
+          "description": "General coordinates for curved spacetime (Schwarzschild, FRW cosmology).",
+          "incompatibilities": ["Cartesian", "Minkowski"]
+        }
+      },
+      "cross_convention_rules": {
+        "astronomical_to_SI": {
+          "description": "To convert from astronomical units to SI",
+          "transformations": [
+            "Mass: M [M☉] → M × 1.978×10³⁰ kg",
+            "Distance: d [AU] → d × 1.496×10¹¹ m, d [pc] → d × 3.086×10¹⁶ m",
+            "Luminosity: L [L☉] → L × 3.828×10²⁶ W"
+          ]
+        }
+      }
+    },
+    "soft_matter": {
+      "primary_domain": "soft_matter",
+      "conventions": {
+        "natural_units": {
+          "key": "natural_units",
+          "value": "thermal",
+          "description": "kB = 1. Length in units of persistence length ℓp or monomer size a. Time in units of relaxation time τ. Temperature T in energy units.",
+          "conversion_rules": {
+            "energy": "E/kB in Kelvin-equivalent units",
+            "length": "R/ℓp dimensionless (scaled by persistence length)"
+          },
+          "incompatibilities": ["SI", "natural"]
+        },
+        "fourier_convention": {
+          "key": "fourier_convention",
+          "value": "physics",
+          "description": "Physics Fourier for scattering (S(k)) and correlation function analysis.",
+          "incompatibilities": ["mathematical"]
+        },
+        "matsubara": {
+          "key": "matsubara",
+          "value": "standard",
+          "description": "Standard Matsubara for polymer field theory and liquid structure calculations.",
+          "incompatibilities": ["real_time"]
+        },
+        "coordinate_system": {
+          "key": "coordinate_system",
+          "value": "Cartesian",
+          "description": "Euclidean 3D for soft matter. No spacetime structure needed.",
+          "incompatibilities": ["general"]
+        }
+      },
+      "cross_convention_rules": {}
+    },
+    "algebraic_qft": {
+      "primary_domain": "algebraic_qft",
+      "conventions": {
+        "natural_units": {
+          "key": "natural_units",
+          "value": "natural",
+          "description": "ℏ = c = 1. Algebraic structures (operator algebras, C*-algebras) work best in dimensionless/natural units.",
+          "incompatibilities": ["SI"]
+        },
+        "metric_signature": {
+          "key": "metric_signature",
+          "value": "mostly-minus",
+          "description": "g_μν = diag(+1, -1, -1, -1). Standard for Wightman axioms and Haag-Kastler nets.",
+          "incompatibilities": ["mostly-plus"]
+        },
+        "fourier_convention": {
+          "key": "fourier_convention",
+          "value": "physics",
+          "description": "Physics Fourier for operator-valued distributions and tempered distributions.",
+          "incompatibilities": ["mathematical"]
+        },
+        "coordinate_system": {
+          "key": "coordinate_system",
+          "value": "Minkowski",
+          "description": "Minkowski spacetime for algebraic QFT axioms (Wightman, Haag-Kastler).",
+          "incompatibilities": ["Euclidean", "general"]
+        },
+        "angular_momentum": {
+          "key": "angular_momentum",
+          "value": "abstract",
+          "description": "Abstract representation theory. Clebsch-Gordan as abstract algebraic objects.",
+          "incompatibilities": ["half-integer allowed", "computational_basis"]
+        },
+        "spin_statistics": {
+          "key": "spin_statistics",
+          "value": "standard",
+          "description": "Spin-statistics theorem as algebraic axiom (proof via locality and positivity).",
+          "incompatibilities": ["wrong_assignment"]
+        },
+        "lagrangian_sign": {
+          "key": "lagrangian_sign",
+          "value": "positive_kinetic",
+          "description": "Standard sign convention for variational/algebraic formulations.",
+          "incompatibilities": ["negative_kinetic"]
+        }
+      },
+      "cross_convention_rules": {}
+    },
+    "string_field_theory": {
+      "primary_domain": "string_field_theory",
+      "conventions": {
+        "natural_units": {
+          "key": "natural_units",
+          "value": "natural",
+          "description": "ℏ = c = 1. String length α' = 1/(2π) or α' = 1 depending on convention. Most SFT calculations in natural units.",
+          "conversion_rules": {
+            "string_length": "α' = ls² where ls is fundamental string length",
+            "string_mass": "M_string² = n/α' for level-n states"
+          },
+          "incompatibilities": ["SI"]
+        },
+        "metric_signature": {
+          "key": "metric_signature",
+          "value": "mostly-minus",
+          "description": "g_μν = diag(+1, -1, -1, -1). Standard for worldsheet and target space metrics in string theory.",
+          "incompatibilities": ["mostly-plus"]
+        },
+        "fourier_convention": {
+          "key": "fourier_convention",
+          "value": "physics",
+          "description": "Physics Fourier for worldsheet mode expansions and target space amplitudes.",
+          "incompatibilities": ["mathematical"]
+        },
+        "gauge_choice": {
+          "key": "gauge_choice",
+          "value": "Lorentz",
+          "description": "Lorentz gauge for string field theory (Witten's OSFT). Also: conformal gauge on worldsheet.",
+          "consequences": {
+            "worldsheet": "Conformal gauge: h_ab = e^φ η_ab on worldsheet",
+            "target_space": "Lorentz gauge for open string field theory cubic action"
+          },
+          "incompatibilities": ["Coulomb"]
+        },
+        "coordinate_system": {
+          "key": "coordinate_system",
+          "value": "Minkowski",
+          "description": "Minkowski target space for perturbative string theory. AdS or other curved backgrounds for non-perturbative.",
+          "incompatibilities": ["Cartesian"]
+        },
+        "spin_statistics": {
+          "key": "spin_statistics",
+          "value": "standard",
+          "description": "Standard spin-statistics for string excitations.",
+          "incompatibilities": ["wrong_assignment"]
+        },
+        "lagrangian_sign": {
+          "key": "lagrangian_sign",
+          "value": "positive_kinetic",
+          "description": "Positive kinetic term for string field theory action. S = (1/2)⟨Φ|Q|Φ⟩ + (g/3)⟨Φ|Φ|Φ⟩.",
+          "incompatibilities": ["negative_kinetic"]
+        }
+      },
+      "cross_convention_rules": {}
+    },
+    "classical_mechanics": {
+      "primary_domain": "classical_mechanics",
+      "conventions": {
+        "natural_units": {
+          "key": "natural_units",
+          "value": "SI",
+          "description": "SI units for classical mechanics. Force in Newtons, energy in Joules, length in meters.",
+          "conversion_rules": {
+            "force": "1 N = 1 kg·m/s²",
+            "energy": "1 J = 1 kg·m²/s²"
+          },
+          "incompatibilities": ["natural", "atomic"]
+        },
+        "fourier_convention": {
+          "key": "fourier_convention",
+          "value": "physics",
+          "description": "Physics Fourier for wave mechanics and signal analysis in classical systems.",
+          "incompatibilities": ["mathematical"]
+        },
+        "coordinate_system": {
+          "key": "coordinate_system",
+          "value": "Cartesian",
+          "description": "Cartesian coordinates for Newtonian mechanics. Generalized coordinates for Lagrangian/Hamiltonian.",
+          "incompatibilities": ["general"]
+        },
+        "angular_momentum": {
+          "key": "angular_momentum",
+          "value": "integer",
+          "description": "Classical angular momentum L = r × p. No quantization. Values are continuous (integer only for quantized systems).",
+          "incompatibilities": ["half-integer allowed", "computational_basis"]
+        },
+        "lagrangian_sign": {
+          "key": "lagrangian_sign",
+          "value": "positive_kinetic",
+          "description": "L = T - V. Standard classical mechanics Lagrangian.",
+          "incompatibilities": ["negative_kinetic"]
+        }
+      },
+      "cross_convention_rules": {}
+    }
+  }
+}

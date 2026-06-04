@@ -1,0 +1,49 @@
+{
+  "name": "Renormalization Group",
+  "description": "Systematic computation method for RG flow, beta functions, and fixed point analysis",
+  "steps": [
+    {
+      "step": 1,
+      "action": "Identify the theory (number of fields, coupling types, symmetry structure) and determine which couplings run",
+      "checkpoint": "All couplings that can run identified? Are there marginal/irrelevant operators that were dropped?"
+    },
+    {
+      "step": 2,
+      "action": "Compute beta functions at the required order using the chosen renormalization scheme",
+      "checkpoint": "Beta functions computed in correct scheme (MS-bar vs on-shell)? Consistent with convention lock?"
+    },
+    {
+      "step": 3,
+      "action": "Verify RG consistency: beta functions satisfy the RG equation (calls to different counterterms must be consistent)",
+      "checkpoint": "Do beta functions satisfy the Callan-Symanzik equation? Are anomalous dimensions consistent?"
+    },
+    {
+      "step": 4,
+      "action": "Find fixed points by solving β(g*) = 0, classify stability (UV/IR stable/unstable)",
+      "checkpoint": "Fixed point exists? Stability classification correct? Eigenvalues of stability matrix have correct sign?"
+    },
+    {
+      "step": 5,
+      "action": "Compute running couplings g(μ) from beta functions, verify physical observables are μ-independent after RG improvement",
+      "checkpoint": "RG-invariance check: observable does not depend on arbitrary scale μ after RG evolution"
+    },
+    {
+      "step": 6,
+      "action": "Check critical exponents and universality class assignment",
+      "checkpoint": "Critical exponents match known universality class? Anomalous dimensions consistent?"
+    }
+  ],
+  "red_flags": [
+    "Beta function sign inconsistency (e.g., positive β for UV-stable coupling)",
+    "Running coupling hits Landau pole (g → ∞ at finite scale)",
+    "RG evolution crosses phase transition without accounting for it",
+    "Mixing renormalization schemes in beta function calculation",
+    "Neglecting threshold effects (heavy particle decoupling)",
+    "Wrong loop order in beta function (using one-loop for two-loop calculation)",
+    "Anomalous dimension wrong sign (positive anomalous dimension for field that should become more irrelevant)"
+  ],
+  "common_errors": [
+    "E02: Metric signature flip affecting beta function signs",
+    "E05: Gauge-dependent beta function used for physical prediction"
+  ]
+}

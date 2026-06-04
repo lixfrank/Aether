@@ -124,3 +124,4 @@ export function aetherMcp(): string {
 }
 
 export { UV_BINARY }
+export { AETHER_HOME }

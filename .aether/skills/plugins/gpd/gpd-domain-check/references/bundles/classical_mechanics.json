@@ -1,0 +1,50 @@
+{
+  "gpd_source": {
+    "repo": "psi-oss/get-physics-done",
+    "path": "gpd/mcp/servers/verification_server.py (DOMAIN_CHECKLISTS)",
+    "commit": "to_be_pinned",
+    "cherry_pick_method": "semantic_equivalence"
+  },
+  "domain": "classical_mechanics",
+  "name": "Classical Mechanics",
+  "priority_checks": [
+    "dimensional_analysis",
+    "numerical_spot_check",
+    "limiting_cases",
+    "conservation_laws",
+    "physical_plausibility",
+    "symmetry_verification"
+  ],
+  "red_flags": [
+    "Hamiltonian not symmetric under canonical transformation",
+    "Action with wrong sign convention",
+    "Missing constraint force in Lagrangian",
+    "Non-conservative force treated as conservative",
+    "Wrong Poisson bracket algebra",
+    "Equations of motion not derivable from stated Hamiltonian"
+  ],
+  "standard_benchmarks": [
+    {
+      "name": "Kepler orbit energy",
+      "reference": "E = -GMm/(2a)",
+      "tolerance": 1e-4
+    },
+    {
+      "name": "Simple harmonic oscillator period",
+      "reference": "T = 2π√(m/k)",
+      "tolerance": 1e-6
+    },
+    {
+      "name": "Noether theorem: symmetry → conservation",
+      "reference": "Time translation → energy conservation",
+      "tolerance": "qualitative"
+    }
+  ],
+  "convention_sensitive": ["natural_units", "lagrangian_sign", "action_convention"],
+  "scripts_available": [
+    "scripts/dimensional_check.py",
+    "scripts/spot_check.py",
+    "scripts/limiting_case_check.py",
+    "scripts/symmetry_check.py"
+  ]
+}

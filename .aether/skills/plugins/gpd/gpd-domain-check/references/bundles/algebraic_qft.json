@@ -1,0 +1,45 @@
+{
+  "gpd_source": {
+    "repo": "psi-oss/get-physics-done",
+    "path": "gpd/mcp/servers/verification_server.py (DOMAIN_CHECKLISTS)",
+    "commit": "to_be_pinned",
+    "cherry_pick_method": "semantic_equivalence"
+  },
+  "domain": "algebraic_qft",
+  "name": "Algebraic Quantum Field Theory",
+  "priority_checks": [
+    "dimensional_analysis",
+    "positivity_constraints",
+    "causality_constraints",
+    "symmetry_verification",
+    "proof_hypothesis_coverage",
+    "limiting_cases"
+  ],
+  "red_flags": [
+    "Net of algebras violating isotony",
+    "Causal commutator not vanishing at spacelike separation",
+    "State not satisfying positivity condition on algebra",
+    "Reeh-Schlieder theorem violation",
+    "Missing modular structure in Tomita-Takesaki theory",
+    "Wrong spectrum condition (negative energy)"
+  ],
+  "standard_benchmarks": [
+    {
+      "name": "Wightman axioms satisfaction",
+      "reference": "Standard checklist: locality, positivity, spectrum, cluster",
+      "tolerance": "qualitative"
+    },
+    {
+      "name": "Free field net isotony",
+      "reference": "O₁ ⊂ O₂ → A(O₁) ⊂ A(O₂)",
+      "tolerance": "qualitative"
+    },
+    {
+      "name": "Causality: [A(O₁), A(O₂)] = 0 for spacelike",
+      "reference": "Zero commutator at spacelike separation",
+      "tolerance": "qualitative"
+    }
+  ],
+  "convention_sensitive": ["metric_signature", "natural_units", "net_convention"],
+  "scripts_available": ["scripts/dimensional_check.py", "scripts/symmetry_check.py", "scripts/limiting_case_check.py"]
+}

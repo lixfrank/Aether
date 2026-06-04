@@ -33,7 +33,7 @@ import { DbCommand } from "./cli/cmd/db"
 import { JsonMigration } from "./storage/json-migration"
 import { Database } from "./storage/db"
 import { Global } from "./global"
-import { ensureUser } from "./persist/migrate"
+import { ensureUser, seedDefaultAssets } from "./persist/migrate"
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -67,6 +67,9 @@ let cli = yargs(hideBin(process.argv))
   .middleware(async (opts) => {
     await ensureUser()
     await Global.ensureDirs()
+    await seedDefaultAssets().catch((err) => {
+      Log.Default.warn("failed to seed default assets", { error: err instanceof Error ? err.message : String(err) })
+    })
     await Log.init({
       print: process.argv.includes("--print-logs"),
       dev: Installation.isLocal(),

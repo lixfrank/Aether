@@ -1,0 +1,45 @@
+{
+  "gpd_source": {
+    "repo": "psi-oss/get-physics-done",
+    "path": "gpd/mcp/servers/verification_server.py (DOMAIN_CHECKLISTS)",
+    "commit": "to_be_pinned",
+    "cherry_pick_method": "semantic_equivalence"
+  },
+  "domain": "amo",
+  "name": "Atomic, Molecular & Optical Physics",
+  "priority_checks": [
+    "dimensional_analysis",
+    "numerical_spot_check",
+    "limiting_cases",
+    "physical_plausibility",
+    "conservation_laws",
+    "order_of_magnitude"
+  ],
+  "red_flags": [
+    "Clebsch-Gordan coefficient sign error",
+    "Selection rule violation (angular momentum, parity)",
+    "Wrong fine-structure splitting order",
+    "Incorrect hydrogen energy level formula",
+    "Missing Lamb shift consideration",
+    "Transition rate exceeding allowed bound"
+  ],
+  "standard_benchmarks": [
+    {
+      "name": "Hydrogen energy levels",
+      "reference": "E_n = -13.6/n² eV",
+      "tolerance": 1e-4
+    },
+    {
+      "name": "Fine structure splitting",
+      "reference": "ΔE_fs ~ α² E_n",
+      "tolerance": 1e-3
+    },
+    {
+      "name": "Einstein A coefficient for 2P→1S",
+      "reference": "A = 6.265e8 s⁻¹",
+      "tolerance": 1e-2
+    }
+  ],
+  "convention_sensitive": ["natural_units", "metric_signature", "angular_momentum_convention"],
+  "scripts_available": ["scripts/dimensional_check.py", "scripts/spot_check.py", "scripts/limiting_case_check.py"]
+}

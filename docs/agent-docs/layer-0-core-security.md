@@ -11,7 +11,7 @@
 | Layer       | 状态            | 简介                                                                                                       |
 | ----------- | --------------- | ---------------------------------------------------------------------------------------------------------- |
 | **Layer 0** | **本文档**      | 核心安全增强：Permission.intersection、Discipline.compile、task 参数扩展、Agent.Info 扩展、skill_refs 注入 |
-| Layer 1     | 在 Layer 0 之后 | Agent 基础设施：mode-switch、fallback_models、prompt 模式切换、background 执行、category routing           |
+| Layer 1     | 在 Layer 0 之后 | Agent 基础设施：mode-switch、fallback_models、prompt 模式切换、background 执行                             |
 | Layer 2     | 在 Layer 1 之后 | Research 配置层：agent md 定义、skill md 定义（零核心源文件改动）                                          |
 | Layer 3     | 在 Layer 2 之后 | Research 基础设施：MCP 服务器（convention lock、verification、errors）、参考文档                           |
 | Layer 4     | 在 Layer 3 之后 | Publication 管线：write-paper、peer-review、respond-to-referees（完全独立）                                |
@@ -250,7 +250,6 @@ const parameters = z.object({
   delegation_depth: z.number().int().min(0).max(3).optional(),
   max_steps: z.number().int().min(1).max(50).optional(),
   timeout_seconds: z.number().int().min(30).max(600).optional(),
-  category: z.string().optional(),
 })
 ```
 
@@ -320,14 +319,13 @@ const result = await SessionPrompt.prompt({
 
 - 第 66-67 行：`hasTaskPermission` / `hasTodoWritePermission` 检查（被 intersection + Discipline.compile 替代）
 - 第 78-102 行：手工拼接的 permission 数组（被 `finalPermission` 替代）
-- 第 108-111 行：手工 model 选择逻辑（被 category routing + fallback 链替代）
+- 第 108-111 行：手工 model 选择逻辑（被 fallback 链替代）
 - 第 138-143 行：tools dict（被 Permission.disabled 运行时硬删除替代）
 
 **新增 import**：
 
 ```ts
 import { Discipline } from "@/session/discipline" // 新增
-import { Provider } from "../provider/provider" // 新增（category routing 需要）
 ```
 
 **primary_tools 行为保留**：v0.6.0 中 `primary_tools` 的语义是"仅 primary agent 可用"。当前 task.ts 通过 permission allow + tools dict false 双重机制实现。新方案中 permission allow 不需要（caller defaults 已有 `* allow`），但需要在 sessionPermission 末尾追加 `{primary_tool, *, deny}` 规则，保留"子代理不可用"的行为。`Permission.disabled()` 在运行时检测这些规则并硬删除工具。
@@ -346,34 +344,6 @@ import { Provider } from "../provider/provider" // 新增（category routing 需
 
 **场景 E 是关键一致性保证**：`delegation_depth` 默认 undefined（不传时不产生 `{task, *, deny}`），task 的 deny/allow 完全取决于 agent 自身权限——与 v0.6.0 中 `hasTaskPermission` 逻辑等价。
 
-### Category routing
-
-`category` 参数用于语义化模型路由。在 `config.ts` 中添加顶层 `category` 字段:
-
-```ts
-category: z.record(
-  z.string(),
-  z.object({
-    model: z.string().optional(),
-    variant: z.string().optional(),
-    temperature: z.number().optional(),
-    description: z.string().optional(),
-  }),
-).optional()
-```
-
-在 `task.ts` execute 中，category 路由保持 fallback 安全链：
-
-```ts
-const cfg = await Config.get()
-const categoryConfig = params.category ? cfg.category?.[params.category] : undefined
-const categoryModel = categoryConfig?.model ? Provider.parseModel(categoryConfig.model) : undefined
-// fallback 安全：category 失败 → agent.model → caller.model
-const model = categoryModel ?? targetAgent.model ?? { modelID: msg.info.modelID, providerID: msg.info.providerID }
-```
-
-**注意**：`category` 字段添加在 `config.ts` 的 `Config.Info` schema 中（改动 0.4 的 config.ts 改动范围之一）。`Config.Info` 有 `.strict()` 模式（config.ts 约第 1320 行），不允许未知 key，因此 `category` 必须作为显式 schema 字段添加，否则 config 加载时会报错。此改动不改变已有字段的行为。
-
 ### 验收测试
 
 ```
@@ -382,8 +352,6 @@ T0.14: 传 permission_override: {bash:["allow","docker*"]} 时，子代理只有
 T0.15: 传 delegation_depth:0 时，子代理的 task 工具被 deny
 T0.16: 传 delegation_depth:undefined（或不传）时，task 权限取决于 agent 自身（与 v0.6.0 一致）
 T0.17: 传 file_scope:["src/**"] 时，子代理的文件操作工具被限制在 src/** 范围
-T0.18: 传 category:"quick" 且 config.category.quick.model 设为 claude-haiku-4-5 时，子代理使用指定模型
-T0.19: category 路由 model 无效时，静默 fallback 到 agent.model/caller.model
 T0.20: sessionPermission 通过 Session.create({permission}) 传递后，运行时 Permission.disabled 正确硬删除 denied 工具
 T0.21: bun typecheck 通过
 ```
@@ -410,7 +378,7 @@ Layer 2 的 research 系 agent 需要手动声明 permission，参考 explore �
 ### 文件
 
 `packages/opencode/src/agent/agent.ts`（在 Info schema 末尾添加 optional 字段 + 在 state merge 循环中逐字段赋值 + 新增 Discipline import）
-`packages/opencode/src/config/config.ts`（在 Agent schema 中添加 optional 字段 + 更新 knownKeys 白名单 + 在 Info schema 中添加 category 字段）
+`packages/opencode/src/config/config.ts`（在 Agent schema 中添加 optional 字段 + 更新 knownKeys 白名单）
 
 ### 新增字段（Agent.Info）
 
@@ -630,10 +598,8 @@ T0.40: bun typecheck 通过
    d. Permission.intersection(parent deny, child allow) → deny（安全修复）
    e. compileDiscipline deny-before-allow 顺序正确
    f. env_scope.allowed_commands 编译为 bash deny + specific allow（只在 agent.ts 中编译一次）
-   g. delegation_depth undefined → 不产生 task 规则（v0.6.0 一致）；delegation_depth 0 → task denied
-   h. category 路由无效 model 时 → 静默 fallback 到 agent/caller model
-   i. Config.Agent 新字段在 knownKeys 白名单中，不落入 options
-   j. Config.Info 的 category 字段在 .strict() schema 中正确定义，config 加载不报错
+g. delegation_depth undefined → 不产生 task 规则（v0.6.0 一致）；delegation_depth 0 → task denied
+    i. Config.Agent 新字段在 knownKeys 白名单中，不落入 options
    k. sessionPermission + primary_tools deny 通过 Session.create({permission}) 传递后，Permission.disabled 正确硬删除 denied 工具
    l. primary_tools 子代理不可用（与 v0.6.0 行为一致）
    m. Tool.Context.agent 是 string，execute 中通过 Agent.get(ctx.agent) 获取 caller Agent.Info

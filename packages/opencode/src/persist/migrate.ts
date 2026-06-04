@@ -1,9 +1,15 @@
 import fs from "fs/promises"
+import os from "os"
 import path from "path"
 import { setTimeout as sleep } from "node:timers/promises"
+import { existsSync, statSync } from "fs"
 import { Flag } from "@/flag/flag"
+import { Log } from "@/util/log"
 import { Filesystem } from "@/util/filesystem"
 import { CFG, LEGACY_CFG, Persist, legacyPlatformDir, platformDir } from "./naming"
+import { AETHER_HOME } from "@/util/python"
+
+const log = Log.create({ service: "migrate" })
 
 const MARK = "migration-v1.json"
 const LOCK = ".migrate.lock"
@@ -152,7 +158,12 @@ async function copyRoots(state: State) {
   await seedDb(state)
 
   await Promise.all([
-    copyFile(state, path.join(Persist.legacy.data, "auth.json"), path.join(Persist.current.data, "auth.json"), "data/auth.json"),
+    copyFile(
+      state,
+      path.join(Persist.legacy.data, "auth.json"),
+      path.join(Persist.current.data, "auth.json"),
+      "data/auth.json",
+    ),
     copyFile(
       state,
       path.join(Persist.legacy.data, "mcp-auth.json"),
@@ -165,7 +176,12 @@ async function copyRoots(state: State) {
       path.join(Persist.current.data, "reading-mode"),
       "data/reading-mode",
     ),
-    copyDir(state, path.join(Persist.legacy.data, "storage"), path.join(Persist.current.data, "storage"), "data/storage"),
+    copyDir(
+      state,
+      path.join(Persist.legacy.data, "storage"),
+      path.join(Persist.current.data, "storage"),
+      "data/storage",
+    ),
     copyFile(
       state,
       path.join(Persist.legacy.config, "config.json"),
@@ -208,7 +224,12 @@ async function copyRoots(state: State) {
       path.join(Persist.current.state, "model.json"),
       "state/model.json",
     ),
-    copyFile(state, path.join(Persist.legacy.state, "kv.json"), path.join(Persist.current.state, "kv.json"), "state/kv.json"),
+    copyFile(
+      state,
+      path.join(Persist.legacy.state, "kv.json"),
+      path.join(Persist.current.state, "kv.json"),
+      "state/kv.json",
+    ),
     copyFile(
       state,
       path.join(Persist.legacy.state, "prompt-history.jsonl"),
@@ -375,4 +396,78 @@ export async function status() {
 export function reset() {
   user = undefined
   project.clear()
+}
+
+const SEED_VERSION_FILE = "seed-version.txt"
+const CURRENT_SEED_VERSION = "1"
+
+function findServerProjectDir(): string | undefined {
+  const binaryDir = path.dirname(process.execPath)
+  for (const root of [".aether", ".opencode"]) {
+    const candidate = path.join(binaryDir, root)
+    try {
+      if (statSync(candidate).isDirectory()) return candidate
+    } catch {}
+  }
+  let dir = process.cwd()
+  while (true) {
+    for (const root of [".aether", ".opencode"]) {
+      const candidate = path.join(dir, root)
+      try {
+        if (statSync(candidate).isDirectory()) return candidate
+      } catch {}
+    }
+    const parent = path.dirname(dir)
+    if (parent === dir) break
+    dir = parent
+  }
+  return undefined
+}
+
+export async function seedDefaultAssets(): Promise<void> {
+  const sourceDir = findServerProjectDir()
+  if (!sourceDir) {
+    log.info("no source .aether dir found, skipping seed")
+    return
+  }
+
+  const versionFile = path.join(AETHER_HOME, SEED_VERSION_FILE)
+  const existingVersion = await Filesystem.readText(versionFile).catch(() => "")
+  if (existingVersion === CURRENT_SEED_VERSION) {
+    log.info("default assets already seeded, skipping")
+    return
+  }
+
+  const subdirs = ["agent", "mcp"]
+  const skillsDir = path.join(sourceDir, "skills")
+  if (existsSync(skillsDir)) subdirs.push("skills")
+
+  for (const subdir of subdirs) {
+    const src = path.join(sourceDir, subdir)
+    const dest = path.join(AETHER_HOME, subdir)
+    if (!(await Filesystem.isDir(src))) continue
+    await fs.mkdir(dest, { recursive: true })
+    const entries = await fs.readdir(src, { withFileTypes: true }).catch(() => [])
+    for (const entry of entries) {
+      if (
+        entry.name.startsWith(".") ||
+        entry.name === "package.json" ||
+        entry.name === "bun.lock" ||
+        entry.name === "node_modules"
+      )
+        continue
+      const entrySrc = path.join(src, entry.name)
+      const entryDest = path.join(dest, entry.name)
+      if (await Filesystem.isDir(entryDest)) continue
+      if (entry.isDirectory()) {
+        await fs.cp(entrySrc, entryDest, { recursive: true })
+      } else {
+        await fs.copyFile(entrySrc, entryDest)
+      }
+    }
+  }
+
+  await fs.mkdir(AETHER_HOME, { recursive: true })
+  await Filesystem.write(versionFile, CURRENT_SEED_VERSION)
+  log.info("default assets seeded to ~/.aether/")
 }

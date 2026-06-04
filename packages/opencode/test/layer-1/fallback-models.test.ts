@@ -3,6 +3,7 @@ import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { Agent } from "../../src/agent/agent"
 import { Permission } from "../../src/permission"
+import { ProviderID, ModelID } from "../../src/provider/schema"
 
 afterEach(async () => {
   await Instance.disposeAll()
@@ -13,7 +14,7 @@ function evalPerm(agent: Agent.Info, permission: string, pattern = "*"): Permiss
 }
 
 describe("Layer 1 — fallback_models config & Agent.Info", () => {
-  test("fallback_models from config populates Agent.Info.fallbackModels (string form)", async () => {
+  test("fallback_models[0] promoted to model when agent.model is absent", async () => {
     await using tmp = await tmpdir({
       config: {
         agent: {
@@ -27,12 +28,16 @@ describe("Layer 1 — fallback_models config & Agent.Info", () => {
       directory: tmp.path,
       fn: async () => {
         const general = await Agent.get("general")
-        expect(general?.fallbackModels).toEqual(["anthropic/claude-sonnet-4-5", "openai/gpt-4o"])
+        expect(general?.model).toEqual({
+          providerID: ProviderID.make("anthropic"),
+          modelID: ModelID.make("claude-sonnet-4-5"),
+        })
+        expect(general?.fallbackModels).toEqual(["openai/gpt-4o"])
       },
     })
   })
 
-  test("fallback_models from config populates Agent.Info.fallbackModels (object form)", async () => {
+  test("fallback_models with single entry: promoted to model, fallbackModels empty", async () => {
     await using tmp = await tmpdir({
       config: {
         agent: {
@@ -46,7 +51,35 @@ describe("Layer 1 — fallback_models config & Agent.Info", () => {
       directory: tmp.path,
       fn: async () => {
         const general = await Agent.get("general")
-        expect(general?.fallbackModels).toEqual([{ model: "anthropic/claude-sonnet-4-5" }])
+        expect(general?.model).toEqual({
+          providerID: ProviderID.make("anthropic"),
+          modelID: ModelID.make("claude-sonnet-4-5"),
+        })
+        expect(general?.fallbackModels).toEqual([])
+      },
+    })
+  })
+
+  test("model takes priority over fallback_models[0]", async () => {
+    await using tmp = await tmpdir({
+      config: {
+        agent: {
+          general: {
+            model: "anthropic/claude-opus-4",
+            fallback_models: ["anthropic/claude-sonnet-4-5", "openai/gpt-4o"],
+          },
+        },
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const general = await Agent.get("general")
+        expect(general?.model).toEqual({
+          providerID: ProviderID.make("anthropic"),
+          modelID: ModelID.make("claude-opus-4"),
+        })
+        expect(general?.fallbackModels).toEqual(["anthropic/claude-sonnet-4-5", "openai/gpt-4o"])
       },
     })
   })

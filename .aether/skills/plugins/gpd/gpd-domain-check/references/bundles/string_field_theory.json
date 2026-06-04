@@ -1,0 +1,50 @@
+{
+  "gpd_source": {
+    "repo": "psi-oss/get-physics-done",
+    "path": "gpd/mcp/servers/verification_server.py (DOMAIN_CHECKLISTS)",
+    "commit": "to_be_pinned",
+    "cherry_pick_method": "semantic_equivalence"
+  },
+  "domain": "string_field_theory",
+  "name": "String & Field Theory",
+  "priority_checks": [
+    "dimensional_analysis",
+    "ward_identities",
+    "unitarity_bounds",
+    "causality_constraints",
+    "conservation_laws",
+    "limiting_cases"
+  ],
+  "red_flags": [
+    "Wrong critical dimension (d≠10 for superstring, d≠26 for bosonic)",
+    "Virasoro algebra with wrong central charge",
+    "Missing modular invariance in partition function",
+    "T-duality violation",
+    "Wrong string coupling power counting",
+    "Anomalous gauge symmetry in low-energy effective action"
+  ],
+  "standard_benchmarks": [
+    {
+      "name": "Virasoro central charge (free boson)",
+      "reference": "c = 1",
+      "tolerance": 1e-10
+    },
+    {
+      "name": "String partition function modular invariance",
+      "reference": "Z(τ) = Z(-1/τ)",
+      "tolerance": 1e-8
+    },
+    {
+      "name": "Critical dimension",
+      "reference": "D_crit = 26 (bosonic), 10 (superstring)",
+      "tolerance": 0
+    }
+  ],
+  "convention_sensitive": ["metric_signature", "natural_units", "string_convention", "worldsheet_convention"],
+  "scripts_available": [
+    "scripts/dimensional_check.py",
+    "scripts/ward_identity_check.py",
+    "scripts/spot_check.py",
+    "scripts/symmetry_check.py"
+  ]
+}

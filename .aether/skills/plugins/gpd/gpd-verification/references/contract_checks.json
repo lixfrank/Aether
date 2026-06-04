@@ -1,0 +1,171 @@
+{
+  "gpd_source": {
+    "repo": "psi-oss/get-physics-done",
+    "path": "gpd/mcp/verification_contract_policy.py",
+    "commit": "to_be_pinned",
+    "cherry_pick_method": "semantic_equivalence"
+  },
+  "description": "Contract check schemas with binding targets, required_fields, and request_templates for systematic verification of PLAN.md contract sections",
+  "contract_checks": [
+    {
+      "id": "5.15",
+      "key": "limit_recovery",
+      "name": "Limit Recovery",
+      "binding_targets": ["observable", "claim", "deliverable", "acceptance_test"],
+      "required_fields": ["observable", "claim", "deliverable"],
+      "optional_fields": ["acceptance_test"],
+      "request_template": {
+        "observable": "The physical observable being tested in the limit (e.g., 'scattering amplitude at E→0')",
+        "claim": "The asserted limit behavior from PLAN.md (e.g., 'amplitude → 0 as E→0')",
+        "deliverable": "The computed/artifact expression to test (e.g., 'M(E) = g^2 * E / (E^2 + m^2)')",
+        "acceptance_test": "The acceptance criterion (e.g., '|limit - 0| < 1e-6')"
+      },
+      "verification_method": "Compute limit of deliverable using limiting_case_check.py; compare against claimed behavior; check acceptance_test threshold",
+      "verdicts": ["pass", "fail", "warning", "insufficient_evidence"]
+    },
+    {
+      "id": "5.16",
+      "key": "benchmark_reproduction",
+      "name": "Benchmark Reproduction",
+      "binding_targets": ["claim", "deliverable", "acceptance_test", "reference"],
+      "required_fields": ["claim", "deliverable", "reference"],
+      "optional_fields": ["acceptance_test"],
+      "request_template": {
+        "claim": "The claimed benchmark value (e.g., 'result = 0.1173 ± 0.0006')",
+        "deliverable": "The computed result (e.g., 'alpha_s(m_Z) = 0.1180')",
+        "acceptance_test": "Numerical tolerance (e.g., '|computed - reference| < 0.001')",
+        "reference": "Published benchmark source (e.g., 'PDG 2023: alpha_s = 0.1173')"
+      },
+      "verification_method": "Substitute numerical values from reference into deliverable; compare against claimed value within acceptance_test tolerance",
+      "verdicts": ["pass", "fail", "warning", "insufficient_evidence"]
+    },
+    {
+      "id": "5.17",
+      "key": "direct_proxy_consistency",
+      "name": "Direct-Proxy Consistency",
+      "binding_targets": ["claim", "deliverable", "acceptance_test", "forbidden_proxy"],
+      "required_fields": ["claim", "deliverable", "forbidden_proxy"],
+      "optional_fields": ["acceptance_test"],
+      "request_template": {
+        "claim": "Claim about direct-proxy relationship (e.g., 'proxy ≈ direct within 5%')",
+        "deliverable": "Both direct and proxy computation results (e.g., 'direct=0.95, proxy=0.93')",
+        "acceptance_test": "Consistency criterion (e.g., '|direct - proxy| / direct < 0.05')",
+        "forbidden_proxy": "List of proxy types that must NOT be used as sole evidence (e.g., ['perturbative approximation for non-perturbative regime'])"
+      },
+      "verification_method": "Compare direct measurement against proxy; verify no forbidden proxy is sole evidence source; check acceptance_test criterion",
+      "verdicts": ["pass", "fail", "warning", "insufficient_evidence"]
+    },
+    {
+      "id": "5.18",
+      "key": "fit_family_mismatch",
+      "name": "Fit Family Mismatch",
+      "binding_targets": ["observable", "claim", "deliverable", "acceptance_test"],
+      "required_fields": ["observable", "claim", "deliverable"],
+      "optional_fields": ["acceptance_test"],
+      "request_template": {
+        "observable": "The quantity being fit/extrapolated (e.g., 'cross section σ(E)')",
+        "claim": "The claimed fit family (e.g., 'power-law: σ ~ E^(-2)')",
+        "deliverable": "The fit result and family used (e.g., 'fitted as exponential: σ = A*exp(-E)')",
+        "acceptance_test": "Family agreement criterion (e.g., 'power-law exponent within ±0.1 of -2')"
+      },
+      "verification_method": "Compare deliverable's fit family against claimed family; test extrapolation behavior; verify acceptance_test",
+      "verdicts": ["pass", "fail", "warning", "insufficient_evidence"]
+    },
+    {
+      "id": "5.19",
+      "key": "estimator_family_mismatch",
+      "name": "Estimator Family Mismatch",
+      "binding_targets": ["observable", "claim", "deliverable", "acceptance_test"],
+      "required_fields": ["observable", "claim", "deliverable"],
+      "optional_fields": ["acceptance_test"],
+      "request_template": {
+        "observable": "The quantity being estimated (e.g., 'mass gap Δ')",
+        "claim": "The claimed estimator properties (e.g., 'unbiased estimator with variance < 0.1')",
+        "deliverable": "The estimator result and bias analysis (e.g., 'estimated Δ=0.45 with bias=0.02')",
+        "acceptance_test": "Bias/consistency criterion (e.g., 'bias < 0.01')"
+      },
+      "verification_method": "Compute estimator bias numerically; check against claimed properties; verify acceptance_test",
+      "verdicts": ["pass", "fail", "warning", "insufficient_evidence"]
+    },
+    {
+      "id": "5.20",
+      "key": "proof_hypothesis_coverage",
+      "name": "Proof Hypothesis Coverage",
+      "binding_targets": ["observable", "claim", "deliverable", "acceptance_test"],
+      "required_fields": ["observable", "claim", "deliverable"],
+      "optional_fields": ["acceptance_test"],
+      "request_template": {
+        "observable": "The mathematical object under proof (e.g., 'theorem T')",
+        "claim": "Set of hypotheses stated (e.g., 'H1: f continuous, H2: f bounded, H3: domain compact')",
+        "deliverable": "The proof text/logic addressing each hypothesis",
+        "acceptance_test": "Coverage completeness criterion (e.g., 'all hypotheses explicitly referenced')"
+      },
+      "verification_method": "Enumerate all hypotheses from claim; verify each is addressed in deliverable; check acceptance_test completeness",
+      "verdicts": ["pass", "fail", "warning", "insufficient_evidence"]
+    },
+    {
+      "id": "5.21",
+      "key": "proof_parameter_coverage",
+      "name": "Proof Parameter Coverage",
+      "binding_targets": ["observable", "claim", "deliverable", "acceptance_test"],
+      "required_fields": ["observable", "claim", "deliverable"],
+      "optional_fields": ["acceptance_test"],
+      "request_template": {
+        "observable": "The parameterized object under proof (e.g., 'P(α, β, γ)')",
+        "claim": "Parameter ranges (e.g., 'α ∈ [0,1], β > 0, γ ∈ ℝ')",
+        "deliverable": "The proof covering parameter ranges",
+        "acceptance_test": "Parameter coverage criterion (e.g., 'all parameter ranges explicitly handled')"
+      },
+      "verification_method": "Enumerate all parameter ranges from claim; verify each range is covered in deliverable; check acceptance_test",
+      "verdicts": ["pass", "fail", "warning", "insufficient_evidence"]
+    },
+    {
+      "id": "5.22",
+      "key": "proof_quantifier_domain",
+      "name": "Proof Quantifier Domain",
+      "binding_targets": ["observable", "claim", "deliverable", "acceptance_test"],
+      "required_fields": ["observable", "claim", "deliverable"],
+      "optional_fields": ["acceptance_test"],
+      "request_template": {
+        "observable": "The quantified statement (e.g., '∀x ∈ D: f(x) > 0')",
+        "claim": "Quantifier specifications (∀/∃ with domain) (e.g., '∀x ∈ ℝ⁺')",
+        "deliverable": "The proof covering quantifier domains",
+        "acceptance_test": "Domain matching criterion (e.g., 'proof domain = claim domain')"
+      },
+      "verification_method": "Extract quantifier domains from claim; verify proof covers same domains; check acceptance_test",
+      "verdicts": ["pass", "fail", "warning", "insufficient_evidence"]
+    },
+    {
+      "id": "5.23",
+      "key": "claim_to_proof_alignment",
+      "name": "Claim-to-Proof Alignment",
+      "binding_targets": ["observable", "claim", "deliverable", "acceptance_test"],
+      "required_fields": ["observable", "claim", "deliverable"],
+      "optional_fields": ["acceptance_test"],
+      "request_template": {
+        "observable": "The target of the claim (e.g., 'scattering amplitude M(s,t)')",
+        "claim": "The precise claim statement (e.g., 'M is analytic in s for fixed t')",
+        "deliverable": "The proof result (e.g., 'proof of analyticity in complex s-plane')",
+        "acceptance_test": "Alignment criterion (e.g., 'proof scope exactly matches claim scope')"
+      },
+      "verification_method": "Compare claim scope against proof scope; verify proof addresses exactly what claim asserts; check acceptance_test",
+      "verdicts": ["pass", "fail", "warning", "insufficient_evidence"]
+    },
+    {
+      "id": "5.24",
+      "key": "counterexample_search",
+      "name": "Counterexample Search",
+      "binding_targets": ["observable", "claim", "deliverable", "acceptance_test"],
+      "required_fields": ["observable", "claim", "deliverable"],
+      "optional_fields": ["acceptance_test"],
+      "request_template": {
+        "observable": "The claimed property/theorem (e.g., 'f(x) > 0 for all x ∈ D')",
+        "claim": "The universal or existential claim (e.g., '∀x ∈ [0,1]: f(x) ≥ ε')",
+        "deliverable": "The claimed result artifact (e.g., 'f(x) computed numerically for 1000 points')",
+        "acceptance_test": "No-counterexample criterion (e.g., 'no x found where f(x) < ε')"
+      },
+      "verification_method": "Systematically search for counterexamples using numerical spot-check at boundary values; verify no counterexample found within acceptance_test scope",
+      "verdicts": ["pass", "fail", "warning", "insufficient_evidence"]
+    }
+  ]
+}

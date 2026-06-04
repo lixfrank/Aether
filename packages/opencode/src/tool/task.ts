@@ -33,7 +33,6 @@ const parameters = z.object({
   delegation_depth: z.number().int().min(0).max(3).optional(),
   max_steps: z.number().int().min(1).max(50).optional(),
   timeout_seconds: z.number().int().min(30).max(600).optional(),
-  category: z.string().optional(),
 })
 
 async function promptWithFallback(input: {
@@ -166,13 +165,10 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       const msg = await MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID })
       if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
 
-      const categoryConfig = params.category ? config.category?.[params.category] : undefined
-      const categoryModel = categoryConfig?.model ? Provider.parseModel(categoryConfig.model) : undefined
-      const model = categoryModel ??
-        agent.model ?? {
-          modelID: msg.info.modelID,
-          providerID: msg.info.providerID,
-        }
+      const model = agent.model ?? {
+        modelID: msg.info.modelID,
+        providerID: msg.info.providerID,
+      }
 
       ctx.metadata({
         title: params.description,

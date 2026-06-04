@@ -34,14 +34,14 @@ Layer 5: Background Execution ─── 独立层（可延后实现）
 
 ## Layer 文档
 
-| Layer       | 文档                                 | 核心源文件改动                                                                                                                                                                                                                                                                                                                                    | 配置层文件                                                                                                                                        |
-| ----------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Layer 0** | `layer-0-core-security.md`           | permission/index.ts (+intersection), session/discipline.ts (新), tool/task.ts (参数扩展+权限重构+2新import+移除手工拼接代码块), agent/agent.ts (Info扩展+1新import,不含base_agent), session/system.ts (skill_refs追加+skill directory URL注入), config/config.ts (Agent schema+knownKeys+Info.category字段), util/python.ts (findOrInstallUv, 新) | 无                                                                                                                                                |
-| **Layer 1** | `layer-1-agent-infrastructure.md`    | permission/index.ts (+EDIT_TOOLS export), session/system.ts (outputDir函数), tool/task.ts (fallback+promptWithFallback), config/config.ts (mcp+output_dir字段), agent/agent.ts (mcp+outputDir字段+merge), session/prompt.ts (outputDir调用+MCP过滤+denied过滤)                                                                                    | 无                                                                                                                                                |
-| **Layer 2** | `layer-2-research-config.md`         | **零**                                                                                                                                                                                                                                                                                                                                            | agents/research.md, research-explorer.md, research-verifier.md, gpd-verifier.md, gpd-reviewer.md (flat + prefix) + skills (多模式, plugins/ 隔离) |
-| **Layer 3** | `layer-3-research-infrastructure.md` | **零**（Layer 0 微改动 findOrInstallUv + skill_refs path injection 作为前置）                                                                                                                                                                                                                                                                     | ~/.aether/mcp/ (MCP服务器源码) + .aether/skill/ (通用+插件) + .aether/research/persistence/ (项目持久化)                                          |
-| **Layer 4** | `layer-4-publication-pipeline.md`    | **零**                                                                                                                                                                                                                                                                                                                                            | .aether/agent/gpd-paper-writer.md, gpd-referee.md + .aether/skill/ 3个skill                                                                       |
-| **Layer 5** | `layer-5-background-execution.md`    | session/background.ts (新), session/background.sql.ts (新), tool/background-output.ts (新), tool/task.ts (background分支), tool/registry.ts (+background_output), session/projectors.ts (+2 projector+修改现有Session.Delete函数体追加清理)                                                                                                       | 无                                                                                                                                                |
+| Layer       | 文档                                 | 核心源文件改动                                                                                                                                                                                                                                                                                                        | 配置层文件                                                                                                                                        |
+| ----------- | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Layer 0** | `layer-0-core-security.md`           | permission/index.ts (+intersection), session/discipline.ts (新), tool/task.ts (参数扩展+权限重构+移除手工拼接代码块), agent/agent.ts (Info扩展+1新import,不含base_agent), session/system.ts (skill_refs追加+skill directory URL注入), config/config.ts (Agent schema+knownKeys), util/python.ts (findOrInstallUv, 新) | 无                                                                                                                                                |
+| **Layer 1** | `layer-1-agent-infrastructure.md`    | permission/index.ts (+EDIT_TOOLS export), session/system.ts (outputDir函数), tool/task.ts (fallback+promptWithFallback), config/config.ts (mcp+output_dir字段), agent/agent.ts (mcp+outputDir字段+merge), session/prompt.ts (outputDir调用+MCP过滤+denied过滤)                                                        | 无                                                                                                                                                |
+| **Layer 2** | `layer-2-research-config.md`         | **零**                                                                                                                                                                                                                                                                                                                | agents/research.md, research-explorer.md, research-verifier.md, gpd-verifier.md, gpd-reviewer.md (flat + prefix) + skills (多模式, plugins/ 隔离) |
+| **Layer 3** | `layer-3-research-infrastructure.md` | **零**（Layer 0 微改动 findOrInstallUv + skill_refs path injection 作为前置）                                                                                                                                                                                                                                         | ~/.aether/mcp/ (MCP服务器源码) + .aether/skills/ (通用+插件) + .aether/research/persistence/ (项目持久化)                                         |
+| **Layer 4** | `layer-4-publication-pipeline.md`    | **零**                                                                                                                                                                                                                                                                                                                | .aether/agent/gpd-paper-writer.md, gpd-referee.md + .aether/skills/ 3个skill                                                                      |
+| **Layer 5** | `layer-5-background-execution.md`    | session/background.ts (新), session/background.sql.ts (新), tool/background-output.ts (新), tool/task.ts (background分支), tool/registry.ts (+background_output), session/projectors.ts (+2 projector+修改现有Session.Delete函数体追加清理)                                                                           | 无                                                                                                                                                |
 
 ---
 
@@ -52,7 +52,9 @@ Layer 5: Background Execution ─── 独立层（可延后实现）
 旧版 research.md 包含 300+ 行 prompt_append 嵌入完整 6-phase 工作流。新版:
 
 - Research agent 定义文件约 50 行 prompt_append（核心约束 + 模式路由指引 + Scale Decision 文本）
-- 具体工作流通过 skill_refs 引用独立 skill: deep-research、autoresearch、literature-review、execute-docker
+- Research agent 无 skill_refs 白名单限制（作为 primary agent，应自由访问所有 skills）
+- 具体工作流通过 skill 路由指引（markdown body 中列出的模式路由表）而非 skill_refs 硬限制
+- Subagents 使用 skill_refs 限制可见 skill 范围（research-explorer 仅见 alpha-research + arxiv-search）
 - Integrity Commandments 移入 research-explorer subagent 的 prompt_append（不再嵌入主 agent）
 - scale_decision 作为 prompt_append 内文本（不再需要核心代码注入，零核心文件改动）
 
@@ -149,12 +151,12 @@ Layer 2-3 的组件分为两个命名层：
 
 ### 插件目录约定（Skills 隔离，Agents 保持 flat）
 
-**Skills** 放在 `.aether/skill/plugins/<plugin>/` 子目录中，利用 OpenCode 的 `**/SKILL.md` glob 发现 + frontmatter `name` 字段命名，**零代码改动**即可实现隔离：
+**Skills** 放在 `.aether/skills/plugins/<plugin>/` 子目录中，利用 OpenCode 的 `**/SKILL.md` glob 发现 + frontmatter `name` 字段命名，**零代码改动**即可实现隔离：
 
 ```
-.aether/skill/plugins/gpd/gpd-verification/SKILL.md  → skill name: "gpd-verification"（来自 frontmatter）
-.aether/skill/plugins/gpd/gpd-errors/SKILL.md        → skill name: "gpd-errors"
-.aether/skill/plugins/bio/bio-verification/SKILL.md   → skill name: "bio-verification"
+.aether/skills/plugins/gpd/gpd-verification/SKILL.md  → skill name: "gpd-verification"（来自 frontmatter）
+.aether/skills/plugins/gpd/gpd-errors/SKILL.md        → skill name: "gpd-errors"
+.aether/skills/plugins/bio/bio-verification/SKILL.md   → skill name: "bio-verification"
 ```
 
 **Agents** 保持 flat 结构 + 前缀命名（因为 agent name 由路径推导，嵌套路径会产生丑名，改动成本高于收益）：
@@ -189,9 +191,8 @@ Layer 2-3 的组件分为两个命名层：
 7. skillRefs 替换广播，有 skillRefs 时只注入指定 skill（含 skill directory URL）；无 skillRefs 时输出与 v0.6.0 一致
 8. sessionPermission 通过 Session.create({permission}) 传递后，运行时 Permission.disabled 正确硬删除 denied 工具
 9. primary_tools deny 规则追加在 sessionPermission 末尾，子代理不可用 primary_tools（与 v0.6.0 行为一致）
-10. category 路由无效 model 时 → 静默 fallback
-11. Config.Agent 新字段在 knownKeys 白名单中，不落入 options；Config.Info 的 category 字段在 .strict() schema 中正确定义
-12. findOrInstallUv() 自动安装 uv 到 ~/.aether/bin/uv（Layer 3 前置）
+10. Config.Agent 新字段在 knownKeys 白名单中，不落入 options
+11. findOrInstallUv() 自动安装 uv 到 ~/.aether/bin/uv（Layer 3 前置）
 
 ### Layer 1 验收
 

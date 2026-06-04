@@ -25,7 +25,7 @@
 ## 设计原则
 
 - **多模式而非单巨型 agent**: Research agent 是**简短定义文件 + 多个可调用工作流模式**
-- **每个模式是独立 skill**: deep-research、autoresearch、literature-review、execute-docker 等是 research agent 可调用的 skill，而非嵌入在一个巨型 prompt 中
+- **每个模式是独立 skill**: deep-research、autoresearch、literature-review、sandbox-executor 等是 research agent 可调用的 skill 或 subagent，而非嵌入在一个巨型 prompt 中
 - **research-explorer**: 子代理名称改为 research-explorer（不再叫 researcher）
 - **灵活验证**: verifier 子代理使用 MCP 服务器提供的验证方案，用户可自定义验证方案
 - **bash 权限统一使用 env_scope**: 不再在 permission 中手动声明 bash 规则，改为 env_scope.allowed_commands 编译为 deny-before-allow Ruleset
@@ -45,11 +45,12 @@
 Research agent 定义文件**不包含**完整工作流 prompt（不再 600+ 行）。它只包含:
 
 1. 权限配置（手动声明，不使用 base_agent 继承；bash 权限使用 env_scope 而非 permission 手动声明；MCP 权限使用 wildcard 模式）
-2. skill_refs 白名单（列出可调用的工作流模式）
-3. **markdown body** 中的 prompt（核心约束 + 模式路由指引 + Scale Decision 文本）
-4. MCP 配置
-5. output_dir 配置（输出目录路径）
-6. env_scope 配置（bash 命令白名单）
+2. **markdown body** 中的 prompt（核心约束 + 模式路由指引 + Scale Decision 文本）
+3. MCP 配置
+4. output_dir 配置（输出目录路径）
+5. env_scope 配置（bash 命令白名单）
+
+> **关键**：research 作为 primary agent 应有自由使用所有 skills 的权限，无需 skill_refs 白名单限制。skill_refs 仅用于 subagent（限制其可见 skill 范围）。
 
 > **关键**：`prompt_append` 不是 Config.Agent knownKeys 字段，会落入 `options` 且无注入机制。所有 prompt 内容必须放在 **markdown body**（YAML frontmatter 之后的文本），由 `loadAgent()` 的 `prompt: md.content.trim()` 自动设为 `prompt` 字段，经 `llm.ts:107` 的 `input.agent.prompt ? [input.agent.prompt]` 注入到 system prompt。YAML frontmatter 仅存放 config 字段。
 
@@ -77,19 +78,6 @@ permission:
   external_directory: ask
   research_conventions_*: allow
   research_state_*: allow
-skill_refs:
-  - deep-research
-  - autoresearch
-  - literature-review
-  - execute-docker
-  - source-comparison
-  - paper-code-audit
-  - alpha-research
-  - arxiv-search
-  - docker
-  - gpd-conventions
-  - gpd-verification
-  - gpd-errors
 fallback_models:
   - anthropic/claude-sonnet-4-5
 mcp:
@@ -120,7 +108,7 @@ You have access to specialized research workflow skills. Route based on intent:
 - **Quick lookup** → Use alpha-research or arxiv-search skill directly. No subagents.
 - **Deep research** → Invoke /deep-research skill. Uses research-explorer subagents.
 - **Systematic literature review** → Invoke /literature-review skill. Uses research-explorer subagents + structured review protocol.
-- **Experiment execution** → Invoke /execute-docker skill. Uses docker sandbox.
+- **Experiment execution** → Dispatch sandbox-executor subagent via task tool. Uses docker sandbox.
 - **Autonomous experiment loop** → Invoke /autoresearch skill. Limited: planning only, no automated edit→run→log loops yet.
 - **Source comparison** → Invoke /source-comparison skill.
 - **Paper-code audit** → Invoke /paper-code-audit skill.
@@ -317,7 +305,7 @@ VERIFICATION.md must contain at least one executed code block with actual output
 
 继承 research-verifier 的通用框架，添加物理领域验证 skills。物理研究用户使用此 agent，非物理用户使用 research-verifier。
 
-**文件组织约定**：Agents 保持 flat 结构 + 前缀命名（因为 agent name 由路径推导，嵌套路径会产生丑名）。Skills 放在 `.aether/skill/plugins/gpd/` 子目录中（skill name 由 frontmatter 决定，不受路径影响）。
+**文件组织约定**：Agents 保持 flat 结构 + 前缀命名（因为 agent name 由路径推导，嵌套路径会产生丑名）。Skills 放在 `.aether/skills/plugins/gpd/` 子目录中（skill name 由 frontmatter 决定，不受路径影响）。
 
 ````md
 ---
@@ -387,7 +375,7 @@ Follow research-verification core procedure, then apply physics-specific checks:
 ## Script Invocation
 
 ```bash
-python .aether/skill/plugins/gpd/gpd-verification/scripts/dimensional_check.py --input '<JSON>'
+python .aether/skills/plugins/gpd/gpd-verification/scripts/dimensional_check.py --input '<JSON>'
 ```
 ````
 
@@ -456,7 +444,10 @@ permission:
   codesearch: allow
   read: allow
   external_directory: ask
-skill_refs: []
+skill_refs:
+  - gpd-errors
+  - gpd-conventions
+  - gpd-domain-check
 ---
 
 <system-reminder>
@@ -482,12 +473,12 @@ Cleanup: `docker stop <name> && docker rm <name>`
 
 | Skill | 文件 | 状态 |
 |---|---|---|
-| alpha-research | `.aether/skill/alpha-research/SKILL.md` | 已存在，auth-first + arxiv fallback |
-| arxiv-search | `.aether/skill/arxiv-search/SKILL.md` | 已存在 |
-| source-comparison | `.aether/skill/source-comparison/SKILL.md` | 已存在，mode-aware |
-| paper-code-audit | `.aether/skill/paper-code-audit/SKILL.md` | 已存在，mode-aware |
-| docker | `.aether/skill/docker/SKILL.md` | 已存在，工具性 skill（确定 docker 环境、编译项目、执行隔离计算） |
-| execute-docker | `.aether/skill/execute-docker/SKILL.md` | 新增，工作流 skill（在已有研究计划下，docker 隔离环境具体执行+验证结果，依赖 docker skill） |
+| alpha-research | `.aether/skills/alpha-research/SKILL.md` | 已存在，auth-first + arxiv fallback |
+| arxiv-search | `.aether/skills/arxiv-search/SKILL.md` | 已存在 |
+| source-comparison | `.aether/skills/source-comparison/SKILL.md` | 已存在，mode-aware |
+| paper-code-audit | `.aether/skills/paper-code-audit/SKILL.md` | 已存在，mode-aware |
+| docker | `.aether/skills/docker/SKILL.md` | 已存在，工具性 skill（确定 docker 环境、编译项目、执行隔离计算） |
+| sandbox-executor | `.aether/agent/sandbox-executor.md` | 新增，subagent（在已有研究计划下，docker 隔离环境具体执行+验证结果，依赖 docker skill + research-verification skill） |
 | gpd-conventions | 新增 skill（约定程序 + MCP 状态层） | Layer 3 创建 |
 | gpd-verification | 新增 skill（验证程序 + scripts 确定性计算） | Layer 3 创建 |
 | gpd-errors | 新增 skill（错误目录 + references 数据） | Layer 3 创建 |
@@ -501,7 +492,7 @@ Cleanup: `docker stop <name> && docker rm <name>`
 
 T2.1: research.md 存在时，Agent.list() 包含 research agent
 T2.2: 从 UI dropdown 选择 research 后，permission 被 intersection 约束
-T2.3: 从 UI dropdown 选择 research 后，skill_refs 生效（替换广播，只看到 skillRefs 指定的 skill 完整注入，无广播列表）
+T2.3: 从 UI dropdown 选择 research 后，skill\*refs 生效（替换广播，只看到 skillRefs 指定的 skill 完整注入，无广播列表）
 T2.4: 从 UI dropdown 选择 research 后，env_scope.allowed_commands 生效（bash 限制到 alpha/docker 等，env_scope 编译为 deny-before-allow 规则）
 T2.5: /deep-research skill 被调用时，完整工作流执行
 T2.6: research-explorer subagent 可通过 task tool 调用
@@ -512,11 +503,11 @@ T2.10: research-verifier skill_refs 仅含 research-verification（通用）
 T2.11: gpd-verifier skill_refs 含 research-verification + 4 个 gpd-\* skills（物理插件）
 T2.12: gpd-verifier 使用 gpd-verification scripts 执行确定性物理验证
 T2.13: gpd-verifier 使用 research-conventions MCP 进行约定锁读写
-T2.13b: MCP 工具权限使用 wildcard 模式（research_conventions*_），Permission.evaluate 正确匹配 MCP 工具 ID
+T2.13b: MCP 工具权限使用 wildcard 模式（research_conventions\**），Permission.evaluate 正确匹配 MCP 工具 ID
 T2.14: gpd-reviewer subagent 可通过 task tool 调用
-T2.15: Scale Decision 文本作为 prompt（markdown body）内容注入（无核心代码 scale_decision 字段；prompt 来自 loadAgent() 的 md.content.trim()）
+T2.15: Scale Decision 文本作为 prompt（markdown body）内容注入（无核心代码 scale*decision 字段；prompt 来自 loadAgent() 的 md.content.trim()）
 T2.16: 不使用 research agent 时，build/plan/general/explore 行为完全不变
-T2.17: 删除 .aether/agent/research_.md 后，所有 native agent 行为不变
+T2.17: 删除 .aether/agent/research\*.md 后，所有 native agent 行为不变
 T2.18: 非物理领域用户可仅使用 research-verifier（无 gpd-\* 插件）
 
 ```

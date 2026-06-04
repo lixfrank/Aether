@@ -1,0 +1,58 @@
+{
+  "name": "Perturbation Theory",
+  "description": "Systematic computation method for perturbative expansions in QFT and related fields",
+  "steps": [
+    {
+      "step": 1,
+      "action": "Identify the expansion parameter (coupling α, λ, g) and verify it is small enough for perturbation theory to be valid",
+      "checkpoint": "Is α < 1? Is the expansion parameter the correct physical coupling?"
+    },
+    {
+      "step": 2,
+      "action": "Determine the order of expansion needed (tree-level, one-loop, two-loop) based on the claim and accuracy requirements",
+      "checkpoint": "Does the claim specify the required order? Does the deliverable match this order?"
+    },
+    {
+      "step": 3,
+      "action": "Draw Feynman diagrams for all diagrams at the desired order using the correct Feynman rules for the chosen gauge and conventions",
+      "checkpoint": "All diagrams accounted for? No missing topology? Correct vertex factors for gauge choice?"
+    },
+    {
+      "step": 4,
+      "action": "Write the amplitude for each diagram, tracking momentum flow, vertex factors, and propagators consistent with convention lock",
+      "checkpoint": "ASSERT_CONVENTION line present? Metric signature consistent? Propagator form matches gauge choice?"
+    },
+    {
+      "step": 5,
+      "action": "Regularize divergences (dimensional regularization, cutoff, Pauli-Villars) consistent with the chosen renormalization scheme",
+      "checkpoint": "Regularization matches renormalization_scheme from lock? ε poles correctly tracked?"
+    },
+    {
+      "step": 6,
+      "action": "Apply renormalization conditions (on-shell, MS-bar, MOM) to define counterterms and subtract divergences",
+      "checkpoint": "Counterterm definitions match renormalization_scheme? No double-counting of subtractions?"
+    },
+    {
+      "step": 7,
+      "action": "Compute the finite remainder at the desired order and verify it matches the claimed result",
+      "checkpoint": "Use spot_check.py for numerical verification. Compare against literature benchmarks."
+    }
+  ],
+  "red_flags": [
+    "Expansion parameter α > 1 — perturbation theory not valid",
+    "Missing diagrams at given order (e.g., forgetting crossed channels)",
+    "Using tree-level Feynman rules for loop diagrams",
+    "Wrong symmetry factor (identical particles, ghosts)",
+    "Gauge parameter ξ appearing in physical observables",
+    "UV divergence treated inconsistently (mixing regularization schemes)",
+    "IR divergence not handled (massless particles, soft limits)",
+    "Counterterm subtraction at wrong order (over/under subtraction)",
+    "Mixing renormalization schemes within same calculation",
+    "Wrong spin sum / polarization sum (using wrong convention for ε^μ)"
+  ],
+  "common_errors": [
+    "E03: Ward identity violation",
+    "E05: Gauge parameter in observable",
+    "E02: Metric signature flip in propagator"
+  ]
+}

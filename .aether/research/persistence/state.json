@@ -1,0 +1,17 @@
+{
+  "phase": null,
+  "plan_number": null,
+  "convention_lock": {},
+  "project_contract": {
+    "claims": [],
+    "deliverables": [],
+    "acceptance_tests": [],
+    "forbidden_proxies": []
+  },
+  "progress": {
+    "phases_completed": 0,
+    "total_phases": 0
+  },
+  "created_at": null,
+  "last_updated": null
+}

@@ -1,0 +1,39 @@
+{
+  "name": "Limiting Cases",
+  "description": "Systematic procedure for computing and verifying limits of physical expressions",
+  "steps": [
+    {
+      "step": 1,
+      "action": "Identify the limit scenario: which variable → what value (0, ∞, specific threshold)",
+      "checkpoint": "Limit variable and target value specified? Physical context for the limit?"
+    },
+    {
+      "step": 2,
+      "action": "State the expected limit behavior from theory or prior knowledge",
+      "checkpoint": "Expected limit value documented? Is it from a reliable source (textbook, literature)?"
+    },
+    {
+      "step": 3,
+      "action": "Run limiting_case_check.py with the expression and limit specification",
+      "checkpoint": "Script computes sympy.limit() — actual computation, not keyword guessing"
+    },
+    {
+      "step": 4,
+      "action": "Compare computed limit against expected behavior",
+      "checkpoint": "Match? If not, is the discrepancy due to wrong expression or wrong expectation?"
+    },
+    {
+      "step": 5,
+      "action": "Check multiple limits (zero, infinity, threshold) if the expression is used in different regimes",
+      "checkpoint": "All relevant limits verified? No regime where expression behaves unexpectedly?"
+    }
+  ],
+  "red_flags": [
+    "Expression that diverges at a limit where physical observable should be finite",
+    "Limit that depends on the order of taking limits (non-commuting limits)",
+    "Wrong asymptotic power (e.g., 1/x instead of 1/x²)",
+    "Limit that doesn't match known physical behavior (e.g., cross section → 0 at threshold)",
+    "Numerical limit disagrees with symbolic limit"
+  ],
+  "common_errors": ["E02: Metric signature affecting limit signs", "E04: Wrong limit order"]
+}

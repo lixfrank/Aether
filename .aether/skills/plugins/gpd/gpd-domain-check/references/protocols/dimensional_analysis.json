@@ -1,0 +1,39 @@
+{
+  "name": "Dimensional Analysis",
+  "description": "Systematic dimension tracking procedure for physics expressions",
+  "steps": [
+    {
+      "step": 1,
+      "action": "Identify all symbols in the expression and their physical dimensions from research context",
+      "checkpoint": "Every symbol has a dimension assignment? Unknown symbols flagged?"
+    },
+    {
+      "step": 2,
+      "action": "Construct dimension_map: {symbol_name: dimension_string} where dimension_string uses [M], [L], [T], [E] notation or natural-unit equivalents",
+      "checkpoint": "dimension_map is complete and consistent with natural_units convention lock? In natural units: mass [E], length [E⁻¹], time [E⁻¹]"
+    },
+    {
+      "step": 3,
+      "action": "Run dimensional_check.py with the expression and dimension_map",
+      "checkpoint": "Script returns status: pass/fail/warning. No dimension_map → warning with confidence 0.3 (cannot verify)"
+    },
+    {
+      "step": 4,
+      "action": "If script returns fail, investigate: wrong dimension assignment, algebraic error, or convention mismatch",
+      "checkpoint": "Root cause identified? Fix dimension_map or expression before proceeding"
+    },
+    {
+      "step": 5,
+      "action": "Verify final expression has correct overall dimensions (e.g., cross section has [E⁻²] in natural units)",
+      "checkpoint": "Overall dimension matches expected physical quantity"
+    }
+  ],
+  "red_flags": [
+    "Expression with mixed natural/SI dimensions without explicit conversion",
+    "Dimensionless quantity that has non-zero computed dimensions",
+    "Dimensions that don't match known scaling behavior (e.g., wrong power of energy)",
+    "Missing ℏ or c factors in natural-unit expressions applied to dimensional quantities",
+    "Adding quantities with different dimensions (e.g., mass + length)"
+  ],
+  "common_errors": ["E02: Metric signature affecting dimension signs", "E06: Wrong dimension assignment"]
+}
