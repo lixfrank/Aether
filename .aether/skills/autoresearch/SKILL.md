@@ -42,11 +42,10 @@ This skill implements phase_execution of the Path 3 research state machine. It i
 Probe the host system for available software:
 
 ```bash
-python3 --version 2>/dev/null || echo "python: not available"
 uv --version 2>/dev/null || echo "CRITICAL: uv not available — Python tasks cannot be isolated; report as critical gap"
+uv python list 2>/dev/null || echo "uv python management: not available"
 docker --version 2>/dev/null || echo "docker: not available"
 wolframscript --version 2>/dev/null || echo "wolframscript: not available"
-nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null || echo "gpu: not available"
 ```
 
 Record results for ENVIRONMENT.md host_system section.
@@ -83,11 +82,10 @@ cycle: [N]
 
 host_system:
   os: "[e.g., macOS 15.5 (Apple Silicon aarch64)]"
-  python: { available: true|false, versions: ["..."], default: "..." }
+  uv: { available: true|false, version: "..." }
+  uv_python: { available: true|false, versions: ["..."] }
   docker: { available: true|false, desktop: true|false, version: "..." }
   wolframscript: { available: true|false, version: "..." }
-  uv: { available: true|false, version: "..." }
-  gpu: { available: true|false }
 
 plan_requirements: [copied from PLAN.md environment_requirements]
 

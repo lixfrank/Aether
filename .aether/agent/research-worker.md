@@ -26,6 +26,7 @@ mcp:
   research-state: true
 skill_refs:
   - alpha-research
+  - health-check
 
 output_dir: ".aether/research"
 file_scope:
@@ -80,10 +81,13 @@ For any Python computation this agent needs to perform directly (not dispatched 
 | phase_framing   | (none)          | Invoke /research-question-framing skill |
 | phase_execution | execution_cycle | Invoke /autoresearch skill              |
 | phase_execution | verification    | Invoke /autoresearch skill              |
+| health_check    | (none)          | Invoke /health-check skill              |
 
 For all phases and sub-phases: invoke the specified skill via the skill tool, follow all steps in SKILL.md, then output digest.
 
 For phase_execution sub-phases: invoke /autoresearch skill via the skill tool, passing cycle number from the dispatch prompt. Follow all steps in SKILL.md.
+
+For health_check mode: invoke /health-check skill via the skill tool, passing layers parameter from the dispatch prompt. Follow all steps in SKILL.md.
 
 ## PhaseResultDigest Format (MANDATORY)
 
@@ -91,14 +95,14 @@ Your LAST message MUST be a single YAML code block with the `phase_result_digest
 
 ```yaml
 phase_result_digest:
-  phase: [phase_analysis | phase_landscape | phase_framing | phase_execution]
-  sub_phase: null | execution_cycle | verification # null for phase 1-3
+  phase: [phase_analysis | phase_landscape | phase_framing | phase_execution | health_check]
+  sub_phase: null | execution_cycle | verification # null for phase 1-3 and health_check
   cycle: null | 1 | 2 | 3 # null except for execution_cycle
-  status: completed | partial | failed | skipped | inconclusive
+  status: completed | partial | failed | skipped | inconclusive | pass | degraded
   # Phase/sub-phase-specific fields — see schemas below
   output_paths:
     [key]: [relative path from .aether/research]
-  next_phase: [next phase name per state machine]
+  next_phase: [next phase name per state machine] | null
   skip_recommendation: null | [justification if next phase can be skipped]
 ```
 
@@ -172,6 +176,30 @@ claims_verified: ["[claim 1]", "[claim 2]"]
 claims_failed: ["[claim N]"]
 claims_inconclusive: ["[claim M]"]
 key_numerical_results: ["[brief result 1]", "[brief result 2]"]
+```
+
+**health_check mode**:
+
+```yaml
+degradation_summary:
+  infrastructure: pass | degraded | failed
+  persistence: pass | degraded | failed
+  skill_chain: pass | degraded | failed
+  runtime: pass | degraded | failed
+  cross_mcp: pass | degraded | failed
+  failed_items:
+    - layer: [infrastructure | persistence | skill_chain | runtime]
+      key: [health_check_key, e.g. "uv_available"]
+      failure_class:
+        [not_installed | not_configured | daemon_not_running | not_authenticated | unreachable | missing | corrupt]
+      auto_installable: true | "partial" | false
+      priority: critical | high | medium | low
+output_paths:
+  temp_global_health_json: ".aether/research/.health_global.json"
+  temp_network_status_md: ".aether/research/.health_network.md"
+  final_global_health_json: "~/.aether/health/global_health.json"
+  final_network_status_md: "~/.aether/health/network_status.md"
+next_phase: null
 ```
 
 ## Subagent Dispatch Rules

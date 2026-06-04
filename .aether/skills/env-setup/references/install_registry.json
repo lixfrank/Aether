@@ -1,0 +1,78 @@
+{
+  "uv": {
+    "auto_installable": true,
+    "platforms": {
+      "macos": "curl -LsSf https://astral.sh/uv/install.sh | sh",
+      "linux": "curl -LsSf https://astral.sh/uv/install.sh | sh"
+    },
+    "verify_command": "uv --version",
+    "post_install_note": "可能需要重新启动 shell 或 source ~/.bashrc/~/.zshrc；同一进程的 PATH 可能未更新，若 verify 失败请建议用户 source 或重开终端",
+    "layer": "infrastructure",
+    "health_check_key": "uv_available",
+    "priority": "critical"
+  },
+  "git": {
+    "auto_installable": true,
+    "platforms": {
+      "macos": "brew install git",
+      "linux": "sudo apt-get install -y git || sudo yum install -y git"
+    },
+    "verify_command": "git --version",
+    "post_install_note": null,
+    "layer": "infrastructure",
+    "health_check_key": "git_available",
+    "priority": "high"
+  },
+  "git_init": {
+    "auto_installable": true,
+    "platforms": {
+      "macos": "git init",
+      "linux": "git init"
+    },
+    "verify_command": "git rev-parse --git-dir",
+    "post_install_note": null,
+    "layer": "infrastructure",
+    "health_check_key": "git_working_dir",
+    "condition": "git_available == pass AND git_working_dir == fail",
+    "priority": "high"
+  },
+  "docker": {
+    "auto_installable": true,
+    "platforms": {
+      "macos": "brew install --cask docker",
+      "linux": "curl -fsSL https://get.docker.com | sh"
+    },
+    "verify_command": "docker version --format '{{.Client.Version}}'",
+    "post_install_note": "macOS 安装后需打开 Docker Desktop 应用；Linux 需 sudo systemctl start docker 启动 daemon",
+    "layer": "infrastructure",
+    "health_check_key": "docker_cli",
+    "priority": "medium"
+  },
+  "docker_daemon": {
+    "auto_installable": true,
+    "platforms": {
+      "macos": "open -a Docker",
+      "linux": "sudo systemctl start docker"
+    },
+    "verify_command": "docker info --format '{{.ServerVersion}}'",
+    "verify_delay_seconds": 30,
+    "post_install_note": "Docker Desktop 启动需要时间，将在 30 秒后验证 daemon 是否就绪",
+    "layer": "infrastructure",
+    "health_check_key": "docker_daemon",
+    "condition": "docker_cli == pass AND docker_daemon == fail",
+    "priority": "medium"
+  },
+  "alpha_cli": {
+    "auto_installable": "partial",
+    "platforms": {
+      "macos": "brew install alpha || npm install -g @anthropic/alpha",
+      "linux": "npm install -g @anthropic/alpha"
+    },
+    "verify_command": "alpha status",
+    "post_install_note": "安装完成后需手动执行 `alpha login` 完成认证",
+    "manual_step": "alpha login",
+    "layer": "infrastructure",
+    "health_check_key": "alpha_cli",
+    "priority": "low"
+  }
+}

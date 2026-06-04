@@ -21,7 +21,7 @@ describe("seedDefaultAssets — incremental seeding logic", () => {
     const state = await fs.readFile(statePath, "utf-8").catch(() => null)
     if (!state) return
     const parsed = JSON.parse(state)
-    const validSubdirs = ["agent", "mcp", "skills"]
+    const validSubdirs = ["agent", "mcp", "skills", "health"]
     for (const entry of parsed.seeded) {
       expect(validSubdirs.includes(entry)).toBe(true)
     }

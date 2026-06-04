@@ -477,6 +477,8 @@ export async function seedDefaultAssets(): Promise<void> {
   const subdirs = ["agent", "mcp"]
   const skillsDir = path.join(sourceDir, "skills")
   if (existsSync(skillsDir)) subdirs.push("skills")
+  const healthDir = path.join(sourceDir, "health")
+  if (existsSync(healthDir)) subdirs.push("health")
 
   let updated = 0
   const seeded: string[] = []

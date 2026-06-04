@@ -427,17 +427,114 @@ If coordinator dispatch worker fails:
 
 On session start:
 
-1. Read `.aether/research/persistence/STATE.md`, `state.json`, `DIGESTS.md`, and `ENVIRONMENT.md` (if exists)
-2. If an active project exists (phase ≠ "not yet started"):
-   - Resume from the current phase
-   - Do NOT re-run the gate
-   - Read DIGESTS.md to understand completed phases' summaries (NOT full output files)
-   - If ENVIRONMENT.md exists: note venv_state for reuse in next cycle
-   - If current phase is phase_execution: check DIGESTS.md for execution_cycle and verification digests to determine current cycle number and status
-   - Dispatch research-worker for the current phase or next execution sub-phase based on STATE.md and digests
-   - Perform consistency check: verify state.json.phase matches DIGESTS.md's last digest phase; if mismatch, reconcile via advance_plan
-3. If no active project:
-   - Run the Entry Gate for the first user prompt
+1. **Tier 0: LLM Bootstrap** — bash: `uv --version`
+   - If uv available → proceed to Tier 0.5
+   - If uv not available → enter LLM-only bootstrap mode:
+     a. Inform user: "uv 不可用，MCP 工具无法启动。uv 是所有 Python 计算的基础依赖。"
+     b. Load env-setup skill, ask user whether to auto-install uv (per-item authorization)
+     c. User agrees → execute: `curl -LsSf https://astral.sh/uv/install.sh | sh`
+     d. Re-check `uv --version` → if still unavailable → suggest user `source ~/.bashrc` or restart terminal
+     e. uv ultimately available → proceed to Tier 0.5
+     f. User declines → continue in LLM-only mode (no MCP, no Python, no SymPy, no Docker). Mark STATE.md `infrastructure: degraded`
+
+2. **Tier 0.5: Cache validity + global directory pre-creation**
+   a. bash: `bash ~/.aether/health/cache_check.sh` (seeded by `seedDefaultAssets()` from `.aether/health/` at CLI startup)
+   b. exit 0 (cache valid) → read `~/.aether/health/global_health.json` cache, skip steps 3-5
+   c. exit 1 (cache expired or missing) → pre-create global health directory (D18):
+   - bash: `mkdir -p ~/.aether/health`
+   - write: `~/.aether/health/global_health.json` (empty placeholder `{}`)
+   - write: `~/.aether/health/network_status.md` (empty placeholder)
+     → This triggers write permission for `~/.aether/health/` once; subsequent overwrites won't ask again
+
+3. **Tier 1-3: Dispatch worker** — `task(subagent_type: "research-worker", prompt: "mode=health_check, layers=[\"infrastructure\",\"persistence\",\"skill_chain\"]")`
+
+4. Wait for worker to return health_check PhaseResultDigest
+
+5. **Migrate temp files to global location** (D17):
+   a. Read digest.output_paths.temp_global_health_json → write `~/.aether/health/global_health.json`
+   b. Read digest.output_paths.temp_network_status_md → write `~/.aether/health/network_status.md`
+   c. bash: `rm .aether/research/.health_global.json .aether/research/.health_network.md`
+
+6. **Process digest** (see Health Check Digest Processing below):
+   - pass → DO NOT update Next Action, continue original workflow
+   - degraded → backup Next Action to Blockers, update Next Action to degradation summary, per-item env-setup authorization → re-dispatch worker after install
+   - failed → backup Next Action, update Next Action to critical failure summary, wait for manual fix
+
+7. Write STATE.md Health Status section (per-layer pass/fail/degraded + pointers to global_health.json and network_status.md)
+
+8. (Existing flow continues: Read STATE.md, state.json, DIGESTS.md, ENVIRONMENT.md...)
+
+On user requests "检查环境" or "health check" (during active workflow):
+
+1. Dispatch research-worker(mode=health_check, layers=None) → wait for digest
+2. Migrate temp files (same as step 5 above)
+3. Update STATE.md Health Status section
+4. **DO NOT update Next Action** — informational only, does not change workflow progress
+5. If degradation found → inform user, but do NOT proactively enter env-setup flow
+
+On user says "我已补充环境" / "我安装了缺失的 xxx":
+
+1. Dispatch research-worker(mode=health_check, layers=None) → wait for digest (full re-check)
+2. Migrate temp files
+3. If digest.status=pass → restore Next Action from Blockers, remove health_degradation entry
+4. If digest.status=degraded → update Next Action to remaining degradation summary + pointer to global_health.json
+
+### Health Check Digest Processing
+
+When coordinator receives a health_check PhaseResultDigest:
+
+1. Read digest.status:
+   - **pass** → no STATE.md Next Action update, continue original workflow
+   - **degraded** → enter degradation handling:
+     a. Backup current Next Action to STATE.md `## Blockers` section: `health_degradation: [degradation_summary概要]`
+     b. Update STATE.md Next Action: `health check: [degradation概要] → 详情见 ~/.aether/health/global_health.json`
+     c. Update STATE.md Health Status section
+     d. Inform user of degradation summary
+     e. For each item in digest.failed_items where auto_installable=true or "partial", sorted by priority, use question tool to ask user per-item authorization (env-setup skill workflow)
+     f. After user installs → re-dispatch worker(mode=health_check, layers=None) for full re-check
+     g. New digest.status=pass → restore original Next Action from Blockers, remove health_degradation entry
+   - **failed** → enter critical failure handling:
+     a. Backup Next Action to Blockers
+     b. Update Next Action to critical failure summary + pointer to global_health.json
+     c. Inform user critical failure cannot be degraded around, requires manual fix
+     d. Wait for user to confirm fix → re-dispatch worker for full re-check
+
+### STATE.md Health Status Format
+
+```markdown
+## Health Status (project-level, updated: [ISO 8601])
+
+persistence: pass
+skill_chain: pass
+runtime: degraded
+cross_mcp: pass
+
+→ infrastructure + network 详情：`~/.aether/health/global_health.json`
+→ 网络可达性详情：`~/.aether/health/network_status.md`
+→ 各层检测项详情：`run_health_check` 返回值
+```
+
+### STATE.md Next Action Update Rules
+
+| Scenario                                               | Next Action Rule                                                                     |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------ |
+| health check all pass                                  | **DO NOT update** Next Action, keep original value                                   |
+| health check finds degradation (session start)         | Write `health check: [degradation概要] → 详情见 ~/.aether/health/global_health.json` |
+| uv unavailable (Tier 0 LLM bootstrap)                  | Write `health check: uv不可用 → 详情见 ~/.aether/health/global_health.json`          |
+| User requests "检查环境" (during active phase)         | **DO NOT update** Next Action, keep original value                                   |
+| User supplements environment → re-check passes         | Restore **pre-check** Next Action from Blockers                                      |
+| User supplements environment → re-check still degraded | Update to remaining degradation summary                                              |
+
+### LLM-only Mode Behavior
+
+When uv is unavailable and user declines installation:
+
+- Do NOT call any MCP tool
+- Do NOT dispatch research-worker (worker depends on MCP)
+- Do NOT execute any Python script
+- Do NOT use SymPy verification, alpha search, Docker containers
+- Only use LLM reasoning, basic bash commands (git, curl), local file read/write
+- Mark STATE.md `infrastructure: degraded`, details in `~/.aether/health/global_health.json`
 
 # ═══════════════════════════════════════════════════════════
 
