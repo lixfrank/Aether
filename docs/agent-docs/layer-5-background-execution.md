@@ -613,5 +613,5 @@ T5.18: 删除 background 相关代码后，task tool 退回 v0.6.0 serial 行为
 ## 回退安全
 
 - 删除 `background.ts`、`background.sql.ts`、`background-output.ts` + 移除 task.ts 的 background 分支 + 移除 registry.ts 的 BackgroundOutputTool 后，task tool 退回 v0.6.0 的 serial/concurrent 行为。
-- Layer 2-4 的 `scale_decision` 中 `mode: background` 规则退回 `mode: concurrent`（在 Layer 2 适配改动中已暂改）。
+- Layer 2-4 的 Scale Decision 文本中 `mode: background` 规则退回 `mode: concurrent`（直接编辑 .aether/agent/research.md 的 prompt_append 即可）。
 - Background task 的 SQLite 数据不影响其他功能（独立表，独立 projector）。

@@ -1,7 +1,7 @@
 # Layer 3: Research Infrastructure — 双层命名架构
 
 > 前置依赖: Layer 0-2（核心安全 + Agent 基础设施 + Research 配置层）
-> 本文档是 5 层重构计划的第四层。**零核心源文件改动** — 全部通过 `.opencode/` 和 `.aether/` 目录中的文件实现。
+> 本文档是 5 层重构计划的第四层。**零核心源文件改动** — 全部通过 `.aether/` 目录中的文件实现。
 > 完成后，research-verifier（通用）可通过 skills+scripts 执行验证，gpd-verifier（物理插件）可额外执行确定性物理计算。
 
 ---
@@ -170,7 +170,7 @@ def run_health_check(project_dir: str, fix: bool = False) -> dict:
 
 #### 文件
 
-`.opencode/skills/research-verification/SKILL.md`
+`.aether/skill/research-verification/SKILL.md`
 
 ```yaml
 ---
@@ -231,27 +231,27 @@ Report must include:
 
 ### 插件目录约定
 
-**Skills** 放在 `.opencode/skills/plugins/gpd/` 子目录中，利用 OpenCode 的 `**/SKILL.md` glob 发现 + frontmatter `name` 字段命名，**零代码改动**即可实现插件隔离：
+**Skills** 放在 `.aether/skill/plugins/gpd/` 子目录中，利用 OpenCode 的 `**/SKILL.md` glob 发现 + frontmatter `name` 字段命名，**零代码改动**即可实现插件隔离：
 
 ```
-.opencode/skills/plugins/gpd/gpd-verification/SKILL.md  → skill name: "gpd-verification"
-.opencode/skills/plugins/gpd/gpd-errors/SKILL.md         → skill name: "gpd-errors"
-.opencode/skills/plugins/gpd/gpd-domain-check/SKILL.md   → skill name: "gpd-domain-check"
-.opencode/skills/plugins/gpd/gpd-conventions/SKILL.md    → skill name: "gpd-conventions"
+.aether/skill/plugins/gpd/gpd-verification/SKILL.md  → skill name: "gpd-verification"
+.aether/skill/plugins/gpd/gpd-errors/SKILL.md         → skill name: "gpd-errors"
+.aether/skill/plugins/gpd/gpd-domain-check/SKILL.md   → skill name: "gpd-domain-check"
+.aether/skill/plugins/gpd/gpd-conventions/SKILL.md    → skill name: "gpd-conventions"
 ```
 
 **Agents** 保持 flat 结构 + `gpd-` 前缀（因为 agent name 由路径推导）：
 
 ```
-.opencode/agents/gpd-verifier.md    → agent name: "gpd-verifier"
-.opencode/agents/gpd-reviewer.md    → agent name: "gpd-reviewer"
+.aether/agent/gpd-verifier.md    → agent name: "gpd-verifier"
+.aether/agent/gpd-reviewer.md    → agent name: "gpd-reviewer"
 ```
 
 **插件管理**：
 
-- **卸载**：删除 `.opencode/skills/plugins/gpd/` 目录 + 删除 `.opencode/agents/gpd-*.md`
+- **卸载**：删除 `.aether/skill/plugins/gpd/` 目录 + 删除 `.aether/agent/gpd-*.md`
 - **分享**：打包 `plugins/gpd/` + flat agents + MCP 配置建议
-- **其他领域插件**：创建 `.opencode/skills/plugins/bio/` + `.opencode/agents/bio-verifier.md`
+- **其他领域插件**：创建 `.aether/skill/plugins/bio/` + `.aether/agent/bio-verifier.md`
 
 ### 3.3.1 gpd-verification skill
 
@@ -261,7 +261,7 @@ Report must include:
 
 #### 文件
 
-`.opencode/skills/plugins/gpd/gpd-errors/SKILL.md`
+`.aether/skill/plugins/gpd/gpd-errors/SKILL.md`
 
 ```yaml
 ---
@@ -308,7 +308,7 @@ For errors that require domain expertise to evaluate, flag as "expert_needed" wi
 
 #### References 目录
 
-`.opencode/skills/plugins/gpd/gpd-errors/references/`
+`.aether/skill/plugins/gpd/gpd-errors/references/`
 
 - `error_catalog.json` — 20 最高风险错误类（与 Layer 2 原设计一致，含 gpd_source 字段）
 - `detection_strategies.json` — 每个错误类的详细检测策略和示例
@@ -324,7 +324,7 @@ For errors that require domain expertise to evaluate, flag as "expert_needed" wi
 
 #### 文件
 
-`.opencode/skills/plugins/gpd/gpd-domain-check/SKILL.md`
+`.aether/skill/plugins/gpd/gpd-domain-check/SKILL.md`
 
 ```yaml
 ---
@@ -367,7 +367,7 @@ Report which checks were script-verified vs LLM-judged vs deferred.
 
 #### References 目录
 
-`.opencode/skills/plugins/gpd/gpd-domain-check/references/bundles/`
+`.aether/skill/plugins/gpd/gpd-domain-check/references/bundles/`
 
 12 个领域 bundle JSON 文件（与 Layer 3 原设计中的 bundles/ 一致，含 gpd_source 字段）。qft.json 包含完整的 priority_checks、specific_red_flags 和 standard_benchmarks（与原设计一致）。
 
@@ -381,7 +381,7 @@ Report which checks were script-verified vs LLM-judged vs deferred.
 
 #### 文件
 
-`.opencode/skills/plugins/gpd/gpd-conventions/SKILL.md`
+`.aether/skill/plugins/gpd/gpd-conventions/SKILL.md`
 
 ```yaml
 ---
@@ -465,14 +465,14 @@ When referencing prior phase results, verify convention lock matches. If convent
 ### 文件结构
 
 ```
-.opencode/
-  agents/                                     → flat 结构 + 前缀命名
+.aether/
+  agent/                                     → flat 结构 + 前缀命名
   │   research.md                             → 通用 research agent
   │   research-explorer.md                    → 通用 explorer subagent
   │   research-verifier.md                    → 通用 verifier subagent
   │   gpd-verifier.md                         → 物理插件 verifier (gpd- 前缀)
   │   gpd-reviewer.md                         → 物理插件 reviewer
-  skills/                                     → 通用 skills (flat) + 插件 skills (plugins/ 子目录)
+  skill/                                     → 通用 skills (flat) + 插件 skills (plugins/ 子目录)
   │   deep-research/SKILL.md                  → 通用
   │   autoresearch/SKILL.md                   → 通用
   │   literature-review/SKILL.md              → 通用
@@ -537,26 +537,26 @@ When referencing prior phase results, verify convention lock matches. If convent
 
 ### 添加新验证脚本
 
-1. 在 `.opencode/skills/plugins/gpd/gpd-verification/scripts/` 中创建 `my_check.py`
+1. 在 `.aether/skill/plugins/gpd/gpd-verification/scripts/` 中创建 `my_check.py`
 2. 实现标准接口: `def run(input_data: dict) -> dict`，返回 `{status, computation, evidence, confidence}`
 3. 在 SKILL.md 的 Step 2 检查类型表中添加条目
 4. verifier subagent 会通过 shell 工具调用新脚本
 
 ### 添加新错误类
 
-1. 在 `.opencode/skills/plugins/gpd/gpd-errors/references/error_catalog.json` 中添加条目
+1. 在 `.aether/skill/plugins/gpd/gpd-errors/references/error_catalog.json` 中添加条目
 2. 在 SKILL.md 的 Step 3 检测策略表中添加条目
 3. 无需修改 MCP 服务器或核心代码
 
 ### 添加新领域 bundle
 
-1. 在 `.opencode/skills/plugins/gpd/gpd-domain-check/references/bundles/` 中创建 `<domain>.json`
+1. 在 `.aether/skill/plugins/gpd/gpd-domain-check/references/bundles/` 中创建 `<domain>.json`
 2. 在 SKILL.md 的 Step 1 域列表中添加条目
 3. 无需修改 MCP 服务器或核心代码
 
 ### 替换验证 skill
 
-1. 创建新 skill 目录（如 `.opencode/skills/my-verification/SKILL.md`）
+1. 创建新 skill 目录（如 `.aether/skill/my-verification/SKILL.md`）
 2. 保持相同接口约定（Procedure 结构、script JSON 输入/输出格式）
 3. 在 verifier agent 的 skill_refs 中替换 `gpd-verification` → `my-verification`
 4. 无需修改 MCP 服务器或核心代码

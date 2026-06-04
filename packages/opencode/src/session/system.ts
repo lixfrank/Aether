@@ -56,46 +56,25 @@ export namespace SystemPrompt {
   export async function skills(agent: Agent.Info) {
     if (Permission.disabled(["skill"], agent.permission).has("skill")) return
 
-    const list = await Skill.available(agent)
-
-    const broadcast = [
-      "Skills provide specialized instructions and workflows for specific tasks.",
-      "Use the skill tool to load a skill when a task matches its description.",
-      Skill.fmt(list, { verbose: true }),
-    ].join("\n")
-
     if (agent.skillRefs?.length) {
       const loaded = await Promise.all(agent.skillRefs.map((name) => Skill.get(name)))
       const found = loaded.filter((s): s is Skill.Info => s !== undefined)
       const missing = agent.skillRefs.filter((name) => !loaded.find((s) => s?.name === name))
-      const injected = [
+      return [
         "## Skills (mandatory)",
         "You MUST follow these skills' instructions for every task they cover.",
         "The following skills have been fully injected — do NOT use the skill tool to load them again.",
         ...found.map((s) => [`### Skill: ${s.name}`, s.content].join("\n")),
         ...(missing.length ? [`Note: skills ${missing.join(", ")} referenced but not found.`] : []),
       ].join("\n")
-      return broadcast + "\n\n" + injected
     }
 
-    return broadcast
-  }
-
-  export function scaleDecision(agent: Agent.Info): string | undefined {
-    if (!agent.scaleDecision || !agent.scaleDecision.rules?.length) return
-    const sd = agent.scaleDecision
-    const threshold = sd.direct_threshold ?? 10
-    const neverSpawn = sd.never_spawn_for ?? []
-    const lines = [
-      "## Scale Decision",
-      `Direct research threshold: ${threshold} words`,
-      `Never spawn subagents for: ${neverSpawn.join(", ")}`,
-      "Rules:",
-    ]
-    for (const rule of sd.rules!) {
-      lines.push(`- ${rule.condition}: ${rule.subagent_count} ${rule.subagent_type} subagents (${rule.mode})`)
-    }
-    return lines.join("\n")
+    const list = await Skill.available(agent)
+    return [
+      "Skills provide specialized instructions and workflows for specific tasks.",
+      "Use the skill tool to load a skill when a task matches its description.",
+      Skill.fmt(list, { verbose: true }),
+    ].join("\n")
   }
 
   function normalizeOutputDir(dir: string): string {

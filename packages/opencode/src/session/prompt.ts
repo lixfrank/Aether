@@ -672,12 +672,10 @@ export namespace SessionPrompt {
       // Build system prompt, adding structured output instruction if needed
       if (step === 1) _cachedSkills = (await SystemPrompt.skills(agent)) ?? undefined
       const skills = _cachedSkills
-      const sd = SystemPrompt.scaleDecision(agent)
       const od = SystemPrompt.outputDir(agent)
       const system = [
         ...(await SystemPrompt.environment(model)),
         ...(skills ? [skills] : []),
-        ...(sd ? [sd] : []),
         ...(od ? [od] : []),
         ...(await InstructionPrompt.system()),
       ]

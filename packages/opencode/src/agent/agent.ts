@@ -70,22 +70,6 @@ export namespace Agent {
           allowed_commands: z.string().array().optional(),
         })
         .optional(),
-      scaleDecision: z
-        .object({
-          direct_threshold: z.number().optional(),
-          never_spawn_for: z.string().array().optional(),
-          rules: z
-            .array(
-              z.object({
-                condition: z.string(),
-                subagent_count: z.number(),
-                subagent_type: z.string(),
-                mode: z.enum(["serial", "concurrent", "background"]),
-              }),
-            )
-            .optional(),
-        })
-        .optional(),
       mcp: z.record(z.string(), z.boolean()).optional(),
       outputDir: z.string().optional(),
     })
@@ -309,7 +293,7 @@ export namespace Agent {
             item.maxSteps = value.max_steps ?? item.maxSteps ?? item.steps
             item.fallbackModels = value.fallback_models ?? item.fallbackModels
             item.envScope = value.env_scope ?? item.envScope
-            item.scaleDecision = value.scale_decision ?? item.scaleDecision
+
             item.mcp = value.mcp ?? item.mcp
             item.outputDir = value.output_dir ?? item.outputDir
             if (value.env_scope?.allowed_commands) {

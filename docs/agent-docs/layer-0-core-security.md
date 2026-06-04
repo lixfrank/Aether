@@ -394,7 +394,7 @@ T0.21: bun typecheck 通过
 
 ### 问题
 
-v0.6.0 的 Agent.Info 缺少 skill_refs（技能白名单）、env_scope（环境隔离）、scale_decision（规模决策）等字段。
+v0.6.0 的 Agent.Info 缺少 skill_refs（技能白名单）、env_scope（环境隔离）等字段。
 
 ### 设计决策：去掉 base_agent 继承
 
@@ -429,16 +429,7 @@ fallbackModels: z.array(z.union([z.string(), z.object({
 envScope: z.object({
   allowed_commands: z.string().array().optional(),
 }).optional(),
-scaleDecision: z.object({
-  direct_threshold: z.number().optional(),
-  never_spawn_for: z.string().array().optional(),
-  rules: z.array(z.object({
-    condition: z.string(),
-    subagent_count: z.number(),
-    subagent_type: z.string(),
-    mode: z.enum(["serial", "concurrent", "background"]),
-  })).optional(),
-}).optional(),
+
 ```
 
 > 所有新增字段使用 `.optional()`（无 `z.default()`），包括内嵌对象的子字段。`Agent.Info` 的 zod schema 有两个实际用途：OpenAPI 文档生成（`resolver(Agent.Info.array())`）和 TypeScript 类型推断（`z.infer<typeof Info>`）。但 Agent.Info 不经过 zod parse——native agent 在 agent.ts 中手工构建，custom agent 在 merge 循环中逐字段赋值。`z.default()` 不在运行时生效，且会误导 OpenAPI 文档和 TypeScript 类型（让它们暗示字段总有值，但实际可为 undefined）。因此所有新增字段（含内嵌子字段）使用 `.optional()`，默认值语义在消费函数中通过 `?? fallback` 实现。
@@ -454,7 +445,7 @@ file_scope: z.string().array().optional(),
 max_steps: z.number().int().positive().optional(),
 fallback_models: z.array(z.union([z.string(), z.object({...})])).optional(),
 env_scope: z.object({ allowed_commands: z.string().array().optional() }).optional(),
-scale_decision: z.object({ direct_threshold: z.number().optional(), never_spawn_for: z.string().array().optional(), rules: z.array(z.object({...})).optional() }).optional(),
+
 ```
 
 **实现注意**：`Config.Agent` 有 `.catchall(z.any()).transform(...)` 结构，transform 中 `knownKeys` 白名单硬编码了已有字段名。新增字段必须加入 `knownKeys`，否则会被静默扫入 `options`。建议在实现时添加 assertion/zod refine，确保 `skill_refs`/`env_scope` 等字段不会意外出现在 `options` 中。
@@ -475,7 +466,7 @@ item.fileScope = value.file_scope ?? item.fileScope
 item.maxSteps = value.max_steps ?? item.maxSteps ?? item.steps
 item.fallbackModels = value.fallback_models ?? item.fallbackModels
 item.envScope = value.env_scope ?? item.envScope
-item.scaleDecision = value.scale_decision ?? item.scaleDecision
+
 // env_scope 编译为 permission（统一入口，不重复编译）
 if (value.env_scope?.allowed_commands) {
   const envRules = Discipline.compile({ env_scope: value.env_scope })
@@ -489,15 +480,14 @@ if (value.env_scope?.allowed_commands) {
 T0.22: 不设新字段时，所有 native agent (build/plan/general/explore/compaction/title/summary) 行为不变
 T0.23: 设 skill_refs:["alpha-research","arxiv-search"] 的 agent 在 skills() 中看到这两个 skill 的完整注入
 T0.24: 设 env_scope.allowed_commands:["alpha","docker"] 的 agent 生成正确的 bash deny+allow 规则
-T0.25: 设 scale_decision 的 agent 不影响无 scale_decision 的 agent
-T0.26: env_scope 编译只在 agent.ts 中发生一次，不在 task.ts 中重复编译
-T0.27: Config.Agent 新字段被 knownKeys 白名单正确识别，不落入 options
-T0.28: bun typecheck 通过
+T0.25: env_scope 编译只在 agent.ts 中发生一次，不在 task.ts 中重复编译
+T0.26: Config.Agent 新字段被 knownKeys 白名单正确识别，不落入 options
+T0.27: bun typecheck 通过
 ```
 
 ---
 
-## 改动 0.5: skill_refs 注入机制（追加而非替换）
+## 改动 0.5: skill_refs 注入机制（替换广播）
 
 ### 问题
 
@@ -505,124 +495,55 @@ v0.6.0 的 skill 注入是广播式（列出所有 skill），对有明确 skill
 
 ### 文件
 
-`packages/opencode/src/session/system.ts`（在 `skills()` 函数返回后追加 skillRefs 内容，不改广播主路径）
+`packages/opencode/src/session/system.ts`（在 `skills()` 函数中，有 skillRefs 时只返回 skillRefs 注入内容，不返回广播）
 
 ### 设计
 
-原方案在 `skills()` 函数开头插入 `if (agent.skillRefs?.length)` 拦截分支，使 skillRefs agent 走全新路径替换广播。这改变了函数的主路径语义。
-
-新方案**不改变主路径**，而是在广播输出之后追加 skillRefs 的完整内容：
+skill_refs 为**替换**而非追加广播。有 skillRefs 时，只注入 skillRefs 指定的 skill 完整内容，不再注入广播列表。原因：指定 skill_refs 的 agent 需要精确控制可见 skill 范围，广播列表会引入噪声并稀释 skillRefs 的信号强度。
 
 ```ts
 export async function skills(agent: Agent.Info) {
   if (Permission.disabled(["skill"], agent.permission).has("skill")) return
 
-  // 主路径不变：广播所有可用 skills
-  const list = await Skill.available(agent)
-  const broadcast = [
-    "Skills provide specialized instructions and workflows for specific tasks.",
-    "Use the skill tool to load a skill when a task matches its description.",
-    Skill.fmt(list, { verbose: true }),
-  ].join("\n")
-
-  // 如果有 skillRefs whitelist，追加完整内容（不替换广播）
+  // 如果有 skillRefs whitelist，只返回注入内容（替换广播）
   if (agent.skillRefs?.length) {
     const loaded = await Promise.all(agent.skillRefs.map((name) => Skill.get(name)))
     const found = loaded.filter((s): s is Skill.Info => s !== undefined)
     const missing = agent.skillRefs.filter((name) => !loaded.find((s) => s?.name === name))
-    const injected = [
+    return [
       "## Skills (mandatory)",
       "You MUST follow these skills' instructions for every task they cover.",
       "The following skills have been fully injected — do NOT use the skill tool to load them again.",
       ...found.map((s) => [`### Skill: ${s.name}`, s.content].join("\n")),
       ...(missing.length ? [`Note: skills ${missing.join(", ")} referenced but not found.`] : []),
     ].join("\n")
-    return broadcast + "\n\n" + injected
   }
 
-  return broadcast
+  // 无 skillRefs 时，返回广播（与 v0.6.0 完全一致）
+  const list = await Skill.available(agent)
+  return [
+    "Skills provide specialized instructions and workflows for specific tasks.",
+    "Use the skill tool to load a skill when a task matches its description.",
+    Skill.fmt(list, { verbose: true }),
+  ].join("\n")
 }
 ```
 
 **优势**：
 
 - `Permission.disabled` 检查位置不变
-- `Skill.available()` 调用不变
-- 广播格式不变
-- skillRefs 只是**追加**额外内容，不截断广播
-- 无 skillRefs 时输出与 v0.6.0 完全一致
+- 无 skillRefs 时输出与 v0.6.0 完全一致（广播路径不变）
+- 有 skillRefs 时输出只包含指定的 skill 内容，无广播噪声
+- 减少 context window 占用
 
 ### 验收测试
 
 ```
-T0.29: agent 无 skillRefs 时，skills() 输出与 v0.6.0 完全一致
-T0.30: agent skillRefs=["alpha-research"] 时，输出包含广播摘要 + alpha-research 的完整内容
-T0.31: agent skillRefs=["nonexistent"] 时，输出包含广播摘要 + "referenced but not found" 提示
-T0.32: agent skillRefs 有值时，广播部分（Skill.fmt）仍然存在，未被截断
+T0.29: agent 无 skillRefs 时，skills() 输出与 v0.6.0 完全一致（广播列表）
+T0.30: agent skillRefs=["alpha-research"] 时，输出仅包含 alpha-research 的完整内容（无广播列表）
+T0.31: agent skillRefs=["nonexistent"] 时，输出仅包含 "referenced but not found" 提示（无广播列表）
+T0.32: agent skillRefs 有值时，广播部分（Skill.fmt）不存在，只有注入内容
 T0.33: bun typecheck 通过
-```
-
----
-
-## 改动 0.6: scale_decision 注入
-
-### 问题
-
-scale_decision 定义了 research agent 在何种条件下使用多少子代理。这是纯 prompt 层的信息，不需要运行时强制。
-
-### 文件
-
-`packages/opencode/src/session/system.ts`（新增 `scaleDecision()` 函数，与 `skills()`/`environment()` 同层级）
-
-### 设计
-
-scale_decision 不作为运行时强制机制（不像 Permission 那样拦截工具调用），而是作为**system prompt 中的行为指导**。
-
-选择 `system.ts` 作为注入点（而非 `prompt.ts`），原因：
-
-1. `system.ts` 是 system prompt 相关内容的自然归属（provider/environment/skills 都在这里）
-2. 改动量最小（system.ts 加一个函数，prompt.ts 加一行）
-3. prompt.ts 已经 2066 行，不应继续增加维护负担
-4. 新函数不影响已有函数，纯增量
-
-```ts
-export function scaleDecision(agent: Agent.Info): string | undefined {
-  if (!agent.scaleDecision || !agent.scaleDecision.rules?.length) return
-  const sd = agent.scaleDecision
-  const threshold = sd.direct_threshold ?? 10
-  const neverSpawn = sd.never_spawn_for ?? []
-  const lines = [
-    "## Scale Decision",
-    `Direct research threshold: ${threshold} words`,
-    `Never spawn subagents for: ${neverSpawn.join(", ")}`,
-    "Rules:",
-  ]
-  for (const rule of sd.rules) {
-    lines.push(`- ${rule.condition}: ${rule.subagent_count} ${rule.subagent_type} subagents (${rule.mode})`)
-  }
-  return lines.join("\n")
-}
-```
-
-在 `prompt.ts` 的 loop 函数中，system prompt 组装处追加一行：
-
-```ts
-// prompt.ts loop 中的 system prompt 组装（改动仅两行）
-const sd = SystemPrompt.scaleDecision(agent)
-const system = [
-  ...(await SystemPrompt.environment(model)),
-  ...(skills ? [skills] : []),
-  ...(sd ? [sd] : []), // 新增
-  ...(await InstructionPrompt.system()),
-]
-```
-
-### 验收测试
-
-```
-T0.34: agent 无 scaleDecision 时，无额外 prompt 注入
-T0.35: agent 有 scaleDecision.rules 时，system prompt 包含 "Scale Decision" section
-T0.36: bun typecheck 通过
 ```
 
 ---
@@ -638,7 +559,7 @@ T0.36: bun typecheck 通过
 4. 运行已有测试套件（无回归）
 5. 验证以下场景:
    a. 不设任何新字段/参数 → 所有 native agent 行为与 v0.6.0 完全一致
-   b. 设 skill_refs 的 agent → skills() 广播 + skillRefs 追加
+   b. 设 skill_refs 的 agent → skills() 只返回 skillRefs 指定的 skill（替换广播）
    c. task tool 传 discipline 参数 → 子代理权限被 intersection 正确约束
    d. Permission.intersection(parent deny, child allow) → deny（安全修复）
    e. compileDiscipline deny-before-allow 顺序正确

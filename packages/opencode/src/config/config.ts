@@ -895,22 +895,6 @@ export namespace Config {
         )
         .optional(),
       env_scope: z.object({ allowed_commands: z.string().array().optional() }).optional(),
-      scale_decision: z
-        .object({
-          direct_threshold: z.number().optional(),
-          never_spawn_for: z.string().array().optional(),
-          rules: z
-            .array(
-              z.object({
-                condition: z.string(),
-                subagent_count: z.number(),
-                subagent_type: z.string(),
-                mode: z.enum(["serial", "concurrent", "background"]),
-              }),
-            )
-            .optional(),
-        })
-        .optional(),
       mcp: z
         .record(z.string(), z.boolean())
         .optional()
@@ -948,7 +932,6 @@ export namespace Config {
         "max_steps",
         "fallback_models",
         "env_scope",
-        "scale_decision",
         "mcp",
         "output_dir",
       ])

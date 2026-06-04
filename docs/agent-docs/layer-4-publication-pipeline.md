@@ -31,7 +31,7 @@
 
 ### 文件
 
-`.opencode/agents/gpd-paper-writer.md`
+`.aether/agent/gpd-paper-writer.md`
 
 ```yaml
 ---
@@ -56,7 +56,7 @@ prompt_append: |
   6. Deliver: .tex file + .bib file + any figure scripts
 
   ## Journal Templates
-  Available in .opencode/get-physics-done/paper-templates/:
+  Available in .aether/get-physics-done/paper-templates/:
   - prl.tex (Physical Review Letters)
   - nature.tex (Nature)
   - jhep.tex (Journal of High Energy Physics)
@@ -77,7 +77,7 @@ prompt_append: |
 
 ### 文件
 
-`.opencode/agents/gpd-referee.md`
+`.aether/agent/gpd-referee.md`
 
 ```yaml
 ---
@@ -118,7 +118,7 @@ prompt_append: |
 
 ### 文件
 
-`.opencode/skills/write-paper/SKILL.md`
+`.aether/skill/write-paper/SKILL.md`
 
 ```yaml
 ---
@@ -138,7 +138,7 @@ Dispatch gpd-paper-writer subagent via task tool for full manuscript generation.
 Inline paper writing:
 1. Gather material from conversation context + project files
 2. Select journal template (default: PRL)
-3. Write LaTeX directly, using .opencode/get-physics-done/paper-templates/<journal>.tex as starting point
+3. Write LaTeX directly, using .aether/get-physics-done/paper-templates/<journal>.tex as starting point
 4. For physics papers, check conventions before writing
 
 ## Available Templates
@@ -159,7 +159,7 @@ Inline paper writing:
 
 ### 文件
 
-`.opencode/skills/peer-review/SKILL.md`
+`.aether/skill/peer-review/SKILL.md`
 
 ```yaml
 ---
@@ -192,7 +192,7 @@ For each issue: severity (FATAL/MAJOR/MINOR/INFO) + location + suggested fix.
 
 ### 文件
 
-`.opencode/skills/respond-to-referees/SKILL.md`
+`.aether/skill/respond-to-referees/SKILL.md`
 
 ```yaml
 ---
@@ -233,6 +233,6 @@ T4.4: /peer-review skill 可在 build mode 中调用
 T4.5: /respond-to-referees skill 可在 build mode 中调用
 T4.6: gpd-paper-writer 生成 .tex + .bib 文件
 T4.7: gpd-referee 生成 Response-and-changes.tex（三部分结构）
-T4.8: journal templates 存在于 .opencode/get-physics-done/paper-templates/ 中
+T4.8: journal templates 存在于 .aether/get-physics-done/paper-templates/ 中
 T4.9: 删除所有 publication agent/skill 文件后，核心行为不变
 ```

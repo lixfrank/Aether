@@ -30,15 +30,15 @@
 
 当用户通过 UI dropdown 切换到 research agent 时，已有流程自动处理一切:
 
-| 功能                    | 由谁处理                                | 需要 insertReminders()? |
-| ----------------------- | --------------------------------------- | ----------------------- |
-| permission intersection | resolveTools()（Layer 0）               | 不需要                  |
-| promptAppend            | system prompt 组装                      | 不需要                  |
-| skill_refs whitelist    | SystemPrompt.skills()（Layer 0）        | 不需要                  |
-| scale_decision          | SystemPrompt.scaleDecision()（Layer 0） | 不需要                  |
-| MCP 工具过滤            | resolveTools()（改动 1.3）              | 不需要                  |
-| denied tools 过滤       | resolveTools()（改动 1.4）              | 不需要                  |
-| output_dir 路径         | SystemPrompt.outputDir()（本改动）      | 不需要                  |
+| 功能                    | 由谁处理                           | 需要 insertReminders()? |
+| ----------------------- | ---------------------------------- | ----------------------- |
+| permission intersection | resolveTools()（Layer 0）          | 不需要                  |
+| promptAppend            | system prompt 组装                 | 不需要                  |
+| skill_refs whitelist    | SystemPrompt.skills()（Layer 0）   | 不需要                  |
+| scale_decision          | prompt_append 内文本（Layer 2）    | 不需要                  |
+| MCP 工具过滤            | resolveTools()（改动 1.3）         | 不需要                  |
+| denied tools 过滤       | resolveTools()（改动 1.4）         | 不需要                  |
+| output_dir 路径         | SystemPrompt.outputDir()（本改动） | 不需要                  |
 
 因此，**不改动 insertReminders()**。build→plan 和 plan→build 的已有逻辑保持不变。
 
@@ -69,7 +69,7 @@ item.outputDir = value.output_dir ?? item.outputDir
 
 ### SystemPrompt.outputDir() 注入
 
-在 `session/system.ts` 中新增（与 `skills`、`scaleDecision` 同模块、同模式）:
+在 `session/system.ts` 中新增（与 `skills` 同模块、同模式）:
 
 ```ts
 export function outputDir(agent: Agent.Info): string | undefined {
@@ -78,7 +78,7 @@ export function outputDir(agent: Agent.Info): string | undefined {
 }
 ```
 
-在 prompt.ts loop 的 system prompt 组装区域调用（与 `SystemPrompt.skills(agent)`、`SystemPrompt.scaleDecision(agent)` 并列）:
+在 prompt.ts loop 的 system prompt 组装区域调用（与 `SystemPrompt.skills(agent)` 并列）:
 
 ```ts
 const outputDirInfo = SystemPrompt.outputDir(agent)
@@ -356,7 +356,7 @@ T1.29: EDIT_TOOLS export 后 prompt.ts 可正常 import 使用
 1. 在 Layer 0 已完成的基础上应用所有 Layer 1 改动
 2. bun typecheck 在 packages/opencode 通过
 3. 运行已有测试套件（无回归）
-4. 创建 .opencode/agents/research.md (最小化测试版)
+4. 创建 .aether/agent/research.md (最小化测试版)
 5. 验证:
    a. 从 UI dropdown 选择 research 后，permission 被 intersection 约束
    b. 切换到 research 后，skill_refs 生效（只看到指定 skills）
