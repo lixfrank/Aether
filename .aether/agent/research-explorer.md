@@ -15,7 +15,6 @@ permission:
   external_directory: ask
 skill_refs:
   - alpha-research
-  - arxiv-search
 fallback_models:
   - anthropic/claude-sonnet-4-5
 mcp:

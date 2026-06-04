@@ -62,7 +62,7 @@ Literature reviews follow a structured, multi-phase workflow:
 1. **Multi-Database Search**: Select databases based on domain:
 
    **Physics & Mathematical Sciences:**
-   - Use arxiv-search skill for arXiv preprint search (physics, math, CS, q-bio)
+   - Use alpha-research skill for arXiv preprint search (physics, math, CS, q-bio)
    - For deeper understanding of arXiv papers: use alphaxiv overview (`webfetch https://alphaxiv.org/overview/<arxiv_id>`)
    - Use INSPIRE-HEP via webfetch for high-energy physics literature (https://inspirehep.net)
    - Use Semantic Scholar API for cross-disciplinary searches and citation graphs
@@ -231,10 +231,10 @@ output_dir/notepads/<slug>/
 
 ### arXiv
 
-Use arxiv-search skill for primary search:
+Use alpha-research skill (no-login mode) for primary search:
 
 ```bash
-.venv/bin/python [YOUR_SKILLS_DIR]/arxiv-search/arxiv_search.py "your search query" --max-papers N
+uv run .aether/skills/alpha-research/arxiv_search.py "your search query" --max-papers N
 ```
 
 **Search tips**:

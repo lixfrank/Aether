@@ -499,7 +499,7 @@ GPD 源码位置: `gpd/mcp/servers/skills_server.py`
 
 **GPD 实现**: arXiv MCP 是上游 `arxiv_mcp_server` 的桥接
 
-**设计说不需要的理由**: OpenCode 已有独立的 arxiv-search skill。
+**设计说不需要的理由**: OpenCode 的 alpha-research skill 已包含 arxiv-search 模式。
 
 **结论**: 正确移除。
 

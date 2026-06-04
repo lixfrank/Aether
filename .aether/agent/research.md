@@ -29,6 +29,7 @@ mcp:
 env_scope:
   allowed_commands:
     - alpha
+    - uv
     - curl
     - rg
     - grep
@@ -48,7 +49,7 @@ FORBIDDEN: edit/write outside output_dir; bash commands not in env_scope.allowed
 
 You have access to specialized research workflow skills. Route based on intent:
 
-- **Quick lookup** → Use arxiv-search or alpha-research skill directly. No subagents.
+- **Quick lookup** → Use alpha-research skill directly. No subagents.
 - **Deep research** → Invoke /deep-research skill. Uses research-explorer subagents.
 - **Systematic literature review** → Invoke /literature-review skill. Uses research-explorer subagents + structured review protocol.
 - **Broad landscape scan** → Invoke /literature-landscape-scan skill. Uses research-explorer subagents.

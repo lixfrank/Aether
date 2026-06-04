@@ -83,12 +83,12 @@ If the response indicates no authentication (or the command fails with an auth e
 1. Tell the user: "The alpha CLI requires an alphaXiv account for paper search, reading, and Q&A. You can set up access by running `alpha login`, or I can guide you through the process."
 2. Wait for the user's response before proceeding.
 3. If the user explicitly declines ("I don't want to create an account" / "skip alpha" / "use arxiv instead" / "no"):
-   → Fall back to the `arxiv-search` skill for paper search (limited: titles and abstracts only, no full text, no Q&A, no annotations).
+   → Fall back to alpha-research arxiv-search mode (limited: titles and abstracts only, no full text, no Q&A, no annotations).
    → For paper reading beyond abstracts, use `webfetch` on arxiv HTML pages where available.
 4. If the user agrees:
    → Guide them through `alpha login` and then continue with alpha CLI.
 
-Do NOT silently skip alpha and use arxiv-search without asking. Only fall back when the user explicitly declines.
+Do NOT silently skip alpha CLI mode without asking. Only fall back to arxiv-search mode when the user explicitly declines.
 
 ## Commands
 
@@ -132,7 +132,7 @@ alpha annotate 2106.09685 "Key paper on LoRA - revisit for adapter comparison"
 
 When alpha is unavailable (user declined account):
 
-- Paper search: use `/arxiv-search` skill
+- Paper search: use alpha-research skill (arxiv-search mode)
 - Paper abstracts: `webfetch` on `https://arxiv.org/abs/<id>`
 - Paper full text (HTML): `webfetch` on `https://arxiv.org/html/<id>` (available for many papers)
 - Paper Q&A: NOT available without alpha — read the full text yourself and answer based on content
@@ -591,7 +591,7 @@ T2.1.5: sandbox-executor.md 存在于 .aether/agent/sandbox-executor.md，subage
 T2.1.6: sandbox-executor skill_refs 包含 docker + research-verification
 T2.1.7: sandbox-executor env_scope 限制 bash 到 docker/uv/python/pip/curl/git
 T2.1.8: sandbox-executor mcp 包含 research-conventions (只读) + research-state
-T2.1.9: research-explorer skill_refs 包含 alpha-research + arxiv-search
+T2.1.9: research-explorer skill_refs 包含 alpha-research
 T2.1.10: 所有端口 skill 的 frontmatter 无 category 字段
 T2.1.11: 删除新增 skills 和 sandbox-executor 后，核心行为不变
 

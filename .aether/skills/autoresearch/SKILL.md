@@ -46,7 +46,7 @@ Based on current ROADMAP phase:
 1. **Determine research needs**: What evidence is needed for this phase?
 2. **Collect evidence**: Invoke `/deep-research` skill to gather and synthesize evidence
    - For literature: dispatch `research-explorer` subagent for parallel database searches
-   - For physics: use `arxiv-search` skill + alphaxiv overview for paper understanding
+   - For physics: use alpha-research skill (no-login mode) + alphaxiv overview for paper understanding
 3. **Write PLAN.md contract**: Write to `.aether/research/persistence/PLAN.md` with:
 
    ```markdown

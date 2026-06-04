@@ -105,7 +105,7 @@ FORBIDDEN: edit/write outside notepad; bash commands not in env_scope.allowed_co
 
 You have access to specialized research workflow skills. Route based on intent:
 
-- **Quick lookup** → Use alpha-research or arxiv-search skill directly. No subagents.
+- **Quick lookup** → Use alpha-research skill directly. No subagents.
 - **Deep research** → Invoke /deep-research skill. Uses research-explorer subagents.
 - **Systematic literature review** → Invoke /literature-review skill. Uses research-explorer subagents + structured review protocol.
 - **Experiment execution** → Dispatch sandbox-executor subagent via task tool. Uses docker sandbox.
@@ -172,7 +172,6 @@ permission:
   external_directory: ask
 skill_refs:
   - alpha-research
-  - arxiv-search
 ---
 
 <system-reminder>
@@ -474,7 +473,7 @@ Cleanup: `docker stop <name> && docker rm <name>`
 | Skill | 文件 | 状态 |
 |---|---|---|
 | alpha-research | `.aether/skills/alpha-research/SKILL.md` | 已存在，auth-first + arxiv fallback |
-| arxiv-search | `.aether/skills/arxiv-search/SKILL.md` | 已存在 |
+| arxiv-search | merged into alpha-research (arxiv-search mode) | 已合并 |
 | source-comparison | `.aether/skills/source-comparison/SKILL.md` | 已存在，mode-aware |
 | paper-code-audit | `.aether/skills/paper-code-audit/SKILL.md` | 已存在，mode-aware |
 | docker | `.aether/skills/docker/SKILL.md` | 已存在，工具性 skill（确定 docker 环境、编译项目、执行隔离计算） |

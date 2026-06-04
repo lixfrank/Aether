@@ -48,7 +48,7 @@
 
 ### 原则 2: 主 agent 不硬编码 skill_refs
 
-**现状**: `research.md` 的 YAML frontmatter 中硬编码了 `skill_refs: [deep-research, arxiv-search, literature-landscape-scan, research-question-framing]`。
+**现状**: `research.md` 的 YAML frontmatter 中硬编码了 `skill_refs: [deep-research, alpha-research, literature-landscape-scan, research-question-framing]`。
 
 **问题**: 主 agent 应有充分权限选择不同 skills，不应限制 skill 可见性。`skill_refs` 的语义是"仅注入这些 skills"，会屏蔽其他可用 skills。
 
@@ -89,7 +89,7 @@ Orchestrate deep research: explore, analyze, verify, and produce structured repo
 
 | Intent                    | Action                                        |
 | ------------------------- | --------------------------------------------- |
-| Quick lookup              | Use arxiv-search or alphaxiv skill directly   |
+| Quick lookup              | Use alpha-research skill directly             |
 | Deep research             | Invoke /deep-research skill                   |
 | Systematic lit review     | Invoke /literature-review skill               |
 | Autonomous research loop  | Invoke /autoresearch skill                    |
@@ -141,7 +141,7 @@ alphaXiv (https://alphaxiv.org) 是 arXiv 的 AI-enhanced 前端，提供:
 - 比 arXiv API 返回的 abstract 更深入（包含方法、结果、局限性的结构化摘要）
 - URL 格式与 arXiv ID 一一对应，可无缝替换
 
-**决策**: 在 `arxiv-search` skill 中增加 alphaxiv 集成:
+**决策**: 在 `alpha-research` skill 中增加 alphaxiv 集成（arxiv-search 模式已合并为子模式）:
 
 - 搜索阶段仍使用 arXiv API（获取 ID 列表）
 - 内容理解阶段优先使用 alphaxiv overview URL (`webfetch https://alphaxiv.org/overview/<arxiv_id>`)
@@ -172,7 +172,7 @@ alphaXiv (https://alphaxiv.org) 是 arXiv 的 AI-enhanced 前端，提供:
   deep-research/SKILL.md                    → 从全局复制+适配
   literature-review/SKILL.md                → 从全局复制+适配
   autoresearch/SKILL.md                     → 新增
-  arxiv-search/SKILL.md                     → 从全局复制+增加 alphaxiv
+  alpha-research/SKILL.md                  → 包含 arxiv-search 子模式 + alphaxiv 集成
   research-verification/SKILL.md            → 不动（Layer 3 已完成）
   research-question-framing/SKILL.md        → 需增强（§3.5）
   literature-landscape-scan/SKILL.md        → 需增强（§3.6）
@@ -364,21 +364,22 @@ structured research question with scope constraints
 
 ---
 
-## 3.8 arxiv-search alphaxiv 集成
+## 3.8 alpha-research alphaxiv 集成（含 arxiv-search 子模式）
 
 ### 现状
 
-全局 arxiv-search SKILL.md (33 行): 仅提供 `arxiv_search.py` 脚本调用，返回 title + abstract。
+全局 arxiv-search SKILL.md (33 行): 仅提供 `arxiv_search.py` 脚本调用，返回 title + abstract。alpha-research SKILL.md (77 行): 提供 alpha CLI 全功能操作。
 
 ### 增强设计
 
-复制到 `.aether/skills/arxiv-search/` 并增加 alphaxiv 集成:
+合并 arxiv-search 为 alpha-research 的子模式，并增加 alphaxiv 集成:
 
-1. **搜索阶段**: 保持 arXiv API 搜索（获取 ID 列表 + title + abstract）
-2. **深度理解阶段**: 对每个感兴趣的 arXiv ID，使用 `webfetch https://alphaxiv.org/overview/<arxiv_id>` 获取 AI 生成的结构化概述
-3. **alphaxiv overview 内容**: 包含 Key Findings、Methodology、Limitations、Broader Impact 的结构化摘要 — 比 abstract 更适合 agent 消费
-4. **fallback**: alphaxiv overview 不可用时（网络问题、新论文尚未生成 overview），回退到 arXiv abstract
-5. **搜索模式**: 增加 alphaxiv 的 "Smart" 搜索作为补充（通过 alphaxiv.org 搜索页面获取 AI 增强检索结果）
+1. **alpha CLI 模式**（需要 alphaXiv 登录）：语义搜索、全文、Q&A、代码检查、标注
+2. **arxiv-search 模式**（无需登录）：关键词搜索 + 分类过滤，仅 title + abstract
+3. **深度理解阶段**: 对每个感兴趣的 arXiv ID，使用 `webfetch https://alphaxiv.org/overview/<arxiv_id>` 获取 AI 生成的结构化概述
+4. **alphaxiv overview 内容**: 包含 Key Findings、Methodology、Limitations、Broader Impact 的结构化摘要 — 比 abstract 更适合 agent 消费
+5. **fallback**: alphaxiv overview 不可用时（网络问题、新论文尚未生成 overview），回退到 arXiv abstract
+6. **搜索模式**: 增加 alphaxiv 的 "Smart" 搜索作为补充（通过 alphaxiv.org 搜索页面获取 AI 增强检索结果）
 
 SKILL.md 增加:
 
@@ -427,7 +428,7 @@ T3.5:  literature-review skill 在 .aether/skills/ 下存在，包含 scripts/�
 T3.6:  autoresearch skill 在 .aether/skills/ 下存在，SKILL.md 描述 planning-only 自主循环
 T3.7:  literature-landscape-scan SKILL.md 增强为完整程序（搜索策略+结构化输出+alphaxiv+质量标准）
 T3.8:  research-question-framing SKILL.md 增强为完整程序（PICO/物理框架+gap输入+可验证性+PLAN合约对接）
-T3.9:  arxiv-search SKILL.md 包含 alphaxiv 集成指引（overview URL 构造+webfetch+fallback）
+T3.9:  alpha-research SKILL.md 包含 arxiv-search 子模式 + alphaxiv 集成指引（overview URL 构造+webfetch+fallback）
 T3.10: research-conventions MCP server.py 中 _init_skill_dirs() 包含 .aether/skills/ 路径
 T3.11: 目录重命名后，gpd-* 物理插件 skills 正常被发现（plugins/gpd/ 在 .aether/skills/ 下）
 T3.12: 删除 .aether/skill/ 目录后，所有 skill 发现仅从 .aether/skills/ 工作
@@ -444,7 +445,7 @@ T3.14: gpd-* 物理插件（4 skills + 6 scripts + references）内容和功能�
 3. **research.md 变更**: 移除 `skill_refs`，修改 prompt body
 4. **deep-research 复制+适配**: 从全局复制到 `.aether/skills/deep-research/`，增加持久化和 MCP 指引
 5. **literature-review 复制+适配**: 从全局完整复制（含 scripts/references/assets），增加物理文献指引
-6. **arxiv-search 复制+alphaxiv**: 从全局复制到 `.aether/skills/arxiv-search/`（含 arxiv_search.py），增加 alphaxiv 集成
+6. **alpha-research 合并**: 合并 arxiv-search 为子模式，增加 alphaxiv 集成
 7. **autoresearch 新增**: 创建 `.aether/skills/autoresearch/SKILL.md`
 8. **literature-landscape-scan 增强**: 扩充 SKILL.md
 9. **research-question-framing 增强**: 扩充 SKILL.md

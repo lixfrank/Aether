@@ -54,7 +54,7 @@ Layer 5: Background Execution ─── 独立层（可延后实现）
 - Research agent 定义文件约 50 行 prompt_append（核心约束 + 模式路由指引 + Scale Decision 文本）
 - Research agent 无 skill_refs 白名单限制（作为 primary agent，应自由访问所有 skills）
 - 具体工作流通过 skill 路由指引（markdown body 中列出的模式路由表）而非 skill_refs 硬限制
-- Subagents 使用 skill_refs 限制可见 skill 范围（research-explorer 仅见 alpha-research + arxiv-search）
+- Subagents 使用 skill_refs 限制可见 skill 范围（research-explorer 仅见 alpha-research）
 - Integrity Commandments 移入 research-explorer subagent 的 prompt_append（不再嵌入主 agent）
 - scale_decision 作为 prompt_append 内文本（不再需要核心代码注入，零核心文件改动）
 

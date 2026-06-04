@@ -446,7 +446,7 @@ if (value.env_scope?.allowed_commands) {
 
 ```
 T0.22: 不设新字段时，所有 native agent (build/plan/general/explore/compaction/title/summary) 行为不变
-T0.23: 设 skill_refs:["alpha-research","arxiv-search"] 的 agent 在 skills() 中看到这两个 skill 的完整注入
+T0.23: 设 skill_refs:["alpha-research"] 的 agent 在 skills() 中看到 alpha-research 的完整注入
 T0.24: 设 env_scope.allowed_commands:["alpha","docker"] 的 agent 生成正确的 bash deny+allow 规则
 T0.25: env_scope 编译只在 agent.ts 中发生一次，不在 task.ts 中重复编译
 T0.26: Config.Agent 新字段被 knownKeys 白名单正确识别，不落入 options

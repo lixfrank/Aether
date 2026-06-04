@@ -1,6 +1,6 @@
 ---
 name: literature-landscape-scan
-description: Scan literature landscape for a research topic. Produces a structured landscape_map.md with domain map, school classification, key paper timeline, controversy annotations, and open problem list. Integrates with arxiv-search, alphaxiv, and research-question-framing.
+description: Scan literature landscape for a research topic. Produces a structured landscape_map.md with domain map, school classification, key paper timeline, controversy annotations, and open problem list. Integrates with alpha-research, alphaxiv, and research-question-framing.
 ---
 
 # Literature Landscape Scan
@@ -33,10 +33,10 @@ Use this skill when:
 
 Execute parallel searches across selected databases:
 
-1. **arXiv**: Use arxiv-search skill with category-appropriate queries
+1. **arXiv**: Use alpha-research skill (no-login mode) with category-appropriate queries
 
    ```bash
-   .venv/bin/python [YOUR_SKILLS_DIR]/arxiv-search/arxiv_search.py "cat:hep-ph AND ti:search_term" --max-papers 50
+   uv run .aether/skills/alpha-research/arxiv_search.py "cat:hep-ph AND ti:search_term" --max-papers 50
    ```
 
 2. **alphaxiv Smart Search**: For AI-enhanced discovery beyond keywords:
@@ -144,7 +144,7 @@ Evaluate landscape scan quality:
 - **research-question-framing**: The gap_list output feeds directly into question framing, converting open problems into structured research questions
 - **deep-research**: For deeper investigation of specific papers or subtopics identified in the landscape
 - **literature-review**: For systematic review of specific themes identified in the landscape
-- **arxiv-search + alphaxiv**: For paper discovery and deep understanding
+- **alpha-research + alphaxiv**: For paper discovery and deep understanding
 
 ## MCP Integration
 

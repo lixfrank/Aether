@@ -20,7 +20,7 @@
 | **peer-review**                  | Peer review toolkit for evaluating methodology, statistics, and reproducibility                 |
 | **write-paper**                  | Generate LaTeX academic papers from research project files                                      |
 | **deep-research**                | Deep research with multi-source synthesis and citations                                         |
-| **arxiv-search**                 | Search arXiv for preprints and academic papers                                                  |
+| **alpha-research**               | Search/read/query papers — alpha CLI mode (full) + arxiv-search mode (no login)                 |
 | **read-arxiv-paper**             | Read and analyze arXiv paper source files                                                       |
 | **research-grants**              | Write research grant proposals (NSF, NIH, DOE, DARPA)                                           |
 | **scientific-critical-thinking** | Evaluate scientific claims, bias detection, and evidence quality assessment                     |
@@ -36,5 +36,5 @@
 ## Usage Notes
 
 - Skills auto-trigger via their `description` field—no manual invocation needed
-- Academic skills can be chained: `arxiv-search` → `read-arxiv-paper` → `literature-review` → `write-paper`
+- Academic skills can be chained: `alpha-research` → `read-arxiv-paper` → `literature-review` → `write-paper`
 - Always use `brainstorming` before starting any development work

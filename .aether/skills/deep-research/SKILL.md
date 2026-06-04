@@ -45,7 +45,7 @@ Follow this systematic approach:
 - Look for primary and secondary sources
 - Check publication dates and currency
 - Evaluate source credibility
-- For physics literature: use arxiv-search skill for initial search, then alphaxiv overview for deeper understanding
+- For physics literature: use alpha-research skill for initial search, then alphaxiv overview for deeper understanding
 - Delegate parallel search tasks to research-explorer subagent when multiple database searches are needed
 
 ### 4. **Synthesize Findings**
