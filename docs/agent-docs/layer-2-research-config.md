@@ -1,20 +1,22 @@
 # Layer 2: Research Configuration Layer
 
-> 前置依赖: Layer 0 + Layer 1（Permission/Discipline/Agent.Info 扩展 + Mode-Switch 基础设施）
-> 本文档是 5 层重构计划的第三层。**零核心源文件改动** — 全部通过 `.opencode/` 和 `.aether/` 目录中的文件实现。
-> 完成后，research mode 可通过 `/research_enter` 进入并使用完整研究工作流。
+> 前置依赖: Layer 0 + Layer 1（Permission/Discipline/Agent.Info 扩展 + output_dir/fallback/MCP per-agent/denied tools）
+> 本文档是 6 层重构计划的第三层。**零核心源文件改动** — 全部通过 `.opencode/` 和 `.aether/` 目录中的文件实现。
+> 完成后，research mode 可通过 UI dropdown 进入并使用完整研究工作流。
+> **注意**：Layer 2 的 scale_decision 中 background 模式暂改为 concurrent，待 Layer 5 background 执行功能完成后恢复。
 
 ---
 
 ## 上下文
 
-| Layer       | 状态            | 简介                                                          |
-| ----------- | --------------- | ------------------------------------------------------------- |
-| Layer 0     | 已完成          | intersection、compile、task 参数、Info 扩展、skill_refs       |
-| Layer 1     | 已完成          | mode-switch、fallback、background、prompt 切换、MCP per-agent |
-| **Layer 2** | **本文档**      | Research 配置层：agent md + skill md（零核心源改动）          |
-| Layer 3     | 在 Layer 2 之后 | MCP 服务器（convention、verification、errors）+ 参考文档      |
-| Layer 4     | 在 Layer 3 之后 | Publication 管线                                              |
+| Layer       | 状态            | 简介                                                     |
+| ----------- | --------------- | -------------------------------------------------------- |
+| Layer 0     | 已完成          | intersection、compile、task 参数、Info 扩展、skill_refs  |
+| Layer 1     | 已完成          | output_dir、fallback_models、MCP per-agent、denied tools |
+| **Layer 2** | **本文档**      | Research 配置层：agent md + skill md（零核心源改动）     |
+| Layer 3     | 在 Layer 2 之后 | MCP 服务器（convention、verification、errors）+ 参考文档 |
+| Layer 4     | 在 Layer 3 之后 | Publication 管线                                         |
+| Layer 5     | 在 Layer 4 之后 | Background 执行（异步 spawn + 信号注入 + 结果取回）      |
 
 ---
 
@@ -37,18 +39,17 @@
 
 Research agent 定义文件**不包含**完整工作流 prompt（不再 600+ 行 prompt_append）。它只包含:
 
-1. 权限配置（base_agent 继承 + overlay）
+1. 权限配置（手动声明，不使用 base_agent 继承）
 2. skill_refs 白名单（列出可调用的工作流模式）
 3. 简短 prompt_append（核心约束 + 模式路由指引）
 4. MCP 配置
-5. 出口选项
+5. output_dir 配置（输出目录路径）
 
 ```yaml
 ---
 description: Research mode — deep search, analysis, and verification
 color: "#7C3AED"
 mode: primary
-base_agent: build
 permission:
   bash:
     alpha*: allow
@@ -64,24 +65,11 @@ permission:
   knowledge_search: allow
   question: allow
   todowrite: allow
-  research_exit: allow
-  plan_enter: allow
   task: allow
   skill: allow
   read: allow
   glob: allow
   grep: allow
-enter_description: Use when the user's request would benefit from deep research, literature search, or knowledge analysis
-exit_options:
-  - label: Plan
-    agent: plan
-    description: Create an implementation plan based on research findings
-  - label: Build
-    agent: build
-    description: Start implementing based on research findings
-  - label: Stay
-    agent: research
-    description: Continue researching
 skill_refs:
   - deep-research
   - autoresearch
@@ -117,7 +105,7 @@ scale_decision:
     - condition: "complex multi-domain research"
       subagent_count: 5
       subagent_type: research-explorer
-      mode: background
+      mode: concurrent
 env_scope:
   allowed_commands:
     - alpha
@@ -126,13 +114,14 @@ env_scope:
     - grep
     - git
     - docker
+output_dir: research
 prompt_append: |
   <system-reminder>
   # Research Mode — HARD CONSTRAINTS
 
   PERMITTED: read/glob/grep any file; edit/write within notepad; websearch/webfetch; knowledge_search; question; todowrite; task (research-explorer/gpd-verifier/gpd-reviewer); skill; bash (alpha/curl/rg/grep/git/docker only).
 
-  FORBIDDEN: edit/write outside notepad; bash commands not in allowed_commands; plan_exit/plan_enter.
+  FORBIDDEN: edit/write outside notepad; bash commands not in allowed_commands.
 
   ## Mode Routing
 
@@ -151,13 +140,13 @@ prompt_append: |
 
   ## Notepad
 
-  Write findings to your notepad directory. After each subagent return: extract learnings → learnings.md, update findings.md.
+  Write findings to your output directory. Create the notepad structure: notepads/<slug>/{sources.md, findings.md, gaps.md, learnings.md, report.md}. After each subagent return: extract learnings → learnings.md, update findings.md.
 
   ## Convention Awareness
 
   Before any physics/math calculation, check convention state via gpd-conventions MCP (convention_lock_status, subfield_defaults). Use ASSERT_CONVENTION headers in derivation files. Verify consistency between phases. The gpd-conventions skill provides the procedure; MCP provides the live data.
 
-  Your turn must end with: asking a question, calling a skill, calling research_exit, or dispatching a subagent.
+  Your turn must end with: asking a question, calling a skill, or dispatching a subagent.
   </system-reminder>
 ---
 ```
@@ -181,7 +170,17 @@ prompt_append: |
 ---
 description: Gather primary evidence across papers, web sources, repos, and local artifacts with integrity constraints
 mode: subagent
-base_agent: explore
+permission:
+  "*": deny
+  grep: allow
+  glob: allow
+  list: allow
+  bash: allow
+  webfetch: allow
+  websearch: allow
+  codesearch: allow
+  read: allow
+  external_directory: ask
 skill_refs:
   - alpha-research
   - arxiv-search
@@ -238,13 +237,22 @@ prompt_append: |
 ---
 description: Verify research results with structured verification procedure (domain-agnostic framework)
 mode: subagent
-base_agent: explore
 permission:
-  mcp__research_conventions__convention_lock_status: allow
-  mcp__research_conventions__convention_check: allow
-  mcp__research_conventions__assert_convention_validate: allow
-  mcp__research_state__get_state: allow
-  mcp__research_state__validate_state: allow
+  "*": deny
+  grep: allow
+  glob: allow
+  list: allow
+  bash: allow
+  webfetch: allow
+  websearch: allow
+  codesearch: allow
+  read: allow
+  external_directory: ask
+  "research-conventions_convention_lock_status": allow
+  "research-conventions_convention_check": allow
+  "research-conventions_assert_convention_validate": allow
+  "research-state_get_state": allow
+  "research-state_validate_state": allow
 skill_refs:
   - research-verification
 prompt_append: |
@@ -304,14 +312,23 @@ prompt_append: |
 ---
 description: Verify physics research results with deterministic computation (scripts) + domain-specific error/catalog/bundle checks
 mode: subagent
-base_agent: explore
 permission:
-  mcp__research_conventions__convention_lock_status: allow
-  mcp__research_conventions__convention_set: allow
-  mcp__research_conventions__convention_check: allow
-  mcp__research_conventions__assert_convention_validate: allow
-  mcp__research_state__get_state: allow
-  mcp__research_state__validate_state: allow
+  "*": deny
+  grep: allow
+  glob: allow
+  list: allow
+  bash: allow
+  webfetch: allow
+  websearch: allow
+  codesearch: allow
+  read: allow
+  external_directory: ask
+  "research-conventions_convention_lock_status": allow
+  "research-conventions_convention_set": allow
+  "research-conventions_convention_check": allow
+  "research-conventions_assert_convention_validate": allow
+  "research-state_get_state": allow
+  "research-state_validate_state": allow
 skill_refs:
   - research-verification
   - gpd-verification
@@ -394,7 +411,17 @@ VERIFICATION.md must contain at least one executed code block with actual output
 ---
 description: Systematic peer review of research artifacts and manuscripts
 mode: subagent
-base_agent: explore
+permission:
+  "*": deny
+  grep: allow
+  glob: allow
+  list: allow
+  bash: allow
+  webfetch: allow
+  websearch: allow
+  codesearch: allow
+  read: allow
+  external_directory: ask
 skill_refs: []
 prompt_append: |
   <system-reminder>
@@ -447,7 +474,7 @@ Classify intent:
 Write research plan to notepad/.plans/<slug>.md. Include: questions, expected sources, verification targets.
 
 ## Phase 2: Gather
-Dispatch research-explorer subagents (concurrent/background) per scale_decision rules.
+Dispatch research-explorer subagents (concurrent) per scale_decision rules.
 Each subagent writes to its own output file. After each returns: extract learnings → learnings.md.
 
 ## Phase 3: Analyze
@@ -460,7 +487,7 @@ Dispatch gpd-verifier subagent to check claims, dimensional consistency, limitin
 Write final report to report.md.
 
 ## Phase 6: Exit
-Call research_exit or ask user about next steps.
+Suggest next steps to user (implement findings, create a plan, continue research).
 ```
 
 ### 2.5.2 autoresearch skill
@@ -575,24 +602,23 @@ Cleanup: `docker stop <name> && docker rm <name>`
 ```
 
 T2.1: research.md 存在时，Agent.list() 包含 research agent
-T2.2: research_enter 工具出现在工具列表
-T2.3: /research_enter 切换后，permission 被 intersection 约束
-T2.4: /research_enter 切换后，skill_refs 生效（只看到 11 个 skill）
-T2.5: /research_enter 切换后，env_scope.allowed_commands 生效（bash 限制到 alpha/docker 等）
-T2.6: /deep-research skill 被调用时，完整工作流执行
-T2.7: research-explorer subagent 可通过 task tool 调用
-T2.8: research-explorer 继承 explore 权限 + Integrity Commandments
-T2.9: research-verifier subagent 可通过 task tool 调用（通用验证框架）
-T2.10: gpd-verifier subagent 可通过 task tool 调用（物理验证插件）
-T2.11: research-verifier skill_refs 仅含 research-verification（通用）
-T2.12: gpd-verifier skill_refs 含 research-verification + 4 个 gpd-\* skills（物理插件）
-T2.13: gpd-verifier 使用 gpd-verification scripts 执行确定性物理验证
-T2.14: gpd-verifier 使用 research-conventions MCP 进行约定锁读写
-T2.15: gpd-reviewer subagent 可通过 task tool 调用
-T2.16: scale_decision rules 注入到 research agent system prompt
-T2.17: 不使用 research agent 时，build/plan/general/explore 行为完全不变
-T2.18: 删除 .opencode/agents/research*.md 后，所有 native agent 行为不变
-T2.19: 非物理领域用户可仅使用 research-verifier（无 gpd-* 插件）
+T2.2: 从 UI dropdown 选择 research 后，permission 被 intersection 约束
+T2.3: 从 UI dropdown 选择 research 后，skill_refs 生效（只看到 11 个 skill）
+T2.4: 从 UI dropdown 选择 research 后，env_scope.allowed_commands 生效（bash 限制到 alpha/docker 等）
+T2.5: /deep-research skill 被调用时，完整工作流执行
+T2.6: research-explorer subagent 可通过 task tool 调用
+T2.7: research-explorer 继承 explore 权限 + Integrity Commandments
+T2.8: research-verifier subagent 可通过 task tool 调用（通用验证框架）
+T2.9: gpd-verifier subagent 可通过 task tool 调用（物理验证插件）
+T2.10: research-verifier skill_refs 仅含 research-verification（通用）
+T2.11: gpd-verifier skill_refs 含 research-verification + 4 个 gpd-\* skills（物理插件）
+T2.12: gpd-verifier 使用 gpd-verification scripts 执行确定性物理验证
+T2.13: gpd-verifier 使用 research-conventions MCP 进行约定锁读写
+T2.14: gpd-reviewer subagent 可通过 task tool 调用
+T2.15: scale_decision rules 注入到 research agent system prompt
+T2.16: 不使用 research agent 时，build/plan/general/explore 行为完全不变
+T2.17: 删除 .opencode/agents/research*.md 后，所有 native agent 行为不变
+T2.18: 非物理领域用户可仅使用 research-verifier（无 gpd-* 插件）
 
 ```
 

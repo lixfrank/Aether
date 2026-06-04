@@ -8,13 +8,14 @@
 
 ## 上下文
 
-| Layer       | 状态       | 简介                                                              |
-| ----------- | ---------- | ----------------------------------------------------------------- |
-| Layer 0     | 已完成     | Permission/Discipline/Info 扩展                                   |
-| Layer 1     | 已完成     | mode-switch/fallback/background                                   |
-| Layer 2     | 已完成     | Research 配置层                                                   |
-| Layer 3     | 已完成     | MCP 服务器 + 参考文档                                             |
-| **Layer 4** | **本文档** | Publication 管线（write-paper、peer-review、respond-to-referees） |
+| Layer       | 状态            | 简介                                                              |
+| ----------- | --------------- | ----------------------------------------------------------------- |
+| Layer 0     | 已完成          | Permission/Discipline/Info 扩展                                   |
+| Layer 1     | 已完成          | output_dir、fallback_models、MCP per-agent、denied tools          |
+| Layer 2     | 已完成          | Research 配置层                                                   |
+| Layer 3     | 已完成          | MCP 服务器 + 参考文档                                             |
+| **Layer 4** | **本文档**      | Publication 管线（write-paper、peer-review、respond-to-referees） |
+| Layer 5     | 在 Layer 4 之后 | Background 执行                                                   |
 
 ---
 
@@ -36,7 +37,8 @@
 ---
 description: Write academic manuscripts in LaTeX with journal-specific formatting
 mode: subagent
-base_agent: general
+permission:
+  todowrite: deny
 skill_refs:
   - write-paper
 prompt_append: |
@@ -81,7 +83,8 @@ prompt_append: |
 ---
 description: Generate point-by-point responses to academic peer review comments
 mode: subagent
-base_agent: general
+permission:
+  todowrite: deny
 skill_refs:
   - respond-to-referee
 prompt_append: |

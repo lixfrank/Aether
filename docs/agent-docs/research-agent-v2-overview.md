@@ -1,7 +1,7 @@
-# Research Agent v2: 5-Layer Reconstruction Plan
+# Research Agent v2: 6-Layer Reconstruction Plan
 
 > 基线版本: v0.6.0 (commit c79260d6a)
-> 本文档是总览，指向 5 个独立的 Layer 文档。
+> 本文档是总览，指向 6 个独立的 Layer 文档。
 > 替代此前所有 agent 设计文档（custom-agent-modes-design.md、parallel-agents-unified-design.md 等）。
 
 ---
@@ -12,8 +12,8 @@
 Layer 0: Core Security Enhancement ─── 所有用户受益
   Permission.intersection, Discipline.compile, Agent.Info扩展, skill_refs注入, scale_decision注入
   ↓
-Layer 1: Agent Infrastructure ─── 通用 agent 模式创建
-  mode-switch, fallback_models, background执行, prompt模式切换, MCP per-agent
+Layer 1: Agent Infrastructure ─── 通用 agent 模式支持
+  fallback_models, output_dir注入, MCP per-agent, denied tools优化
   ↓
 Layer 2: Research Config Layer ─── 零核心源改动
   agent md (research/research-explorer/research-verifier/gpd-verifier/gpd-reviewer) + skill md (多模式)
@@ -25,6 +25,9 @@ Layer 3: Research Infrastructure ─── 双层命名: research-* (通用框�
   ↓
 Layer 4: Publication Pipeline ─── 完全独立
   write-paper, peer-review, respond-to-referees (subagent + skill)
+  ↓
+Layer 5: Background Execution ─── 独立层（可延后实现）
+  异步spawn + 信号注入 + 结果取回 + SQLite持久化
 ```
 
 ---
@@ -34,10 +37,11 @@ Layer 4: Publication Pipeline ─── 完全独立
 | Layer       | 文档                                 | 核心源文件改动                                                                                                                                                                                                                                                                                    | 配置层文件                                                                                                                                        |
 | ----------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Layer 0** | `layer-0-core-security.md`           | permission/index.ts (+intersection), session/discipline.ts (新), tool/task.ts (参数扩展+权限重构+2新import+移除手工拼接代码块), agent/agent.ts (Info扩展+1新import,不含base_agent), session/system.ts (skill_refs追加+scaleDecision), config/config.ts (Agent schema+knownKeys+Info.category字段) | 无                                                                                                                                                |
-| **Layer 1** | `layer-1-agent-infrastructure.md`    | tool/mode-switch.ts (新), session/background.ts (新), session/concurrency.ts (新), tool/background-output.ts (新), session/prompt.ts (agent切换分支), session/processor.ts (fallback), tool/registry.ts (注册)                                                                                    | 无                                                                                                                                                |
+| **Layer 1** | `layer-1-agent-infrastructure.md`    | permission/index.ts (+EDIT_TOOLS export), session/system.ts (outputDir函数), tool/task.ts (fallback+promptWithFallback), config/config.ts (mcp+output_dir字段), agent/agent.ts (mcp+outputDir字段+merge), session/prompt.ts (outputDir调用+MCP过滤+denied过滤)                                    | 无                                                                                                                                                |
 | **Layer 2** | `layer-2-research-config.md`         | **零**                                                                                                                                                                                                                                                                                            | agents/research.md, research-explorer.md, research-verifier.md, gpd-verifier.md, gpd-reviewer.md (flat + prefix) + skills (多模式, plugins/ 隔离) |
 | **Layer 3** | `layer-3-research-infrastructure.md` | **零**                                                                                                                                                                                                                                                                                            | research-_ MCP (state, conventions) + research-_ skills (通用) + gpd-\* skills in plugins/gpd/ (物理插件隔离) + 参考文档                          |
 | **Layer 4** | `layer-4-publication-pipeline.md`    | **零**                                                                                                                                                                                                                                                                                            | .opencode/agents/gpd-paper-writer.md, gpd-referee.md + .opencode/skills/ 3个skill                                                                 |
+| **Layer 5** | `layer-5-background-execution.md`    | session/background.ts (新), session/background.sql.ts (新), tool/background-output.ts (新), tool/task.ts (background分支), tool/registry.ts (+background_output), session/projectors.ts (+2 projector+修改现有Session.Delete函数体追加清理)                                                       | 无                                                                                                                                                |
 
 ---
 
@@ -131,10 +135,10 @@ env_scope 的编译**只在 `agent.ts` 中进行**（通过 `Discipline.compile(
 
 Layer 2-3 的组件分为两个命名层：
 
-| 前缀         | 含义             | 范围               | 示例                                                                                                                   |
-| ------------ | ---------------- | ------------------ | ---------------------------------------------------------------------------------------------------------------------- |
-| `research-*` | 通用研究基础设施 | 适用于任何研究领域 | research-state MCP、research-conventions MCP（框架）、research-verification skill（通用验证程序）                      |
-| `gpd-*`      | 物理领域插件     | 仅适用于物理研究   | gpd-verification scripts（SymPy 计算）、gpd-errors catalog（104 物理错误类）、gpd-domain-check bundles（QFT/GR/CM 等） |
+| 前缀         | 含义             | 范围               | 示例                                                                                                                      |
+| ------------ | ---------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| `research-*` | 通用研究基础设施 | 适用于任何研究领域 | research-state MCP、research-conventions MCP（框架）、research-verification skill（通用验证程序）                         |
+| `gpd-*`      | 物理领域插件     | 仅适用于物理研究   | gpd-verification scripts（SymPy 计算）、gpd-errors catalog（20 精选物理错误类）、gpd-domain-check bundles（QFT/GR/CM 等） |
 
 **verifier agent 拆分为两层**：
 
@@ -191,14 +195,14 @@ Layer 2-3 的组件分为两个命名层：
 ### Layer 1 验收
 
 12. build/plan 切换不受影响
-13. research_enter 工具可用
-14. fallback_models 降级正确
-15. background mode spawn + output 正确
-16. MCP per-agent activate/deactivate 正确
+13. UI dropdown 切换到 research 后 permission/skill_refs/MCP/output_dir 自动生效（不需 insertReminders 改动）
+14. subagent fallback_models 降级正确（promptWithFallback helper 在 task.ts，不改 processor.ts）
+15. MCP per-agent 工具过滤正确（resolveTools 中过滤，不做 connect/disconnect）
+16. denied tools 过滤正确（resolveTools 中过滤，不展示被 deny 的工具）
 
 ### Layer 2 验收
 
-17. research mode 可通过 /research_enter 进入
+17. research mode 可通过 UI dropdown 进入
 18. skill_refs whitelist 生效（广播 + skillRefs 追加）
 19. research-explorer subagent 可调用
 20. research-verifier subagent 可调用（通用验证框架）
@@ -227,7 +231,18 @@ Layer 2-3 的组件分为两个命名层：
 37. respond-to-referees 三部分结构正确
 38. journal templates 可用
 
+### Layer 5 验收
+
+39. background mode spawn 立即返回 taskID，primary agent 不等待
+40. background task 完成后 primary session 消息流中出现合成通知信号
+41. background_output 工具取回完整结果（内存 Map）或截断摘要（SQLite）
+42. background_output 对 running task 返回 "still running"（不阻塞等待）
+43. promptWithFallback 在 Layer 1 定义，serial 和 background 模式共用
+44. primary step abort 不传播到 background task；session delete 时 background task 标记 cancelled
+45. background_task SQLite 表正确持久化
+
 ### 回退安全
 
-39. 删除所有 Layer 2-4 配置文件 + MCP 配置后，行为与 v0.6.0 一致
-40. Layer 0-1 的核心源文件改动可通过删除新增代码恢复 v0.6.0 行为
+46. 删除所有 Layer 2-4 配置文件 + MCP 配置后，行为与 v0.6.0 一致
+47. Layer 0-1 的核心源文件改动可通过删除新增代码恢复 v0.6.0 行为
+48. 删除 Layer 5 background 相关代码后，task tool 退回 serial/concurrent，Layer 2 scale_decision 中 background→concurrent 退回生效

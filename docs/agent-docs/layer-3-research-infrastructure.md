@@ -8,13 +8,14 @@
 
 ## 上下文
 
-| Layer       | 状态            | 简介                                          |
-| ----------- | --------------- | --------------------------------------------- |
-| Layer 0     | 已完成          | Permission/Discipline/Info 扩展               |
-| Layer 1     | 已完成          | mode-switch/fallback/background/MCP per-agent |
-| Layer 2     | 已完成          | Research agent/skill 配置文件（零核心源改动） |
-| **Layer 3** | **本文档**      | MCP 状态层 + Skills/Scripts 计算层            |
-| Layer 4     | 在 Layer 3 之后 | Publication 管线                              |
+| Layer       | 状态            | 简介                                                     |
+| ----------- | --------------- | -------------------------------------------------------- |
+| Layer 0     | 已完成          | Permission/Discipline/Info 扩展                          |
+| Layer 1     | 已完成          | output_dir、fallback_models、MCP per-agent、denied tools |
+| Layer 2     | 已完成          | Research agent/skill 配置文件（零核心源改动）            |
+| **Layer 3** | **本文档**      | MCP 状态层 + Skills/Scripts 计算层                       |
+| Layer 4     | 在 Layer 3 之后 | Publication 管线                                         |
+| Layer 5     | 在 Layer 4 之后 | Background 执行                                          |
 
 ---
 
