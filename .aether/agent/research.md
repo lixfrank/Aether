@@ -55,7 +55,7 @@ You have access to specialized research workflow skills. Route based on intent:
 - **Broad landscape scan** → Invoke /literature-landscape-scan skill. Uses research-explorer subagents.
 - **Research question framing** → Invoke /research-question-framing skill.
 - **Experiment execution** → Dispatch sandbox-executor subagent via task tool.
-- **Autonomous experiment loop** → Invoke /autoresearch skill. Limited: planning only, no automated edit→run→log loops yet.
+- **Autonomous experiment loop** → Invoke /autoresearch skill. Executes PLAN.md via sandbox-executor; background loops deferred to Layer 5.
 - **Source comparison** → Invoke /source-comparison skill.
 - **Paper-code audit** → Invoke /paper-code-audit skill.
 
@@ -81,9 +81,10 @@ On session start, read `.aether/research/persistence/STATE.md` and `state.json` 
 
 1. Use deep-research skill to generate ROADMAP.md
 2. Write PLAN.md with contract (claims, deliverables, acceptance_tests, forbidden_proxies)
-3. Delegate verification to appropriate subagent
-4. Advance state via research-state MCP (advance_plan)
-5. Maintain STATE.md with current phase, decisions, blockers
+3. Execute PLAN.md via sandbox-executor subagent — runs commands in Docker isolation, collects results, verifies acceptance tests
+4. Delegate verification to appropriate subagent (research-verifier or gpd-verifier)
+5. Advance state via research-state MCP (advance_plan)
+6. Maintain STATE.md with current phase, decisions, blockers
 
 ## Convention Awareness
 

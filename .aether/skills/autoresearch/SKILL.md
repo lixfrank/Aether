@@ -1,11 +1,11 @@
 ---
 name: autoresearch
-description: Autonomous research loop — plan, execute, verify, advance. Currently supports planning phase only; full execution loop deferred to Layer 5.
+description: Autonomous research loop — plan, execute, verify, advance. Supports planning and execution phases; background execution deferred to Layer 5.
 ---
 
 # AutoResearch
 
-Autonomous research loop for advancing research projects without continuous user supervision. Currently supports the planning phase; automated execution→verify→log cycles require Layer 5 background execution.
+Autonomous research loop for advancing research projects without continuous user supervision. Supports planning and execution phases via sandbox-executor subagent; background execution→verify→log cycles require Layer 5.
 
 ## When to Use
 
@@ -17,18 +17,18 @@ Use this skill when:
 
 ## Current Scope
 
-**Planning phase only**. The autoresearch loop can:
+**Planning and execution phases**. The autoresearch loop can:
 
 1. Read current state and determine next phase
 2. Collect evidence and write PLAN.md contract
-3. Advance state via MCP
+3. Dispatch sandbox-executor subagent to execute PLAN.md commands in Docker isolation
 4. Dispatch verification subagents
+5. Advance state via MCP
 
 **Not yet supported** (deferred to Layer 5):
 
-- Automated script execution with edit→run→log cycles
-- Background task management
-- Long-running computational loops
+- Background task management (non-blocking execution)
+- Long-running computational loops with automatic edit→run→log cycles
 
 ## Loop Procedure
 
@@ -75,7 +75,20 @@ Based on current ROADMAP phase:
 4. **Check conventions**: Call `convention_lock_status` via research-conventions MCP before proceeding
 5. **Advance state**: Call `advance_plan` via research-state MCP to move from `planning` to `executing`
 
-### Step 3: Verify Phase
+### Step 3: Execute Phase
+
+1. **Prepare execution**: Read PLAN.md contract section to extract execution commands, acceptance tests, deliverables, and environment requirements
+2. **Dispatch sandbox-executor**: Via task tool, pass:
+   - PLAN.md contract reference (commands, acceptance tests, deliverables)
+   - Environment requirements (Python version, GPU, dependencies)
+   - Convention context (read from research-conventions MCP — sandbox-executor reads but never writes)
+3. **Read execution report**: Read `.aether/research/persistence/EXECUTION.md` produced by sandbox-executor
+4. **Decision**:
+   - All acceptance tests passed → proceed to verification phase
+   - Some acceptance tests failed → investigate root cause, may need to revise PLAN.md or execution setup
+   - Inconclusive results → may need alternative execution approach or manual intervention
+
+### Step 4: Verify Phase
 
 1. **Dispatch verifier**: Based on domain:
    - General research: delegate to `research-verifier` subagent (uses research-verification skill)
@@ -86,7 +99,7 @@ Based on current ROADMAP phase:
    - Some claims failed → investigate root cause, may need to revise PLAN.md
    - Script pass overrides LLM-only judgment → respect computational oracle results
 
-### Step 4: Advance Phase
+### Step 5: Advance Phase
 
 1. **Update STATE.md**: Record phase completion, decisions made, blockers encountered
 2. **Advance state**: Call `advance_plan` via research-state MCP
@@ -101,7 +114,7 @@ initial → planning → executing → verifying → completed
                               (if failed) → revising → planning
 ```
 
-Current support: `initial → planning → (manual execution) → verifying → advance`
+Current support: `initial → planning → executing → verifying → advance`
 
 ## Integrity
 
