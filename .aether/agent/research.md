@@ -182,13 +182,14 @@ phase_debate       ─── Multi-agent debate loop (coordinator-managed):
                        │  [ALL_RESOLVED] → advance_plan(      │
                        │    phase_checkpoint) → exit loop     │
                        │                                     │
-                       │  [UNRESOLVED + round<3] → next round │
-                       │    focused on ESCALATE + repaired    │
-                       │    topics                            │
-                       │                                     │
-                       │  [round=3 unresolved] → advance_plan │
-                       │    (phase_checkpoint) with Blockers  │
-                       │                                     │
+                        │  [FURTHER_ROUNDS_NEEDED + round<3]   │
+                        │    → next round focused on ESCALATE  │
+                        │    + re_verification topics          │
+                        │                                     │
+                        │  [round=3 FURTHER_ROUNDS_NEEDED]     │
+                        │    → advance_plan                    │
+                        │    (phase_checkpoint) with Blockers  │
+                        │                                     │
                        └─────────────────────────────────────┘
    │
    ▼
@@ -328,15 +329,15 @@ task(
 
 **Phase routing rules** (applied by coordinator after each digest):
 
-| Digest next_phase       | Coordinator action                                                                                                                                                                    |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| phase_landscape         | Dispatch worker (phase=landscape)                                                                                                                                                     |
-| phase_framing           | Dispatch worker (phase=framing)                                                                                                                                                       |
-| phase_debate            | Start debate loop — dispatch worker (sub_phase=advocacy, round=1)                                                                                                                     |
-| phase_checkpoint        | Coordinator handles directly (NO worker dispatch) — see section below                                                                                                                 |
-| phase_execution         | Start execution loop — dispatch worker (sub_phase=execution_cycle, cycle=1)                                                                                                           |
-| completed               | Present final results to user                                                                                                                                                         |
-| null (sub-phase digest) | Coordinator decides next sub-phase based on sub_phase + round/cycle + status. Debate first 3 steps (advocacy/critique/rebuttal) flow in fixed order, not dependent on digest routing. |
+| Digest next_phase       | Coordinator action                                                                                                                                                                                 |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| phase_landscape         | Dispatch worker (phase=landscape)                                                                                                                                                                  |
+| phase_framing           | Dispatch worker (phase=framing)                                                                                                                                                                    |
+| phase_debate            | Start debate loop — dispatch worker (sub_phase=advocacy, round=1)                                                                                                                                  |
+| phase_checkpoint        | Coordinator handles directly (NO worker dispatch) — see section below                                                                                                                              |
+| phase_execution         | Start execution loop — dispatch worker (sub_phase=execution_cycle, cycle=1)                                                                                                                        |
+| completed               | Present final results to user                                                                                                                                                                      |
+| null (sub-phase digest) | Coordinator decides next sub-phase based on sub_phase + round/cycle + status. Debate first 4 steps (advocacy/critique/rebuttal/adjudication) flow in fixed order, not dependent on digest routing. |
 
 4. If status=failed:
    - Append digest to DIGESTS.md (record failure)
@@ -366,22 +367,62 @@ After processing each worker digest, check consistency:
 
 phase_debate uses coordinator-managed multi-round loop with 5 worker dispatches per round.
 
+#### Debate Topics
+
+Debate topics are defined in the debate skills (/debate-advocate, /debate-critic, /debate-adjudicator, /debate-repair). The topic schema is owned by the skills, not the coordinator. When dispatching workers, reference "all debate topics" (not a hardcoded count) — the skills enumerate and assess the full topic list internally.
+
 #### Debate Sub-phase Routing
 
-| Current sub_phase completed     | Next dispatch (no DIGESTS.md read needed)              |
-| ------------------------------- | ------------------------------------------------------ |
-| advocacy (status=completed)     | dispatch critique (same round)                         |
-| critique (status=completed)     | dispatch rebuttal (same round)                         |
-| rebuttal (status=completed)     | dispatch adjudication (same round)                     |
-| adjudication (status=completed) | dispatch repair (same round)                           |
-| repair                          | Read repair digest → route per §3.3                    |
-| any sub_phase (status=failed)   | Retry same sub_phase (max 2 retries, 3 total attempts) |
+| Current sub_phase completed     | Next dispatch (no DIGESTS.md read needed)                          |
+| ------------------------------- | ------------------------------------------------------------------ |
+| advocacy (status=completed)     | dispatch critique (same round)                                     |
+| critique (status=completed)     | dispatch rebuttal (same round)                                     |
+| rebuttal (status=completed)     | dispatch adjudication (same round)                                 |
+| adjudication (status=completed) | create PLAN.md backup, dispatch repair (same round)                |
+| repair                          | Read repair digest → route per §Repair Digest Processing           |
+| any sub_phase (status=failed)   | Retry same sub_phase (max 2 retries, 3 total attempts)             |
+| DEBATE.md not updated           | Reject digest, retry same sub_phase (max 2 retries, counts toward) |
 
 First 4 steps (advocacy/critique/rebuttal/adjudication) return minimal digest (4 fields: phase/sub_phase/round/status) via task return value — NOT written to DIGESTS.md. Only repair writes a full digest to DIGESTS.md.
 
+#### Sub-phase Output Verification
+
+After each debate worker returns:
+
+1. Call `check_file_updated(project_dir, "persistence/DEBATE.md", since_mtime=<pre-dispatch mtime>)` via research-state MCP
+2. If file NOT updated → worker did not write to DEBATE.md → reject digest, retry same sub_phase (max 2 retries, 3 total attempts)
+3. If file updated → accept digest, proceed to next sub_phase per routing table
+
+#### Repair Pre-backup
+
+Before dispatching repair worker, create backup of PLAN.md:
+
+```
+bash: cp .aether/research/persistence/PLAN.md .aether/research/persistence/PLAN.md.pre_repair_round{N}
+```
+
+This backup is used for crash recovery (see §Repair Crash Recovery below).
+
+#### Repair Crash Recovery
+
+If repair worker times out or crashes after potentially modifying PLAN.md:
+
+1. Check whether `PLAN.md.pre_repair_round{N}` exists
+2. If backup exists → restore: `cp .aether/research/persistence/PLAN.md.pre_repair_round{N} .aether/research/persistence/PLAN.md`
+3. Check DEBATE.md for partial repair report content — if found, note in retry prompt: "Ignore incomplete repair report at end of DEBATE.md"
+4. Retry repair dispatch (max 2 retries)
+5. If all retries fail → enter Digest Parsing Fallback with `status: repair_incomplete_risk`, present to user
+
 #### Round 1: Full Debate (5 dispatches)
 
-For each sub-phase dispatch, call `update_debate_state(current_sub_phase="<sub_phase>")` via research-state MCP.
+For each sub-phase dispatch, call `update_debate_state(current_sub_phase="<sub_phase>")` via research-state MCP. Before each dispatch, record DEBATE.md mtime via `check_file_updated` (research-state MCP).
+
+**Before the first dispatch of each round**, append a round header to DEBATE.md:
+
+```
+edit: append to .aether/research/persistence/DEBATE.md
+## Round [N]
+```
 
 1. Dispatch worker (sub_phase=advocacy, round=1):
 
@@ -392,7 +433,7 @@ task(
   prompt: "Execute advocacy sub-phase of phase_debate (round 1).
 Invoke /debate-advocate skill in advocacy mode.
 Read PLAN.md, ROADMAP.md, and user's original research prompt.
-For each of the 14 debate topics, construct a defense (DEFEND or CONCEDE).
+For all debate topics defined in the skill, construct a defense (DEFEND or CONCEDE).
 Append advocacy brief to DEBATE.md.
 After completing, output minimal digest as your final message."
 )
@@ -407,7 +448,7 @@ task(
   prompt: "Execute critique sub-phase of phase_debate (round 1).
 Invoke /debate-critic skill.
 Read Advocate Brief from DEBATE.md (current round) + PLAN.md + ROADMAP.md + user's original prompt.
-For each of the 14 debate topics, provide assessment (SOUND/CONCERN/CRITICAL).
+For all debate topics defined in the skill, provide assessment (SOUND/CONCERN/CRITICAL).
 Append critique to DEBATE.md.
 After completing, output minimal digest as your final message."
 )
@@ -437,7 +478,7 @@ task(
   prompt: "Execute adjudication sub-phase of phase_debate (round 1).
 Invoke /debate-adjudicator skill.
 Read current round's Advocate Brief + Critic Critique + Advocate Rebuttal from DEBATE.md + PLAN.md + ROADMAP.md.
-Rule on ALL 14 topics (UPHELD/REVISE/ESCALATE/CONCEDED) using decision rules.
+Rule on ALL debate topics (UPHELD/REVISE/ESCALATE/CONCEDED) using decision rules defined in the skill.
 Do NOT modify PLAN.md.
 Append ruling to DEBATE.md.
 After completing, output minimal digest as your final message."
@@ -446,26 +487,37 @@ After completing, output minimal digest as your final message."
 
 5. Dispatch worker (sub_phase=repair, round=1):
 
+**Pre-backup**: `bash: cp .aether/research/persistence/PLAN.md .aether/research/persistence/PLAN.md.pre_repair_round1`
+
 ```
 task(
   description: "debate repair round 1",
   subagent_type: "research-worker",
   prompt: "Execute repair sub-phase of phase_debate (round 1).
 Invoke /debate-repair skill.
-Read DEBATE.md current round (REVISE/CONCEDED rulings + reasons) + PLAN.md + research_questions.md + ROADMAP.md.
-Repair PLAN.md and research_questions.md based on rulings.
+Read DEBATE.md current round (REVISE/CONCEDED/ESCALATE rulings + reasons) + PLAN.md + research_questions.md + ROADMAP.md.
+Repair PLAN.md and research_questions.md based on rulings. For ESCALATE topics, add exploration steps and conditional branches.
 Append repair report to DEBATE.md.
-Output repair digest as your final message (this will be appended to DIGESTS.md)."
+Output repair digest as your final message (this will be appended to DIGESTS.md).
+Include re_verification_topics in your digest. Do NOT judge whether ESCALATE topics are resolved — that is the next round's job."
 )
 ```
 
 #### Round 2-3: Focused Debate
 
-For rounds 2+, the dispatch prompt must include the narrowed topic list per §3.4 convergence mechanism:
+For rounds 2+, the dispatch prompt must include the narrowed topic list from two sources:
 
-- Previous round's ESCALATE topics
-- Previous round's REVISE/CONCEDED topics that were repaired (need re-verification)
-- UPHELD topics whose evaluation may depend on modified PLAN.md sections (inferred from repair digest's `modified_sections`)
+- ESCALATE topics from DEBATE.md adjudicator ruling (automatically carry over — repair does not judge whether they are resolved)
+- `re_verification_topics` from repair digest (UPHELD topics that may be affected by repairs + repaired REVISE/CONCEDED topics)
+
+Coordinator reads ESCALATE topics from DEBATE.md adjudicator ruling and `re_verification_topics` from repair digest, combines them, and passes into the next round's dispatch prompt. Coordinator does NOT interpret or infer topic relevance.
+
+Before the first dispatch of a focused round, append the round header to DEBATE.md:
+
+```
+edit: append to .aether/research/persistence/DEBATE.md
+## Round [N]
+```
 
 Example dispatch for focused round:
 
@@ -476,7 +528,7 @@ task(
   prompt: "Execute advocacy sub-phase of phase_debate (round [N]).
 Invoke /debate-advocate skill in advocacy mode.
 Read PLAN.md, ROADMAP.md, user's original prompt, and full DEBATE.md history.
-FOCUS on these topics: [list ESCALATE + repaired + affected UPHELD topics].
+FOCUS on these topics: [ESCALATE topics from DEBATE.md adjudicator ruling + re_verification_topics from repair digest].
 For focused topics: provide detailed defense (DEFEND/CONCEDE).
 For other topics: brief confirmation of unchanged status.
 Append advocacy brief to DEBATE.md.
@@ -484,29 +536,40 @@ After completing, output minimal digest as your final message."
 )
 ```
 
-Same pattern applies for critique, rebuttal, adjudication, and repair in focused rounds.
+Same pattern applies for critique, rebuttal, adjudication, and repair in focused rounds. For repair in focused rounds, the prompt must also include "For ESCALATE topics, add exploration steps and conditional branches; include re_verification_topics in your digest. Do NOT judge whether ESCALATE topics are resolved."
 
 #### Round Termination Conditions
 
-| Condition                                                            | Action                                                                                                    |
-| -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| Repair digest shows round_verdict=ALL_RESOLVED                       | Terminate debate, advance_plan → phase_checkpoint                                                         |
-| Repair digest shows round_verdict=UNRESOLVED_REMAINING and round < 3 | Next round focused on unresolved + repaired topics                                                        |
-| Round = 3 with unresolved topics                                     | Terminate debate, enter phase_checkpoint with unresolved topics in STATE.md Blockers                      |
-| ESCALATE count ≥ previous round's ESCALATE count (divergence)        | Next round is final round regardless of round count. Final round ESCALATE topics go to STATE.md Blockers. |
-| Worker dispatch failure                                              | Retry max 2 times (3 total attempts), report to user after 3 failures                                     |
+| Condition                                                             | Action                                                                                               |
+| --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Repair digest shows round_verdict=ALL_RESOLVED                        | Terminate debate, advance_plan → phase_checkpoint                                                    |
+| Repair digest shows round_verdict=FURTHER_ROUNDS_NEEDED and round < 3 | Next round focused on ESCALATE topics (from DEBATE.md) + re_verification topics (from repair digest) |
+| Round = 3 with ESCALATE topics or unverified repairs                  | Terminate debate, enter phase_checkpoint with remaining topics in STATE.md Blockers                  |
+| Worker dispatch failure                                               | Retry max 2 times (3 total attempts), report to user after 3 failures                                |
+
+#### Debate Error Handling
+
+| Scenario                                                     | Detection                                                  | Action                                                                                                                                                                                                                      |
+| ------------------------------------------------------------ | ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Worker returns malformed digest                              | Digest YAML parsing fails                                  | Reject, retry same sub_phase (max 2 retries)                                                                                                                                                                                |
+| Worker wrote DEBATE.md but task timed out                    | Task tool returns timeout                                  | Check DEBATE.md for partial content via `check_file_updated`. If partial write detected, note in retry prompt: "Ignore incomplete section at end of DEBATE.md". Retry same sub_phase.                                       |
+| Repair worker modified PLAN.md but digest not returned       | Repair worker timeout + PLAN.md.pre_repair_round{N} exists | Restore PLAN.md from backup. Check DEBATE.md for partial repair report — if found, note in retry prompt. Retry repair (max 2 retries). If all retries fail → Digest Parsing Fallback with `status: repair_incomplete_risk`. |
+| Repair modifications incomplete or inconsistent with rulings | No automated detection                                     | Accept digest, rely on next debate round to catch issues. Adjudicator will assess repaired PLAN.md in next round.                                                                                                           |
+| DEBATE.md not updated after worker returns                   | `check_file_updated` returns not_updated                   | Reject digest, retry same sub_phase (max 2 retries, counts toward 3 total attempts per sub_phase)                                                                                                                           |
 
 #### Repair Digest Processing
 
 After repair digest is received:
 
 1. Append repair digest to DIGESTS.md
-2. Call `update_debate_state(rounds_completed=N, unresolved_topics=[...], current_sub_phase=null)` via research-state MCP
-3. Read repair digest fields:
+2. Read DEBATE.md adjudicator ruling → extract ESCALATE topic names
+3. Call `update_debate_state(rounds_completed=N, escalate_topics=[...from DEBATE.md...], current_sub_phase=null)` via research-state MCP
+4. Clean up backup: `bash: rm -f .aether/research/persistence/PLAN.md.pre_repair_round{N}`
+5. Read repair digest fields:
    - `round_verdict=ALL_RESOLVED` → call `advance_plan(phase=phase_checkpoint, plan_number=5)` → proceed to phase_checkpoint
-   - `round_verdict=UNRESOLVED_REMAINING` + `round < 3` → dispatch next round (advocacy, round=N+1) with focused topic list
-   - `round_verdict=UNRESOLVED_REMAINING` + `round >= 3` → call `advance_plan(phase=phase_checkpoint, plan_number=5)`, write unresolved topics to STATE.md Blockers → proceed to phase_checkpoint
-4. Git commit after debate completion:
+   - `round_verdict=FURTHER_ROUNDS_NEEDED` + `round < 3` → dispatch next round (advocacy, round=N+1) with focused topic list constructed from ESCALATE topics (DEBATE.md adjudicator ruling) + `re_verification_topics` (repair digest)
+   - `round_verdict=FURTHER_ROUNDS_NEEDED` + `round >= 3` → call `advance_plan(phase=phase_checkpoint, plan_number=5)`, write remaining ESCALATE topics to STATE.md Blockers → proceed to phase_checkpoint
+6. Git commit after debate completion:
    ```
    git add .aether/research/
    git commit -m "research: phase_debate completed (plan 4)"
@@ -519,7 +582,7 @@ In phase_checkpoint, if user rejects and requests debate revision:
 1. **Preserve DEBATE.md**: new round content appends after existing content
 2. **Do NOT rollback PLAN.md**: new round based on checkpoint-time PLAN.md (including previous repairs)
 3. Inject user feedback as additional constraint in new round dispatch prompt
-4. Round counter continues incrementing (not reset), but not subject to max 3 round limit (human-initiated reopening)
+4. Round counter continues incrementing (not reset). Each reopening allows up to 3 more rounds (cumulative, same max-round rule as initial debate)
 
 ### phase_checkpoint (NO subagent dispatch)
 
@@ -534,11 +597,11 @@ In phase_checkpoint, if user rejects and requests debate revision:
    - Verification criteria
    - Environment requirements: [from PLAN.md environment_requirements or framing digest]
    - Debate outcome: [from DEBATE.md — key rulings, repairs applied]
-   - Unresolved concerns: [ESCALATE topics if any, from DEBATE.md]
+   - Escalated concerns: [ESCALATE topics if any, from DEBATE.md]
 5. Use question tool: "Based on the analysis, here is the research plan: [summary]. Shall I proceed with execution?"
 6. MUST NOT proceed without user confirmation
 7. If user rejects, offer options:
-   - "Request debate revision" → preserve DEBATE.md, new round (round counter continues, not subject to max 3 limit)
+   - "Request debate revision" → preserve DEBATE.md, new round (round counter continues, up to 3 more rounds per reopening, cumulative)
    - "Rollback to framing" → git rollback to phase_framing commit, re-execute framing + debate
    - "Rollback to earlier phase" → git rollback to target phase commit
      For rollback options:
@@ -665,6 +728,11 @@ If digest YAML parsing fails or worker didn't output a digest:
    - Construct fallback digest from file evidence
    - Append to DIGESTS.md with flag: `status: completed_fallback`
    - Proceed to next phase with caution
+5. Repair incomplete risk (repair worker crashed after modifying PLAN.md, no valid digest, backup restored):
+   - Construct fallback digest with flag: `status: repair_incomplete_risk`
+   - Append to DIGESTS.md
+   - Present to user: "Repair worker may have partially modified PLAN.md. Backup has been restored. Manual review recommended."
+   - Ask: retry repair / proceed with current PLAN.md / abort?
 
 ### Task Dispatch Failure
 
@@ -730,9 +798,12 @@ On session start:
    - If current phase is phase_execution: check state.json.execution_cycle + DIGESTS.md for cycle status
    - If current phase is phase_debate: check state.json.debate.current_sub_phase + DEBATE.md for round status
      - If state.json.debate.current_sub_phase is non-null → resume from that sub_phase (interrupted mid-round)
+     - If current_sub_phase was "repair" → check for PLAN.md.pre_repair_round{N} backup:
+       - Backup exists → restore PLAN.md from backup, then re-dispatch repair
+       - Backup does not exist → check DEBATE.md for repair report section; if found with full content, infer completion and construct fallback digest; if not found, re-dispatch repair
      - If state.json.debate.current_sub_phase is null → check DEBATE.md last round's Round Verdict
        - ALL RESOLVED → proceed to phase_checkpoint
-       - UNRESOLVED REMAINING → continue from round state.json.debate.rounds_completed + 1
+       - FURTHER ROUNDS NEEDED → continue from round state.json.debate.rounds_completed + 1, read ESCALATE topics from DEBATE.md adjudicator ruling + last repair digest's `re_verification_topics` for focus list
      - Fallback (state.json.debate missing): read DEBATE.md last section type to determine interruption point
    - Git consistency check: git log --oneline -5 → verify last commit matches state.json.phase_commits[current_phase]
    - If git commit SHA mismatch: git checkout state.json.phase_commits[current_phase] -- .aether/research/ → git add + commit

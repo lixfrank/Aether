@@ -206,13 +206,15 @@ phase_result_digest:
   cycle: null
   round: [N]
   status: completed
-  round_verdict: ALL_RESOLVED | UNRESOLVED_REMAINING
+  round_verdict: ALL_RESOLVED | FURTHER_ROUNDS_NEEDED
   repairs_applied: [N]
   repair_scope:
     local: [N]
     structural: [N]
-  modified_sections: ["section_name: change description", ...]
-  unresolved_topics: ["[topic name]", ...]
+    exploratory: [N]
+  re_verification_topics:
+    - topic: "[topic name]"
+      reason: "[why this UPHELD topic may be affected by the repairs]"
   next_phase: phase_checkpoint | phase_debate
   output_paths:
     debate_log: "persistence/DEBATE.md"

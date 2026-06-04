@@ -316,7 +316,7 @@ def advance_plan(
             "debate",
             {
                 "rounds_completed": 0,
-                "unresolved_topics": [],
+                "escalate_topics": [],
                 "current_sub_phase": None,
             },
         )
@@ -345,12 +345,13 @@ VALID_DEBATE_SUB_PHASES = {
 def update_debate_state(
     project_dir: str,
     rounds_completed: int | None = None,
-    unresolved_topics: list[str] | None = None,
+    escalate_topics: list[str] | None = None,
     current_sub_phase: str | None = None,
 ) -> dict[str, Any]:
     """Update debate-specific fields in state.json.
     Only callable during phase_debate.
     All parameters are optional — only provided fields are updated.
+    escalate_topics: ESCALATE topic names extracted from DEBATE.md adjudicator ruling by coordinator.
     current_sub_phase accepts: advocacy, critique, rebuttal, adjudication, repair, null."""
     pd = _resolve_project_dir(project_dir)
     state = _read_state_safe(pd)
@@ -369,15 +370,15 @@ def update_debate_state(
         "debate",
         {
             "rounds_completed": 0,
-            "unresolved_topics": [],
+            "escalate_topics": [],
             "current_sub_phase": None,
         },
     )
 
     if rounds_completed is not None:
         state["debate"]["rounds_completed"] = int(rounds_completed)
-    if unresolved_topics is not None:
-        state["debate"]["unresolved_topics"] = list(unresolved_topics)
+    if escalate_topics is not None:
+        state["debate"]["escalate_topics"] = list(escalate_topics)
     if current_sub_phase is not None:
         sub = str(current_sub_phase)
         state["debate"]["current_sub_phase"] = None if sub == "null" else sub
@@ -386,6 +387,53 @@ def update_debate_state(
     return _stable_response(
         {
             "debate": state["debate"],
+        }
+    )
+
+
+@mcp.tool(annotations=READ_ONLY)
+def check_file_updated(
+    project_dir: str, file_path: str, since_mtime: float
+) -> dict[str, Any]:
+    """Check if a file under .aether/research/ has been modified since a given timestamp.
+
+    Used by the coordinator to verify that a debate worker actually wrote to DEBATE.md
+    after returning a digest. file_path is relative to .aether/research/ (e.g.
+    "persistence/DEBATE.md"). since_mtime is a Unix timestamp (seconds since epoch)
+    recorded before the worker was dispatched.
+
+    Returns: updated (bool), current_mtime, size, previous_mtime."""
+    pd = _resolve_project_dir(project_dir)
+    full_path = pd / OUTPUT_DIR / file_path
+    if not full_path.exists():
+        return _stable_response(
+            {
+                "updated": False,
+                "exists": False,
+                "current_mtime": None,
+                "size": None,
+                "previous_mtime": since_mtime,
+            }
+        )
+    try:
+        stat = full_path.stat()
+    except OSError:
+        return _stable_response(
+            {
+                "updated": False,
+                "exists": True,
+                "current_mtime": None,
+                "size": None,
+                "previous_mtime": since_mtime,
+            }
+        )
+    return _stable_response(
+        {
+            "updated": stat.st_mtime > since_mtime,
+            "exists": True,
+            "current_mtime": stat.st_mtime,
+            "size": stat.st_size,
+            "previous_mtime": since_mtime,
         }
     )
 

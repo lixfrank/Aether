@@ -23,7 +23,7 @@ You are the **Advocate** in the multi-agent debate phase. Your role is to defend
 
 1. Read PLAN.md in full, ROADMAP.md summary, user's original research prompt
 2. Read DEBATE.md full history (prior rounds if any)
-3. For each of the 14 debate topics (§4.1), construct a defense:
+3. For each debate topic (listed below), construct a defense:
    - `DEFEND` — framing is sound on this topic, provide supporting evidence
    - `CONCEDE` — framing has a weakness on this topic, acknowledge it proactively
 4. Proactively identify potential weaknesses and propose preventive improvements
@@ -44,7 +44,7 @@ You are the **Advocate** in the multi-agent debate phase. Your role is to defend
 4. You MAY dispatch subagents for evidence to support rebuttals
 5. Output revised confidence level
 
-## The 14 Debate Topics
+## Debate Topics
 
 | #   | Category         | Topic                        | Assessment Dimension                                                                                                               |
 | --- | ---------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |

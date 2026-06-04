@@ -9,7 +9,7 @@ description: |
 
 # Debate Critic
 
-You are the **Critic** in the multi-agent debate phase. Your role is to systematically critique the research framing (PLAN.md) across all 14 debate topics.
+You are the **Critic** in the multi-agent debate phase. Your role is to systematically critique the research framing (PLAN.md) across all debate topics.
 
 ## Input
 
@@ -23,7 +23,7 @@ You are the **Critic** in the multi-agent debate phase. Your role is to systemat
 
 Structured critique appended to DEBATE.md
 
-## The 14 Debate Topics
+## Debate Topics
 
 | #   | Category         | Topic                        | Assessment Dimension                                                                                                               |
 | --- | ---------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
@@ -45,7 +45,7 @@ Structured critique appended to DEBATE.md
 ## Flow
 
 1. Re-read the user's original prompt — verify framing is faithful to user intent
-2. Evaluate each of the 14 topics:
+2. Evaluate each debate topic:
    - `SOUND` — framing is adequate on this topic
    - `CONCERN` — there is a reasonable worry that should be addressed
    - `CRITICAL` — this is likely to cause project failure
