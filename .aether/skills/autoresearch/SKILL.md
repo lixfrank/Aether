@@ -24,9 +24,9 @@ This skill implements **Phase 5** of the Path 3 research state machine. It is in
 
 **Output** (MUST write all of these):
 
-1. `output_dir/persistence/EXECUTION.md` — Execution results (written by sandbox-executor)
-2. `output_dir/persistence/VERIFICATION.md` — Verification report (appended, never overwritten)
-3. `output_dir/persistence/STATE.md` — Updated with phase=phase_execution completed → completed
+1. `.aether/research/persistence/EXECUTION.md` — Execution results (written by sandbox-executor)
+2. `.aether/research/persistence/VERIFICATION.md` — Verification report (appended, never overwritten)
+3. `.aether/research/persistence/STATE.md` — Updated with phase=phase_execution completed → completed
 
 **State transition**: phase_execution → completed
 
@@ -38,9 +38,9 @@ This skill implements **Phase 5** of the Path 3 research state machine. It is in
 
 ### Step 1: Read Current State
 
-1. Read `output_dir/persistence/STATE.md` — confirm phase_checkpoint was passed with user_decision=confirmed
-2. Read `output_dir/persistence/PLAN.md` — extract contract (claims, deliverables, acceptance_tests, forbidden_proxies)
-3. Read `output_dir/persistence/ROADMAP.md` — understand overall project context
+1. Read `.aether/research/persistence/STATE.md` — confirm phase_checkpoint was passed with user_decision=confirmed
+2. Read `.aether/research/persistence/PLAN.md` — extract contract (claims, deliverables, acceptance_tests, forbidden_proxies)
+3. Read `.aether/research/persistence/ROADMAP.md` — understand overall project context
 4. Read state.json via research-state MCP (`get_state`)
 5. Check `convention_lock_status` via research-conventions MCP
 
@@ -68,7 +68,7 @@ Via task tool, pass:
 
 ### Step 4: Read Execution Report
 
-1. Read `output_dir/persistence/EXECUTION.md` produced by sandbox-executor
+1. Read `.aether/research/persistence/EXECUTION.md` produced by sandbox-executor
 2. Decision:
    - All acceptance tests passed → proceed to verification
    - Some acceptance tests failed → investigate root cause, may need to revise execution setup
@@ -88,7 +88,7 @@ Via task tool, pass:
 
 ### Step 6: Update State → Completed
 
-1. Update `output_dir/persistence/STATE.md`:
+1. Update `.aether/research/persistence/STATE.md`:
    - phase: completed
    - key decisions: [final verification results]
    - blockers: [any remaining issues]

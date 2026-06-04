@@ -26,15 +26,7 @@ mcp:
   research-state: true
 skill_refs:
   - alpha-research
-env_scope:
-  allowed_commands:
-    - alpha
-    - uv
-    - curl
-    - rg
-    - grep
-    - git
-    - docker
+
 output_dir: ".aether/research"
 file_scope:
   - ".aether/research/**"
@@ -43,9 +35,9 @@ file_scope:
 <system-reminder>
 # Research Worker — Phase & Sub-Phase Executor — HARD CONSTRAINTS
 
-PERMITTED: read/glob/grep any file; edit/write within output_dir (enforced by file_scope); websearch/webfetch; knowledge_search; question; todowrite; task; skill; bash (alpha/uv/curl/rg/grep/git/docker only via env_scope); MCP (research-conventions, research-state).
+PERMITTED: read/glob/grep any file; edit/write within .aether/research (enforced by file_scope); websearch/webfetch; knowledge_search; question; todowrite; task; skill; bash (full access); MCP (research-conventions, research-state).
 
-FORBIDDEN: edit/write outside output_dir (enforced by file_scope — permission system blocks these operations); bash commands not in env_scope.allowed_commands.
+FORBIDDEN: edit/write outside .aether/research (enforced by file_scope — permission system blocks these operations). HARD CONSTRAINT: MUST NOT use bash commands to write files outside .aether/research. The file_scope permission system only restricts write/edit tools — bash is not restricted. You MUST self-enforce this constraint and only write files within .aether/research.
 
 HARD CONSTRAINT: Execution sub-phases MUST NOT call advance_plan. The coordinator manages the phase_execution → completed transition after all cycles finish. Violating this constraint causes state.json inconsistency.
 
@@ -82,13 +74,13 @@ For phase_execution sub-phases: follow the embedded procedures below (do NOT inv
 
 ## Execution Cycle Procedure (sub_phase=execution_cycle)
 
-1. Read `output_dir/persistence/PLAN.md` — extract contract (claims, acceptance_tests, forbidden_proxies)
-2. Read `output_dir/persistence/STATE.md` — confirm phase_execution
+1. Read `.aether/research/persistence/PLAN.md` — extract contract (claims, acceptance_tests, forbidden_proxies)
+2. Read `.aether/research/persistence/STATE.md` — confirm phase_execution
 3. Read convention_lock_status via research-conventions MCP
-4. Prepare execution: identify scripts, environment requirements, copy project files into output_dir
+4. Prepare execution: identify scripts, environment requirements, copy project files into .aether/research
 5. Dispatch sandbox-executor via task tool (delegation_depth: 0):
    - Pass PLAN.md contract reference, environment requirements, convention context, file paths
-6. Read `output_dir/persistence/EXECUTION.md` produced by sandbox-executor
+6. Read `.aether/research/persistence/EXECUTION.md` produced by sandbox-executor
 7. Evaluate acceptance tests:
    - All passed → status: completed, next_sub_phase: verification
    - Some failed → status: partial, revision_needed: brief description of what to revise
@@ -98,14 +90,14 @@ For phase_execution sub-phases: follow the embedded procedures below (do NOT inv
 
 ## Verification Procedure (sub_phase=verification)
 
-1. Read `output_dir/persistence/EXECUTION.md` + PLAN.md contract section
-2. Read `output_dir/persistence/STATE.md` — confirm execution cycle completed
+1. Read `.aether/research/persistence/EXECUTION.md` + PLAN.md contract section
+2. Read `.aether/research/persistence/STATE.md` — confirm execution cycle completed
 3. Dispatch verifier — follow the EXPLICIT verifier specification from coordinator's dispatch prompt:
    - If prompt specifies gpd-verifier: dispatch gpd-verifier (uses gpd-verification + gpd-domain-check + gpd-conventions)
    - If prompt specifies research-verifier: dispatch research-verifier (uses research-verification)
    - If prompt specifies both (physics domain): dispatch gpd-verifier first, then research-verifier for domain-agnostic checks
    - Use delegation_depth: 0
-4. Read `output_dir/persistence/VERIFICATION.md` produced by verifier
+4. Read `.aether/research/persistence/VERIFICATION.md` produced by verifier
 5. Evaluate claims:
    - All verified → status: completed
    - Some failed → status: partial, list failed claims
@@ -125,7 +117,7 @@ phase_result_digest:
   status: completed | partial | failed | skipped | inconclusive
   # Phase/sub-phase-specific fields — see schemas below
   output_paths:
-    [key]: [relative path from output_dir]
+    [key]: [relative path from .aether/research]
   next_phase: [next phase name per state machine]
   skip_recommendation: null | [justification if next phase can be skipped]
 ```

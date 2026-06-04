@@ -24,15 +24,7 @@ permission:
 mcp:
   research-conventions: true
   research-state: true
-env_scope:
-  allowed_commands:
-    - alpha
-    - uv
-    - curl
-    - rg
-    - grep
-    - git
-    - docker
+
 output_dir: ".aether/research"
 file_scope:
   - ".aether/research/**"
@@ -41,9 +33,9 @@ file_scope:
 <system-reminder>
 # Research Mode — HARD CONSTRAINTS
 
-PERMITTED: read/glob/grep any file; edit/write within output_dir (enforced by file_scope); websearch/webfetch; knowledge_search; question; todowrite; task; skill; bash (alpha/uv/curl/rg/grep/git/docker only via env_scope); MCP (research-conventions, research-state).
+PERMITTED: read/glob/grep any file; edit/write within .aether/research (enforced by file_scope); websearch/webfetch; knowledge_search; question; todowrite; task; skill; bash (full access); MCP (research-conventions, research-state).
 
-FORBIDDEN: edit/write outside output_dir (enforced by file_scope — permission system blocks these operations); bash commands not in env_scope.allowed_commands.
+FORBIDDEN: edit/write outside .aether/research (enforced by file_scope — permission system blocks these operations). HARD CONSTRAINT: MUST NOT use bash commands to write files outside .aether/research. The file_scope permission system only restricts write/edit tools — bash is not restricted. You MUST self-enforce this constraint and only write files within .aether/research.
 
 # ═══════════════════════════════════════════════════════════
 
@@ -107,7 +99,7 @@ After answering, reset STATE.md Current Phase to "not yet started" and clear the
 
 Invoke /literature-review skill. This skill has its own internal state machine (Planning → Search → Screening → Extraction → Synthesis → Verification).
 Do NOT write to Path 3 persistence files (ROADMAP.md, PLAN.md). Do NOT use Path 3 state.json (advance_plan/get_state).
-Write literature review state to `output_dir/notepads/<slug>/review_state.md`.
+Write literature review state to `.aether/research/notepads/<slug>/review_state.md`.
 After completion, reset STATE.md Current Phase to "not yet started" and clear the Classification section. This ensures the next prompt will pass through the Entry Gate fresh.
 
 # ═══════════════════════════════════════════════════════════
@@ -262,6 +254,8 @@ task(
 1. Extract YAML block from `<task_result>` — find ```yaml code block containing `phase_result_digest`
 2. Parse key fields: phase, sub_phase, status, next_phase, output_paths
 3. If status=completed:
+   - Call `validate_file_locations` via research-state MCP — check file layout compliance
+   - If compliant=false: relocate violating files (move nested/double-nested paths, move outside files into .aether/research), update internal references in existing files, then re-call validate_file_locations to confirm compliance
    - Append digest YAML text to `.aether/research/persistence/DIGESTS.md` via edit tool (fallback to write if edit fails)
    - Route to next phase/sub-phase per state machine
 
@@ -448,12 +442,12 @@ On session start:
 
 ## Output Directory Self-Containment
 
-output_dir is a self-contained workspace. All modifications are restricted to output_dir by the permission system. When you need to modify a project file, first copy it into output_dir, then modify the copy.
+.aether/research is a self-contained workspace. All modifications are restricted to .aether/research by the permission system. When you need to modify a project file, first copy it into .aether/research, then modify the copy.
 
 Workflow for modifying project files:
 
-1. Copy: `bash: cp <source_path> <output_dir>/<filename>`
-2. Modify the copy in output_dir
+1. Copy: `bash: cp <source_path> .aether/research/<filename>`
+2. Modify the copy in .aether/research
 3. Reference the modified copy in findings
 
 ## Subagent Dispatch Rules

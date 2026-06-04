@@ -49,6 +49,15 @@ export namespace Discipline {
           rules.push({ permission: tool, pattern: scopePattern, action: "allow" })
         }
       }
+      for (const scopePattern of d.file_scope) {
+        if (scopePattern.endsWith("/**")) {
+          const base = scopePattern.slice(0, -3)
+          const nestedPattern = `${base}/${base}/**`
+          for (const tool of WRITE_TOOLS) {
+            rules.push({ permission: tool, pattern: nestedPattern, action: "deny" })
+          }
+        }
+      }
     }
 
     if (d.delegation_depth === 0) {

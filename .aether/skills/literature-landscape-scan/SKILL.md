@@ -18,9 +18,9 @@ This skill implements **Phase 2** of the Path 3 research state machine. It expan
 
 **Output** (MUST write all of these):
 
-1. `output_dir/notepads/<slug>/landscape_map.md` — Structured landscape map
-2. `output_dir/persistence/ROADMAP.md` — Updated with landscape findings (schools, papers, controversies)
-3. `output_dir/persistence/STATE.md` — Updated with phase=phase_landscape completed
+1. `.aether/research/notepads/<slug>/landscape_map.md` — Structured landscape map
+2. `.aether/research/persistence/ROADMAP.md` — Updated with landscape findings (schools, papers, controversies)
+3. `.aether/research/persistence/STATE.md` — Updated with phase=phase_landscape completed
 
 **State transition**: phase_landscape → phase_framing
 
@@ -39,9 +39,9 @@ This skill implements **Phase 2** of the Path 3 research state machine. It expan
 
 ### Step 1: Read Current State
 
-1. Read `output_dir/persistence/STATE.md` — confirm phase is phase_analysis completed
-2. Read `output_dir/persistence/ROADMAP.md` — understand project scope and question
-3. Read `output_dir/notepads/<slug>/research_analysis.md` — review Phase 1 findings
+1. Read `.aether/research/persistence/STATE.md` — confirm phase is phase_analysis completed
+2. Read `.aether/research/persistence/ROADMAP.md` — understand project scope and question
+3. Read `.aether/research/notepads/<slug>/research_analysis.md` — review Phase 1 findings
 4. Check skip condition: Does ROADMAP.md already contain sufficient landscape coverage?
 5. Read state.json via research-state MCP (`get_state`)
 6. Check `convention_lock_status` via research-conventions MCP if physics domain
@@ -101,7 +101,7 @@ Classify papers into a structured landscape:
 
 ### Step 6: Write Landscape Map
 
-Write to `output_dir/notepads/<slug>/landscape_map.md`:
+Write to `.aether/research/notepads/<slug>/landscape_map.md`:
 
 ```markdown
 # Literature Landscape: [Topic]
@@ -152,7 +152,7 @@ Append landscape findings to ROADMAP.md:
 
 ### Step 8: Update State
 
-1. Update `output_dir/persistence/STATE.md`:
+1. Update `.aether/research/persistence/STATE.md`:
    - phase: phase_landscape completed
    - key decisions: [landscape decisions]
    - blockers: [any gaps in coverage]

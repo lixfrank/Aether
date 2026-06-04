@@ -52,4 +52,27 @@ describe("Discipline.compile — research agent constraint shortcuts", () => {
     const rules = Discipline.compile({})
     expect(rules.length).toBe(0)
   })
+
+  test("file_scope denies nested output_dir paths (e.g., .aether/research/.aether/research/**)", () => {
+    const rules = Discipline.compile({
+      file_scope: [".aether/research/**"],
+    })
+    expect(Permission.evaluate("write", ".aether/research/notepads/test.md", rules).action).toBe("allow")
+    expect(Permission.evaluate("edit", ".aether/research/persistence/ROADMAP.md", rules).action).toBe("allow")
+    expect(Permission.evaluate("write", ".aether/research/.aether/research/notepads/test.md", rules).action).toBe(
+      "deny",
+    )
+    expect(Permission.evaluate("edit", ".aether/research/.aether/research/persistence/ROADMAP.md", rules).action).toBe(
+      "deny",
+    )
+    expect(Permission.evaluate("write", "secrets/credentials.json", rules).action).toBe("deny")
+  })
+
+  test("file_scope nested deny works for non-research scopes (e.g., src/src/**)", () => {
+    const rules = Discipline.compile({
+      file_scope: ["src/**"],
+    })
+    expect(Permission.evaluate("write", "src/main.ts", rules).action).toBe("allow")
+    expect(Permission.evaluate("write", "src/src/main.ts", rules).action).toBe("deny")
+  })
 })

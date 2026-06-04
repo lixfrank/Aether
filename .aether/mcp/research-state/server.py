@@ -445,6 +445,139 @@ def get_config(project_dir: str) -> dict[str, Any]:
     })
 
 
+OUTPUT_DIR = ".aether/research"
+PERSISTENCE_WHITELIST = {
+    "STATE.md", "ROADMAP.md", "PLAN.md", "DIGESTS.md", "state.json",
+    "EXECUTION.md", "VERIFICATION.md",
+}
+
+
+def _scan_output_dir(pd: Path) -> list[Path]:
+    output_root = pd / OUTPUT_DIR
+    if not output_root.exists():
+        return []
+    return [p for p in output_root.rglob("*") if p.is_file()]
+
+
+def _is_nested_output_dir(path: Path, pd: Path) -> bool:
+    rel = str(path.relative_to(pd))
+    parts = rel.split("/")
+    depth = 0
+    for p in parts:
+        if p == OUTPUT_DIR:
+            depth += 1
+    return depth > 1
+
+
+def _is_outside_output_dir(path: Path, pd: Path) -> bool:
+    try:
+        rel = str(path.relative_to(pd))
+    except ValueError:
+        return True
+    return not rel.startswith(OUTPUT_DIR + "/") and rel != OUTPUT_DIR
+
+
+def _is_persistence_non_whitelisted(path: Path, pd: Path) -> bool:
+    rel = str(path.relative_to(pd))
+    if not rel.startswith(OUTPUT_DIR + "/persistence/"):
+        return False
+    filename = path.name
+    return filename not in PERSISTENCE_WHITELIST and not filename.endswith(".lock")
+
+
+@mcp.tool(annotations=READ_ONLY)
+def validate_file_locations(project_dir: str) -> dict[str, Any]:
+    """Validate file layout against expected schema. Checks for:
+    1. Nested output_dir paths (e.g., .aether/research/.aether/research/...)
+    2. Files written outside output_dir (e.g., references/ folder at project root)
+    3. Non-whitelisted files in persistence/ directory
+
+    Returns compliance status and violation details. The coordinator should
+    call this after receiving a worker digest, before appending to DIGESTS.md.
+    The agent should relocate any violating files and re-call to confirm compliance."""
+    pd = _resolve_project_dir(project_dir)
+    violations = []
+    output_root = pd / OUTPUT_DIR
+    output_exists = output_root.exists()
+
+    if not output_exists:
+        return _stable_response({
+            "compliant": True,
+            "violations": [],
+            "output_dir_exists": False,
+            "total_files_in_output_dir": 0,
+            "project_dir": str(pd),
+        })
+
+    all_output_files = _scan_output_dir(pd)
+
+    for f in all_output_files:
+        rel = str(f.relative_to(pd))
+        if _is_nested_output_dir(f, pd):
+            nested_base_idx = rel.find(OUTPUT_DIR, len(OUTPUT_DIR) + 1)
+            correct_rel = rel[:nested_base_idx] + rel[nested_base_idx + len(OUTPUT_DIR) + 1:]
+            violations.append({
+                "path": rel,
+                "rule": "nested_output_dir",
+                "suggested_correction": f"remove nested {OUTPUT_DIR} prefix; correct path: {correct_rel}",
+            })
+
+    project_files_outside = []
+    for f in pd.rglob("*"):
+        if not f.is_file():
+            continue
+        if str(f).startswith(str(pd / ".aether")):
+            continue
+        if str(f).startswith(str(pd / ".git")):
+            continue
+        if f.parent == pd:
+            candidates = ["package.json", "tsconfig.json", "bun.lock", "bunfig.toml",
+                          "Cargo.toml", "pyproject.toml", "Makefile", ".gitignore",
+                          "README.md", "LICENSE", "AGENTS.md"]
+            if f.name in candidates:
+                continue
+        rel = str(f.relative_to(pd))
+        if _is_outside_output_dir(f, pd):
+            project_files_outside.append(rel)
+
+    recent_outside = []
+    for rel in project_files_outside:
+        f = pd / rel
+        try:
+            mtime = f.stat().st_mtime
+            state = _read_state_safe(pd)
+            state_mtime = (pd / DEFAULT_STATE_DIR / "state.json").stat().st_mtime
+            if mtime > state_mtime - 60:
+                recent_outside.append(rel)
+        except OSError:
+            recent_outside.append(rel)
+
+    for rel in recent_outside:
+        violations.append({
+            "path": rel,
+            "rule": "outside_output_dir",
+            "suggested_correction": f"move into {OUTPUT_DIR}/notepads/<slug>/ or appropriate subdirectory",
+        })
+
+    for f in all_output_files:
+        rel = str(f.relative_to(pd))
+        if _is_persistence_non_whitelisted(f, pd):
+            violations.append({
+                "path": rel,
+                "rule": "persistence_non_whitelisted",
+                "suggested_correction": f"move to {OUTPUT_DIR}/notepads/<slug>/ if it is research output, or remove if temporary",
+            })
+
+    return _stable_response({
+        "compliant": len(violations) == 0,
+        "violations": violations,
+        "output_dir_exists": output_exists,
+        "total_files_in_output_dir": len(all_output_files),
+        "persistence_whitelist": sorted(PERSISTENCE_WHITELIST),
+        "project_dir": str(pd),
+    })
+
+
 _tighten_tool_contracts()
 
 if __name__ == "__main__":

@@ -18,9 +18,9 @@ This skill implements **Phase 1** of the Path 3 research state machine. It is in
 
 **Output** (MUST write all of these):
 
-1. `output_dir/persistence/ROADMAP.md` — Project definition, phase breakdown, milestones, expected deliverables
-2. `output_dir/persistence/STATE.md` — Updated with phase=phase_analysis completed
-3. `output_dir/notepads/<slug>/research_analysis.md` — Detailed analysis with citations
+1. `.aether/research/persistence/ROADMAP.md` — Project definition, phase breakdown, milestones, expected deliverables
+2. `.aether/research/persistence/STATE.md` — Updated with phase=phase_analysis completed
+3. `.aether/research/notepads/<slug>/research_analysis.md` — Detailed analysis with citations
 
 **State transition**: phase_analysis → phase_landscape (or phase_framing if landscape is skipped)
 
@@ -30,8 +30,8 @@ This skill implements **Phase 1** of the Path 3 research state machine. It is in
 
 ### Step 1: Read Current State
 
-1. Read `output_dir/persistence/STATE.md` — confirm phase indicates gate classification complete and Path 3 selected (Current Phase field should contain "gate → Path 3" or be empty/not yet started)
-2. Read `output_dir/persistence/state.json` via research-state MCP (`get_state`)
+1. Read `.aether/research/persistence/STATE.md` — confirm phase indicates gate classification complete and Path 3 selected (Current Phase field should contain "gate → Path 3" or be empty/not yet started)
+2. Read `.aether/research/persistence/state.json` via research-state MCP (`get_state`)
 3. Check `convention_lock_status` via research-conventions MCP if physics domain
 
 ### Step 2: Clarify the Research Question
@@ -57,7 +57,7 @@ This skill implements **Phase 1** of the Path 3 research state machine. It is in
 
 ### Step 5: Write ROADMAP.md
 
-Write to `output_dir/persistence/ROADMAP.md` with this structure:
+Write to `.aether/research/persistence/ROADMAP.md` with this structure:
 
 ```markdown
 # Research Roadmap
@@ -110,7 +110,7 @@ Write to `output_dir/persistence/ROADMAP.md` with this structure:
 
 ### Step 6: Write Research Analysis
 
-Write to `output_dir/notepads/<slug>/research_analysis.md`:
+Write to `.aether/research/notepads/<slug>/research_analysis.md`:
 
 ```markdown
 ## Executive Summary
@@ -146,7 +146,7 @@ Write to `output_dir/notepads/<slug>/research_analysis.md`:
 
 ### Step 7: Update State
 
-1. Update `output_dir/persistence/STATE.md`:
+1. Update `.aether/research/persistence/STATE.md`:
    - phase: phase_analysis completed
    - key decisions: [what was decided]
    - blockers: [any identified]

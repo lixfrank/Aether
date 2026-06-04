@@ -17,9 +17,9 @@ This skill implements **Phase 3** of the Path 3 research state machine. It conve
 
 **Output** (MUST write all of these):
 
-1. `output_dir/persistence/PLAN.md` — Contract with claims, deliverables, acceptance_tests, forbidden_proxies
-2. `output_dir/notepads/<slug>/research_questions.md` — Structured question framing
-3. `output_dir/persistence/STATE.md` — Updated with phase=phase_framing completed
+1. `.aether/research/persistence/PLAN.md` — Contract with claims, deliverables, acceptance_tests, forbidden_proxies
+2. `.aether/research/notepads/<slug>/research_questions.md` — Structured question framing
+3. `.aether/research/persistence/STATE.md` — Updated with phase=phase_framing completed
 
 **State transition**: phase_framing → phase_checkpoint (user confirmation)
 
@@ -29,8 +29,8 @@ This skill implements **Phase 3** of the Path 3 research state machine. It conve
 
 ### Step 1: Read Current State
 
-1. Read `output_dir/persistence/STATE.md` — confirm phase is phase_landscape completed (or phase_analysis if landscape was skipped)
-2. Read `output_dir/persistence/ROADMAP.md` — understand project scope
+1. Read `.aether/research/persistence/STATE.md` — confirm phase is phase_landscape completed (or phase_analysis if landscape was skipped)
+2. Read `.aether/research/persistence/ROADMAP.md` — understand project scope
 3. Read landscape_map.md (if exists) — extract gap_list
 4. Read research_analysis.md — extract initial findings
 5. Read state.json via research-state MCP (`get_state`)
@@ -74,7 +74,7 @@ Every research question MUST include:
 
 ### Step 5: Write Research Questions Document
 
-Write to `output_dir/notepads/<slug>/research_questions.md`:
+Write to `.aether/research/notepads/<slug>/research_questions.md`:
 
 ```markdown
 # Research Questions: [Topic]
@@ -100,7 +100,7 @@ Write to `output_dir/notepads/<slug>/research_questions.md`:
 
 ### Step 6: Map to PLAN.md Contract
 
-Write to `output_dir/persistence/PLAN.md`:
+Write to `.aether/research/persistence/PLAN.md`:
 
 ```markdown
 # Research Plan — [Project Name]
@@ -145,7 +145,7 @@ Before finalizing for physics domains:
 
 ### Step 8: Update State
 
-1. Update `output_dir/persistence/STATE.md`:
+1. Update `.aether/research/persistence/STATE.md`:
    - phase: phase_framing completed
    - key decisions: [research questions chosen, framework selected]
    - blockers: [any]
