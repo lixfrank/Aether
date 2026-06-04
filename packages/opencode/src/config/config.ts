@@ -165,17 +165,6 @@ export namespace Config {
     const deps = []
 
     for (const dir of unique(directories)) {
-      if (dir.endsWith(PROJECT) || dir.endsWith(LEGACY_PROJECT) || dir === Flag.OPENCODE_CONFIG_DIR) {
-        for (const file of [...configFiles(CFG), ...configFiles(LEGACY_CFG)]) {
-          log.debug(`loading config from ${path.join(dir, file)}`)
-          result = mergeConfigConcatArrays(result, await loadFile(path.join(dir, file)))
-          // to satisfy the type checker
-          result.agent ??= {}
-          result.mode ??= {}
-          result.plugin ??= []
-        }
-      }
-
       deps.push(
         iife(async () => {
           const shouldInstall = await needsInstall(dir)
@@ -184,9 +173,20 @@ export namespace Config {
       )
 
       result.command = mergeDeep(result.command ?? {}, await loadCommand(dir))
-      result.agent = mergeDeep(result.agent, await loadAgent(dir))
+      result.agent = mergeDeep(result.agent ?? {}, await loadAgent(dir))
       result.agent = mergeDeep(result.agent, await loadMode(dir))
       result.plugin.push(...(await loadPlugin(dir)))
+
+      // jsonc loaded AFTER .md so that user-editable jsonc overrides .md definitions
+      if (dir.endsWith(PROJECT) || dir.endsWith(LEGACY_PROJECT) || dir === Flag.OPENCODE_CONFIG_DIR) {
+        for (const file of [...configFiles(CFG), ...configFiles(LEGACY_CFG)]) {
+          log.debug(`loading config from ${path.join(dir, file)}`)
+          result = mergeConfigConcatArrays(result, await loadFile(path.join(dir, file)))
+          result.agent ??= {}
+          result.mode ??= {}
+          result.plugin ??= []
+        }
+      }
     }
 
     // Inline config content overrides all non-managed config sources.
