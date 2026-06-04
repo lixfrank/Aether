@@ -18,6 +18,10 @@ permission:
   research_state_*: allow
 skill_refs:
   - research-verification
+fallback_models:
+  - alibaba-cn/deepseek-v4-pro
+  - alibaba-cn/glm-5.1
+  - alibaba-cn/qwen3.6-max-preview
 file_scope:
   - ".aether/research/**"
 mcp:

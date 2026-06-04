@@ -33,7 +33,9 @@ output_dir: ".aether/research"
 file_scope:
   - ".aether/research/**"
 fallback_models:
-  - anthropic/claude-sonnet-4-5
+  - alibaba-cn/glm-5.1
+  - alibaba-cn/kimi-k2.6
+  - alibaba-cn/qwen3.6-max-preview
 ---
 
 <system-reminder>

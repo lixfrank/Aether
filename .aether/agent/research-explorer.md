@@ -16,7 +16,8 @@ permission:
 skill_refs:
   - alpha-research
 fallback_models:
-  - anthropic/claude-sonnet-4-5
+  - alibaba-cn/deepseek-v4-flash
+  - alibaba-cn/qwen3.6-plus
 file_scope:
   - ".aether/research/**"
 mcp:
