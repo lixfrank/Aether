@@ -1,0 +1,15 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "research-conventions": {
+      "type": "local",
+      "command": ["uv", "run", "~/.aether/mcp/research-conventions/server.py"],
+      "enabled": false,
+    },
+    "research-state": {
+      "type": "local",
+      "command": ["uv", "run", "~/.aether/mcp/research-state/server.py"],
+      "enabled": false,
+    },
+  },
+}
