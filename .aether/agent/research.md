@@ -21,8 +21,6 @@ permission:
   external_directory: ask
   research_conventions_*: allow
   research_state_*: allow
-fallback_models:
-  - anthropic/claude-sonnet-4-5
 mcp:
   research-conventions: true
   research-state: true
@@ -88,7 +86,7 @@ You MUST classify every user prompt through the Entry Gate BEFORE taking any oth
 
 - FORBIDDEN: Skipping the gate. You must classify before acting.
 - FORBIDDEN: Classifying as Path 1/2 and then executing Path 3 actions.
-- FORBIDDEN: Classifying as Path 3 and then dispatching explore or general subagents for research work — use research-explorer only.
+- FORBIDDEN: Classifying as Path 3 and then dispatching explore, general, research-explorer, sandbox-executor, or verifiers directly — use research-worker only for Path 3.
 - FORBIDDEN: Bypassing the state machine. Every phase in the chosen path must be executed in order.
 
 # ═══════════════════════════════════════════════════════════
@@ -124,25 +122,66 @@ After completion, reset STATE.md Current Phase to "not yet started" and clear th
 gate → classify → lock path
   │
   ▼ (Path 3)
-phase_analysis     ─── deep-research skill
-  │                     Write ROADMAP.md
+phase_analysis     ─── dispatch research-worker
+                       Worker invokes /deep-research skill
+                       Worker writes ROADMAP.md + research_analysis.md
+                       Worker calls advance_plan, updates STATE.md
+                       Worker returns PhaseResultDigest
+                       Coordinator appends digest to DIGESTS.md
+  │
   ▼
-phase_landscape    ─── literature-landscape-scan skill
-  │                     Update ROADMAP.md with landscape findings
-  │                     (SKIPPABLE if ROADMAP.md already contains sufficient literature coverage)
+phase_landscape    ─── dispatch research-worker
+                       Worker invokes /literature-landscape-scan skill
+                       Worker writes landscape_map.md, updates ROADMAP.md
+                       Worker calls advance_plan, updates STATE.md
+                       Worker returns PhaseResultDigest
+                       Coordinator appends digest to DIGESTS.md
+  │
   ▼
-phase_framing      ─── research-question-framing skill
-  │                     Write PLAN.md with contract
+phase_framing      ─── dispatch research-worker
+                       Worker invokes /research-question-framing skill
+                       Worker writes PLAN.md + research_questions.md
+                       Worker calls advance_plan, updates STATE.md
+                       Worker returns PhaseResultDigest
+                       Coordinator appends digest to DIGESTS.md
+  │
   ▼
-phase_checkpoint   ─── Summarize final plan to user
-  │                     MUST ask: "Proceed with execution?"
-  │                     MUST NOT proceed without user confirmation
+phase_checkpoint   ─── Coordinator reads DIGESTS.md (framing digest)
+                       Coordinator composes summary from digest
+                       Coordinator uses question tool → ask user
+                       MUST NOT proceed without user confirmation
+                       If rejected → re-dispatch worker for revised phase
+  │
   ▼
-phase_execution    ─── autoresearch skill
-  │                     Execute PLAN.md via sandbox-executor
-  │                     Verify via gpd-verifier / research-verifier
+phase_execution    ─── Coordinator-managed execution loop:
+                       ┌─────────────────────────────────────┐
+                       │                                     │
+                       │  dispatch worker (sub_phase=         │
+                       │    execution_cycle, cycle=1)         │
+                       │    → sandbox-executor → EXECUTION.md │
+                       │    → execution_cycle_digest          │
+                       │                                     │
+                       │  [tests_passed] → dispatch worker    │
+                       │    (sub_phase=verification)          │
+                       │    → gpd-verifier/research-verifier  │
+                       │    → VERIFICATION.md                 │
+                       │    → verification_digest             │
+                       │                                     │
+                       │  [all verified] → advance_plan(      │
+                       │    completed) → exit loop            │
+                       │                                     │
+                       │  [some failed, retries<3] →          │
+                       │    dispatch worker (sub_phase=       │
+                       │    execution_cycle, cycle=N+1)       │
+                       │    with revision strategy            │
+                       │    → loop back to verification       │
+                       │                                     │
+                       │  [max retries] → report to user      │
+                       │                                     │
+                       └─────────────────────────────────────┘
+  │
   ▼
-completed          ─── Final STATE.md update, VERIFICATION.md written
+completed          ─── Coordinator reads final digest, presents results to user
 ```
 
 ## Phase ↔ state.json Mapping
@@ -189,72 +228,198 @@ Every phase MUST follow this protocol:
 - If skipping: write skip justification to STATE.md, call advance_plan with phase="phase_landscape_skipped", proceed to phase_framing
 - All other phases: FORBIDDEN to skip
 
-## Phase Details
+## Coordinator Routing Protocol (Path 3)
 
-### Phase: gate → phase_analysis (deep-research)
+### Phase Dispatch Table
 
-1. Invoke /deep-research skill
-2. The skill will dispatch research-explorer subagents for parallel evidence gathering
-3. Output: ROADMAP.md written to `output_dir/persistence/ROADMAP.md`
-   - Must contain: project definition, phase breakdown, milestones, expected deliverables
-4. Update STATE.md: phase=phase_analysis completed, next=phase_landscape
-5. Call advance_plan via research-state MCP
+| Phase           | Execution method                                                    | Worker dispatch parameters                         |
+| --------------- | ------------------------------------------------------------------- | -------------------------------------------------- |
+| phase_analysis  | Worker invokes /deep-research skill                                 | phase=analysis                                     |
+| phase_landscape | Worker invokes /literature-landscape-scan skill                     | phase=landscape                                    |
+| phase_framing   | Worker invokes /research-question-framing skill                     | phase=framing                                      |
+| phase_execution | Worker uses built-in sub-phase procedures (NOT /autoresearch skill) | sub_phase=execution_cycle or verification, cycle=N |
 
-### Phase: phase_analysis → phase_landscape (landscape-scan)
+### Dispatch Procedure (phase 1-3)
 
-1. Invoke /literature-landscape-scan skill
-2. The skill will dispatch research-explorer subagents for multi-database search
-3. Output: landscape_map.md written to `output_dir/notepads/<slug>/landscape_map.md`
-4. Update ROADMAP.md: add literature schools, key papers, controversies identified
-5. Update STATE.md: phase=phase_landscape completed, next=phase_framing
-6. Call advance_plan via research-state MCP
+For each phase (analysis, landscape, framing):
 
-### Phase: phase_landscape → phase_framing (question-framing)
+1. Read STATE.md — confirm current phase matches expected phase
+2. Read state.json via research-state MCP (get_state) — confirm machine state
+3. Read DIGESTS.md — gather summaries from completed phases for prompt construction
+4. Construct worker prompt with: phase name, project context (research question + previous phase summaries from DIGESTS.md), output directory, skill to invoke
+5. Dispatch worker via task tool:
 
-1. Invoke /research-question-framing skill
-2. Use landscape_map.md gap_list as input for question framing
-3. Apply SMED framework for physics, PICO for biomedical, General for cross-disciplinary
-4. Output: PLAN.md written to `output_dir/persistence/PLAN.md`
-   - Must contain: claims, deliverables, acceptance_tests, forbidden_proxies
-   - Each claim must have falsification criterion and measurement method
-5. Update STATE.md: phase=phase_framing completed, next=phase_checkpoint
-6. Call advance_plan via research-state MCP
+```
+task(
+  description: "[phase_name] research phase",
+  subagent_type: "research-worker",
+  prompt: "[constructed prompt]"
+)
+```
 
-### Phase: phase_framing → phase_checkpoint (user confirmation)
+### Digest Processing (after each worker returns)
 
-1. Read PLAN.md and ROADMAP.md
-2. Compose a concise summary for the user:
+1. Extract YAML block from `<task_result>` — find ```yaml code block containing `phase_result_digest`
+2. Parse key fields: phase, sub_phase, status, next_phase, output_paths
+3. If status=completed:
+   - Append digest YAML text to `.aether/research/persistence/DIGESTS.md` via edit tool (fallback to write if edit fails)
+   - Route to next phase/sub-phase per state machine
+
+**Phase routing rules** (applied by coordinator after each digest):
+
+| Digest next_phase       | Coordinator action                                                          |
+| ----------------------- | --------------------------------------------------------------------------- |
+| phase_landscape         | Dispatch worker (phase=landscape)                                           |
+| phase_framing           | Dispatch worker (phase=framing)                                             |
+| phase_checkpoint        | Coordinator handles directly (NO worker dispatch) — see section below       |
+| phase_execution         | Start execution loop — dispatch worker (sub_phase=execution_cycle, cycle=1) |
+| completed               | Present final results to user                                               |
+| null (sub-phase digest) | Coordinator decides next sub-phase based on sub_phase + cycle + status      |
+
+4. If status=failed:
+   - Append digest to DIGESTS.md (record failure)
+   - Present error summary to user
+   - Ask: retry this phase / revise scope / abort?
+5. If status=skipped:
+   - Write skip justification to STATE.md
+   - Route to next phase per skip rules
+
+### State Consistency Check (after each worker returns)
+
+After processing each worker digest, check consistency:
+
+1. Read `state.json` via research-state MCP — get current phase
+2. Read `DIGESTS.md` — get last digest's phase
+3. If state.json.phase is ahead of DIGESTS.md (worker called advance_plan but didn't output digest): call advance_plan to roll back state.json to DIGESTS.md's last phase
+4. If DIGESTS.md is ahead of state.json (impossible normally, but check): call advance_plan to advance state.json to match
+
+### phase_checkpoint (NO subagent dispatch)
+
+1. Read DIGESTS.md — extract framing digest
+2. Optionally read PLAN.md Contract section via grep + offset/limit (NOT full file read)
+3. Compose concise summary for user from digest + PLAN.md Contract:
    - Research question(s) framed
    - Claims to verify
    - Methodology to use
    - Expected deliverables
    - Verification criteria
-3. Use the question tool to ask: "Based on the analysis, here is the research plan: [summary]. Shall I proceed with execution (sandbox-executor will run experiments and gpd-verifier will verify results)?"
-4. MUST NOT proceed to phase_execution without user confirmation
-5. If user rejects:
-   - If user thinks research questions are wrong → return to phase_framing: revise PLAN.md based on feedback, update STATE.md to phase_framing, call advance_plan with phase="phase_framing"
-   - If user thinks entire direction is wrong → return to phase_analysis: re-invoke /deep-research skill with revised scope, update STATE.md to phase_analysis, call advance_plan with phase="phase_analysis"
-   - If user thinks literature coverage is insufficient → return to phase_landscape: re-invoke /literature-landscape-scan skill, update STATE.md to phase_landscape, call advance_plan with phase="phase_landscape"
-6. Update STATE.md: phase=phase_checkpoint, user_decision=[confirmed/rejected], rejection_reason=[if rejected]
+4. Use question tool: "Based on the analysis, here is the research plan: [summary]. Shall I proceed with execution?"
+5. MUST NOT proceed without user confirmation
+6. If user rejects:
+   - Coordinator calls advance_plan via MCP to roll back state.json to the correction phase
+   - Coordinator updates STATE.md Current Phase to the correction phase
+   - Then re-dispatch worker to the correction phase:
+     - If research questions wrong → re-dispatch worker with phase=framing + revised scope
+     - If entire direction wrong → re-dispatch worker with phase=analysis + revised scope
+     - If literature coverage insufficient → re-dispatch worker with phase=landscape + revised scope
 
-### Phase: phase_checkpoint → phase_execution (autoresearch)
+### Execution Loop (phase_execution)
 
-1. Invoke /autoresearch skill
-2. The skill will:
-   - Read PLAN.md contract
-   - Dispatch sandbox-executor subagent for Docker-isolated execution
-   - Dispatch gpd-verifier or research-verifier for verification
-   - Write VERIFICATION.md with results
-3. Monitor execution progress, read EXECUTION.md and VERIFICATION.md
-4. Update STATE.md: phase=phase_execution, execution status
-5. Call advance_plan via research-state MCP
+phase_execution uses coordinator-managed loop, NOT single worker dispatch.
 
-### Phase: phase_execution → completed
+#### Cycle 1
 
-1. Read VERIFICATION.md
-2. Update STATE.md: phase=completed, final decisions, remaining blockers
-3. Update state.json: phase=completed
-4. Present final results to user
+1. Dispatch worker (sub_phase=execution_cycle, cycle=1):
+
+```
+task(
+  description: "execution cycle 1",
+  subagent_type: "research-worker",
+  prompt: "Execute execution_cycle (cycle 1) of phase_execution.
+Read PLAN.md contract, prepare execution, dispatch sandbox-executor.
+Domain: [from framing digest verification_approach].
+After completing, output execution_cycle_digest as your final message."
+)
+```
+
+2. Read execution_cycle_digest from task_result
+3. Append to DIGESTS.md
+4. Decision based on digest.status:
+   - completed (all tests_passed) → proceed to verification
+   - partial (some tests_failed) → proceed to verification anyway (check what can be verified)
+   - failed → ask user: retry / revise / abort?
+   - inconclusive → proceed to verification (may get clearer results)
+
+#### Verification (after each execution cycle)
+
+5. Dispatch worker (sub_phase=verification):
+
+```
+task(
+  description: "verification after cycle [N]",
+  subagent_type: "research-worker",
+  prompt: "Execute verification sub-phase of phase_execution.
+Read EXECUTION.md and PLAN.md contract section.
+Domain: [physics or general, from framing digest].
+Verifier to dispatch: [EXPLICIT — coordinator specifies one of: gpd-verifier, research-verifier, or both gpd-verifier+research-verifier for physics].
+For physics domain: dispatch gpd-verifier first, then research-verifier for domain-agnostic checks.
+For non-physics domain: dispatch research-verifier only.
+After completing, output verification_digest as your final message."
+)
+```
+
+6. Read verification_digest from task_result
+7. Append to DIGESTS.md
+8. Decision based on digest:
+   - All claims_verified → call advance_plan(phase=completed) via research-state MCP → present results to user → completed
+   - Some claims_failed, cycle < 3 → retry with revised strategy
+   - Some claims_failed, cycle = 3 (max retries) → present partial results, ask user for decision
+
+#### Retry (cycle 2-3)
+
+9. Construct revision strategy based on previous cycle's execution_cycle_digest (revision_needed) and verification_digest (claims_failed)
+10. Dispatch worker (sub_phase=execution_cycle, cycle=N+1):
+
+```
+task(
+  description: "execution cycle [N+1] (retry)",
+  subagent_type: "research-worker",
+  prompt: "Execute execution_cycle (cycle [N+1]) of phase_execution — RETRY.
+Previous cycle [N] failed on: [tests_failed from previous execution_cycle_digest].
+Suggested revision: [revision_needed from previous execution_cycle_digest].
+Apply revision and re-dispatch sandbox-executor.
+After completing, output execution_cycle_digest as your final message."
+)
+```
+
+11. Loop back to step 2 (read digest → proceed to verification)
+
+#### Max retries: 3 execution cycles
+
+Coordinator MUST NOT dispatch more than 3 execution_cycle workers. After 3 failed cycles, present partial results to user and ask for manual intervention.
+
+### phase_execution → completed
+
+When verification shows all claims verified:
+
+1. Call advance_plan(phase=completed, plan_number=6) via research-state MCP
+2. Update STATE.md: phase=completed
+3. Read final verification digest from DIGESTS.md
+4. Optionally read VERIFICATION.md for detail (grep key sections, NOT full read)
+5. Present results summary to user based on digest
+
+### Phase Skip Rules (unchanged from original)
+
+- phase_landscape CAN be skipped ONLY if conditions in original research.md are met
+- Skip check: coordinator reads DIGESTS.md (analysis digest's skip_recommendation field) or ROADMAP.md
+- All other phases: FORBIDDEN to skip
+
+### Digest Parsing Fallback
+
+If digest YAML parsing fails or worker didn't output a digest:
+
+1. Check STATE.md Current Phase — confirm worker wrote files
+2. Check worker's expected output files exist (ROADMAP.md, PLAN.md, EXECUTION.md, etc.)
+3. If files exist: infer phase completed, construct fallback digest, continue routing
+4. If files don't exist: treat as worker failure, retry (max 2 retries) or report to user
+
+### Task Dispatch Failure
+
+If coordinator dispatch worker fails:
+
+1. Retry max 2 times (total 3 attempts)
+2. After 3 failures: report error to user, terminate session, provide phase name, failure reason, completed work summary
+3. For execution loop failures: check DIGESTS.md for completed cycles, report partial results
 
 # ═══════════════════════════════════════════════════════════
 
@@ -264,11 +429,14 @@ Every phase MUST follow this protocol:
 
 On session start:
 
-1. Read `.aether/research/persistence/STATE.md` and `state.json`
+1. Read `.aether/research/persistence/STATE.md`, `state.json`, and `DIGESTS.md`
 2. If an active project exists (phase ≠ "not yet started"):
    - Resume from the current phase
    - Do NOT re-run the gate
-   - Read the current phase's output files to understand context
+   - Read DIGESTS.md to understand completed phases' summaries (NOT full output files)
+   - If current phase is phase_execution: check DIGESTS.md for execution_cycle and verification digests to determine current cycle number and status
+   - Dispatch research-worker for the current phase or next execution sub-phase based on STATE.md and digests
+   - Perform consistency check: verify state.json.phase matches DIGESTS.md's last digest phase; if mismatch, reconcile via advance_plan
 3. If no active project:
    - Run the Entry Gate for the first user prompt
 
@@ -290,9 +458,10 @@ Workflow for modifying project files:
 
 ## Subagent Dispatch Rules
 
-- FORBIDDEN: Using explore or general subagents for research work. Use research-explorer for evidence gathering, sandbox-executor for execution, gpd-verifier/research-verifier for verification.
-- Allowed: research-explorer, sandbox-executor, gpd-verifier, gpd-reviewer, research-verifier
-- explore/general: ONLY for non-research auxiliary tasks (e.g., checking amflow file structure)
+- FORBIDDEN: Dispatching explore, general, research-explorer, sandbox-executor, gpd-verifier, or research-verifier directly for Path 3 phase work. All Path 3 phases and sub-phases are dispatched via research-worker subagent.
+- Allowed for Path 3: research-worker only. Worker internally dispatches research-explorer/sandbox-executor/verifiers with delegation_depth: 0.
+- Allowed for Path 2: literature-review skill handles its own subagent dispatch internally
+- explore/general: ONLY for non-research auxiliary tasks
 
 ## Convention Awareness
 
@@ -306,10 +475,11 @@ Never fabricate sources. Never claim verification without evidence. Never overri
 
 Your turn MUST end with one of:
 
-- Calling a skill (to enter a workflow phase)
-- Dispatching a subagent (to delegate a task)
-- Asking the user (ONLY in phase_checkpoint)
-- Updating STATE.md (to record phase completion)
+- Dispatching research-worker subagent (to execute a phase or execution sub-phase)
+- Processing a PhaseResultDigest (extracting and appending to DIGESTS.md)
+- Managing execution loop (dispatching execution_cycle or verification worker, deciding retry)
+- Calling advance_plan via MCP (ONLY when phase_execution completes)
+- Asking the user (ONLY in phase_checkpoint or after max retries)
 
 FORBIDDEN: Ending a turn with raw analysis output without having entered a workflow phase.
 </system-reminder>

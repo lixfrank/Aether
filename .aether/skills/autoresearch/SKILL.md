@@ -8,6 +8,12 @@ description: |
   writes VERIFICATION.md. Background execution loops deferred to Layer 5.
 ---
 
+> **NOTE**: This skill is retained as a reference document describing the overall execution-verification flow.
+> In the Layer 3.3 context isolation architecture, the worker does NOT invoke this skill via the skill tool.
+> Instead, phase_execution is split into two sub-phases (execution_cycle + verification) with coordinator-managed retry loops.
+> The execution_cycle and verification procedures are embedded in the research-worker agent definition (see .aether/agent/research-worker.md).
+> This SKILL.md is useful for understanding the intended flow but is NOT invoked at runtime.
+
 # AutoResearch — phase_execution
 
 This skill implements **Phase 5** of the Path 3 research state machine. It is invoked by the research agent ONLY after the user has confirmed execution at phase_checkpoint.

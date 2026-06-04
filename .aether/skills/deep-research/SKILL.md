@@ -152,7 +152,38 @@ Write to `output_dir/notepads/<slug>/research_analysis.md`:
    - blockers: [any identified]
    - next_action: enter phase_landscape (or phase_framing if skip justified)
 2. Call `advance_plan` via research-state MCP
-3. Return to the research agent — the agent will route to the next phase
+3. Output a PhaseResultDigest as your final message (see Step 8). The coordinator will route to the next phase based on the digest.
+
+### Step 8: Output PhaseResultDigest
+
+Output a YAML code block as your FINAL message with this schema:
+
+```yaml
+phase_result_digest:
+  phase: phase_analysis
+  sub_phase: null
+  cycle: null
+  status: completed
+  research_question: "[core question from user prompt]"
+  domain: [physics | cs | biomedical | cross-disciplinary]
+  key_findings:
+    - "[Finding 1, max 200 chars]"
+    - "[Finding 2, max 200 chars]"
+    - "[Finding 3, max 200 chars]"
+  gaps_identified:
+    - "[Gap 1, max 100 chars]"
+    - "[Gap 2, max 100 chars]"
+  schools_preview:
+    - name: "[School Name]"
+      representative_papers: ["arXiv:XXXX.XXXXX"]
+  output_paths:
+    roadmap: persistence/ROADMAP.md
+    analysis: notepads/[slug]/research_analysis.md
+  next_phase: phase_landscape
+  skip_recommendation: null | "[justification if landscape phase can be skipped]"
+```
+
+MUST NOT output any other text after this YAML block. The coordinator parses this digest to route the next phase.
 
 ## Subagent Dispatch
 

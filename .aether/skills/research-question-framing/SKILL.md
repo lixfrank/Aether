@@ -151,7 +151,37 @@ Before finalizing for physics domains:
    - blockers: [any]
    - next_action: enter phase_checkpoint (present plan to user for confirmation)
 2. Call `advance_plan` via research-state MCP
-3. Return to the research agent — the agent will enter phase_checkpoint
+3. Output a PhaseResultDigest as your final message (see Step 9). The coordinator will enter phase_checkpoint based on the digest.
+
+### Step 9: Output PhaseResultDigest
+
+Output a YAML code block as your FINAL message with this schema:
+
+```yaml
+phase_result_digest:
+  phase: phase_framing
+  sub_phase: null
+  cycle: null
+  status: completed
+  research_questions:
+    - question: "[full formulated question text]"
+      framework: [SMED | PICO | General]
+      falsification_criterion: "[1 sentence]"
+  claims:
+    - claim: "[1 sentence assertion]"
+      acceptance_test: "[1 sentence verification method]"
+  forbidden_proxies:
+    - "[proxy 1 description]"
+    - "[proxy 2 description]"
+  execution_method: "[Python | C++ | Mathematica | theoretical derivation]"
+  verification_approach: [gpd-verifier | research-verifier]
+  output_paths:
+    plan: persistence/PLAN.md
+    research_questions: notepads/[slug]/research_questions.md
+  next_phase: phase_checkpoint
+```
+
+MUST NOT output any other text after this YAML block.
 
 ## Integrity
 

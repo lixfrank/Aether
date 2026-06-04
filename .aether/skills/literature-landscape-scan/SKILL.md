@@ -158,7 +158,40 @@ Append landscape findings to ROADMAP.md:
    - blockers: [any gaps in coverage]
    - next_action: enter phase_framing
 2. Call `advance_plan` via research-state MCP
-3. Return to the research agent — the agent will route to phase_framing
+3. Output a PhaseResultDigest as your final message (see Step 9). The coordinator will route to the next phase based on the digest.
+
+### Step 9: Output PhaseResultDigest
+
+Output a YAML code block as your FINAL message with this schema:
+
+```yaml
+phase_result_digest:
+  phase: phase_landscape
+  sub_phase: null
+  cycle: null
+  status: completed
+  schools:
+    - name: "[School Name]"
+      core_idea: "[1 sentence summary]"
+      representative_papers: ["arXiv:XXXX.XXXXX"]
+  gap_list:
+    - id: gap_1
+      description: "[1 sentence]"
+      significance: [H | M | L]
+      difficulty: [H | M | E]
+    - id: gap_2
+      description: "[1 sentence]"
+      significance: [H | M | L]
+      difficulty: [H | M | E]
+  controversies:
+    - topic: "[debate topic]"
+      positions: ["School A: position X", "School B: position Y"]
+  output_paths:
+    landscape_map: notepads/[slug]/landscape_map.md
+  next_phase: phase_framing
+```
+
+MUST NOT output any other text after this YAML block.
 
 ## Subagent Dispatch
 
