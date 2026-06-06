@@ -254,9 +254,14 @@ Every phase MUST follow this protocol:
 
 ### Before entering a phase:
 
-1. Read STATE.md — confirm current phase matches expected phase (use mapping table above)
-2. Read state.json via research-state MCP (get_state) — confirm machine state matches STATE.md
-3. Check convention_lock_status via research-conventions MCP if physics domain
+1. Git repository check — ensure the project workspace has a git repository for phase rollback support:
+   - bash: `git rev-parse --is-inside-work-tree 2>/dev/null`
+   - If NOT inside a git repo → initialize one:
+     - bash: `git init && git add -A && git commit -m "research: initial state before phase [phase_name]"`
+   - If inside a git repo → proceed (no action needed)
+2. Read STATE.md — confirm current phase matches expected phase (use mapping table above)
+3. Read state.json via research-state MCP (get_state) — confirm machine state matches STATE.md
+4. Check convention_lock_status via research-conventions MCP if physics domain
 
 ### After completing a phase:
 
@@ -787,28 +792,36 @@ On session start:
 
 7. Write STATE.md Health Status section (per-layer pass/fail/degraded + pointers to global_health.json and network_status.md)
 
-**Step B: Session State Recovery**
+**Step B: Git Repository Check (mandatory prerequisite)**
 
-8. Read .aether/research/persistence/STATE.md, state.json (via MCP get_state), DIGESTS.md, ENVIRONMENT.md
-9. If an active project exists (phase ≠ "gate" or "not yet started"):
-   - Resume from the current phase
-   - Do NOT re-run the gate
-   - Read DIGESTS.md for completed phase summaries
-   - If ENVIRONMENT.md exists: note venv_state
-   - If current phase is phase_execution: check state.json.execution_cycle + DIGESTS.md for cycle status
-   - If current phase is phase_debate: check state.json.debate.current_sub_phase + DEBATE.md for round status
-     - If state.json.debate.current_sub_phase is non-null → resume from that sub_phase (interrupted mid-round)
-     - If current_sub_phase was "repair" → check for PLAN.md.pre_repair_round{N} backup:
-       - Backup exists → restore PLAN.md from backup, then re-dispatch repair
-       - Backup does not exist → check DEBATE.md for repair report section; if found with full content, infer completion and construct fallback digest; if not found, re-dispatch repair
-     - If state.json.debate.current_sub_phase is null → check DEBATE.md last round's Round Verdict
-       - ALL RESOLVED → proceed to phase_checkpoint
-       - FURTHER ROUNDS NEEDED → continue from round state.json.debate.rounds_completed + 1, read ESCALATE topics from DEBATE.md adjudicator ruling + last repair digest's `re_verification_topics` for focus list
-     - Fallback (state.json.debate missing): read DEBATE.md last section type to determine interruption point
-   - Git consistency check: git log --oneline -5 → verify last commit matches state.json.phase_commits[current_phase]
-   - If git commit SHA mismatch: git checkout state.json.phase_commits[current_phase] -- .aether/research/ → git add + commit
-   - Dispatch research-worker for current phase
-10. If no active project (phase = "gate" or "not yet started" and DIGESTS.md empty):
+8. Git repository check — ensure the project workspace has a git repository for rollback support:
+   - bash: `git rev-parse --is-inside-work-tree 2>/dev/null`
+   - If NOT inside a git repo → initialize one:
+     - bash: `git init && git add -A && git commit -m "research: initial state for session recovery"`
+   - If inside a git repo → proceed
+
+**Step C: Session State Recovery**
+
+9. Read .aether/research/persistence/STATE.md, state.json (via MCP get_state), DIGESTS.md, ENVIRONMENT.md
+10. If an active project exists (phase ≠ "gate" or "not yet started"):
+    - Resume from the current phase
+    - Do NOT re-run the gate
+    - Read DIGESTS.md for completed phase summaries
+    - If ENVIRONMENT.md exists: note venv_state
+    - If current phase is phase_execution: check state.json.execution_cycle + DIGESTS.md for cycle status
+    - If current phase is phase_debate: check state.json.debate.current_sub_phase + DEBATE.md for round status
+      - If state.json.debate.current_sub_phase is non-null → resume from that sub_phase (interrupted mid-round)
+      - If current_sub_phase was "repair" → check for PLAN.md.pre_repair_round{N} backup:
+        - Backup exists → restore PLAN.md from backup, then re-dispatch repair
+        - Backup does not exist → check DEBATE.md for repair report section; if found with full content, infer completion and construct fallback digest; if not found, re-dispatch repair
+      - If state.json.debate.current_sub_phase is null → check DEBATE.md last round's Round Verdict
+        - ALL RESOLVED → proceed to phase_checkpoint
+        - FURTHER ROUNDS NEEDED → continue from round state.json.debate.rounds_completed + 1, read ESCALATE topics from DEBATE.md adjudicator ruling + last repair digest's `re_verification_topics` for focus list
+      - Fallback (state.json.debate missing): read DEBATE.md last section type to determine interruption point
+    - Git consistency check: git log --oneline -5 → verify last commit matches state.json.phase_commits[current_phase]
+    - If git commit SHA mismatch: git checkout state.json.phase_commits[current_phase] -- .aether/research/ → git add + commit
+    - Dispatch research-worker for current phase
+11. If no active project (phase = "gate" or "not yet started" and DIGESTS.md empty):
 
 - Run Entry Gate for first user prompt
 
@@ -833,19 +846,21 @@ When coordinator receives a health_check PhaseResultDigest:
 
 1. Read digest.status:
    - **pass** → no STATE.md Next Action update, continue original workflow
-   - **degraded** → enter degradation handling:
-     a. Backup current Next Action to STATE.md `## Blockers` section: `health_degradation: [degradation_summary概要]`
-     b. Update STATE.md Next Action: `health check: [degradation概要] → 详情见 ~/.aether/health/global_health.json`
-     c. Update STATE.md Health Status section
-     d. Inform user of degradation summary
-     e. For each item in digest.failed_items where auto_installable=true or "partial", sorted by priority, use question tool to ask user per-item authorization (env-setup skill workflow)
-     f. After user installs → re-dispatch worker(mode=health_check, layers=None) for full re-check
-     g. New digest.status=pass → restore original Next Action from Blockers, remove health_degradation entry
-   - **failed** → enter critical failure handling:
-     a. Backup Next Action to Blockers
-     b. Update Next Action to critical failure summary + pointer to global_health.json
-     c. Inform user critical failure cannot be degraded around, requires manual fix
-     d. Wait for user to confirm fix → re-dispatch worker for full re-check
+
+- **degraded** → enter degradation handling:
+  a. Check for `git_working_dir` failure in digest.failed_items → if present: - bash: `git init && git add -A && git commit -m "research: initial state after health check git init"` - Re-dispatch worker(mode=health_check, layers=["infrastructure"]) to verify git_working_dir now passes - If still degraded (other items) → continue to step b
+  b. Backup current Next Action to STATE.md `## Blockers` section: `health_degradation: [degradation_summary概要]`
+  c. Update STATE.md Next Action: `health check: [degradation概要] → 详情见 ~/.aether/health/global_health.json`
+  d. Update STATE.md Health Status section
+  e. Inform user of degradation summary
+  f. For each remaining item in digest.failed_items (excluding git_working_dir — already handled) where auto_installable=true or "partial", sorted by priority, use question tool to ask user per-item authorization (env-setup skill workflow)
+  g. After user installs → re-dispatch worker(mode=health_check, layers=None) for full re-check
+  h. New digest.status=pass → restore original Next Action from Blockers, remove health_degradation entry
+  - **failed** → enter critical failure handling:
+    a. Backup Next Action to Blockers
+    b. Update Next Action to critical failure summary + pointer to global_health.json
+    c. Inform user critical failure cannot be degraded around, requires manual fix
+    d. Wait for user to confirm fix → re-dispatch worker for full re-check
 
 ### STATE.md Health Status Format
 
