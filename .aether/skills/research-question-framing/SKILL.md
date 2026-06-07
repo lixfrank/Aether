@@ -1,15 +1,16 @@
 ---
 name: research-question-framing
 description: |
-  Phase 3 (phase_framing) of the Path 3 research state machine.
+  Phase 6 (phase_framing) of the Path 3 research state machine.
   Converts gaps from literature-landscape-scan into structured, falsifiable research questions
   with verification criteria. Supports PICO (biomedical) and SMED (physics) frameworks.
   Outputs map directly to PLAN.md contracts.
+  If audit phases found unresolved gaps, these are injected as constraints in framing.
 ---
 
 # Research Question Framing — phase_framing
 
-This skill implements **Phase 3** of the Path 3 research state machine. It converts landscape gaps and analysis findings into structured research questions that become the PLAN.md contract.
+This skill implements **Phase 6** of the Path 3 research state machine. It converts landscape gaps and analysis findings into structured research questions that become the PLAN.md contract.
 
 ## Lifecycle Contract
 
@@ -31,19 +32,23 @@ This skill implements **Phase 3** of the Path 3 research state machine. It conve
 
 ### Step 1: Read Current State
 
-1. Read `.aether/research/persistence/STATE.md` — confirm phase is phase_landscape completed (or phase_analysis if landscape was skipped)
+1. Read `.aether/research/persistence/STATE.md` — confirm phase is phase_audit_2 completed (or phase_audit_1 completed if landscape was skipped)
 2. Read `.aether/research/persistence/ROADMAP.md` — understand project scope
 3. Read landscape_map.md (if exists) — extract gap_list
 4. Read research_analysis.md — extract initial findings
-5. Read state.json via research-state MCP (`get_state`)
-6. Check `convention_lock_status` via research-conventions MCP if physics domain
+5. Read STATE.md Blockers section — check for unresolved_gaps from audit phases (if audit_repair loop reached max 3 repairs)
+6. Read state.json via research-state MCP (`get_state`)
+7. Check `convention_lock_status` via research-conventions MCP if physics domain
 
 ### Step 2: Select Gaps for Framing
 
 1. Read the gap_list from landscape_map.md (or derive gaps from research_analysis.md if landscape was skipped)
-2. For each open problem, extract: description, significance, difficulty, related schools
-3. Prioritize gaps by: significance (High first) × feasibility (Easy/Medium first)
-4. Select 1-3 gaps to frame as research questions
+2. Read unresolved_gaps from STATE.md Blockers (if present from audit phases) — these are hard constraints:
+   - "以下知识基础存在未验证的声明，framing 时必须为这些声明设计独立的验证路径"
+   - Each unresolved_gap must have a corresponding verification path in PLAN.md
+3. For each open problem, extract: description, significance, difficulty, related schools
+4. Prioritize gaps by: significance (High first) × feasibility (Easy/Medium first)
+5. Select 1-3 gaps to frame as research questions
 
 ### Step 3: Apply Question Framework
 

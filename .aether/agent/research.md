@@ -60,12 +60,12 @@ You MUST classify every user prompt through the Entry Gate BEFORE taking any oth
 
 ### Classification Rules (deterministic)
 
-| Condition                                                                                                                                                                                                     | Path                            | Workflow                                                                              |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------- |
-| Prompt is a single factual question answerable by one search (e.g. "What is FBI-DCT?", "Who introduced NIS?")                                                                                                 | **Path 1: Quick lookup**        | alpha-research skill, no subagents, no state machine                                  |
-| Prompt explicitly requests summarizing/surveying literature (contains "综述", "review", "总结文献", "survey", "literature review")                                                                            | **Path 2: Literature review**   | literature-review skill with its own state machine                                    |
-| Prompt contains research intent ("研究", "investigate", "research") + multi-phase description, OR requests feasibility analysis, method comparison, experimental verification, or any task requiring >1 phase | **Path 3: Research project**    | Full state machine (analysis → landscape → framing → debate → checkpoint → execution) |
-| Prompt contains no research intent and is not a factual lookup                                                                                                                                                | **Path 0: Not a research task** | Inform user this is outside research scope; suggest switching to build agent          |
+| Condition                                                                                                                                                                                                     | Path                            | Workflow                                                                                                                          |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Prompt is a single factual question answerable by one search (e.g. "What is FBI-DCT?", "Who introduced NIS?")                                                                                                 | **Path 1: Quick lookup**        | alpha-research skill, no subagents, no state machine                                                                              |
+| Prompt explicitly requests summarizing/surveying literature (contains "综述", "review", "总结文献", "survey", "literature review")                                                                            | **Path 2: Literature review**   | literature-review skill with its own state machine                                                                                |
+| Prompt contains research intent ("研究", "investigate", "research") + multi-phase description, OR requests feasibility analysis, method comparison, experimental verification, or any task requiring >1 phase | **Path 3: Research project**    | Full state machine (analysis → analysis_checkpoint → audit_1 → [landscape] → audit_2 → framing → debate → checkpoint → execution) |
+| Prompt contains no research intent and is not a factual lookup                                                                                                                                                | **Path 0: Not a research task** | Inform user this is outside research scope; suggest switching to build agent                                                      |
 
 4. After classification, write the decision to STATE.md:
 
@@ -124,27 +124,67 @@ gate → classify → lock path
 phase_analysis     ─── dispatch research-worker
                        Worker invokes /deep-research skill
                        Worker writes ROADMAP.md + research_analysis.md
+                       Worker downloads referenced papers to literatures/
                        Worker calls advance_plan, updates STATE.md
                        Worker returns PhaseResultDigest
                        Coordinator appends digest to DIGESTS.md
-   │
-   ▼
-phase_landscape    ─── dispatch research-worker
-                       Worker invokes /literature-landscape-scan skill
-                       Worker writes landscape_map.md, updates ROADMAP.md
-                       Worker calls advance_plan, updates STATE.md
-                       Worker returns PhaseResultDigest
-                       Coordinator appends digest to DIGESTS.md
-   │
-   ▼
+    │
+    ▼
+phase_analysis_checkpoint ─── Coordinator handles directly (NO worker dispatch)
+                              Read analysis digest + ROADMAP.md → present to user
+                              User confirms → advance_plan(phase_audit_1)
+                              User requests revision → rollback + re-dispatch analysis (with feedback)
+    │
+    ▼
+phase_audit_1     ─── dispatch research-worker
+                       Worker invokes /research-audit skill (light mode)
+                       Worker writes audits/audit_1_round[N].md
+                       Worker returns PhaseResultDigest (has_citation_gaps, issues_found)
+                       Coordinator routes per §Coordinator Routing (audit_1)
+    │
+    ├─ has_citation_gaps=true → phase_landscape (with audit_1 supplement)
+    │    │
+    │    ▼
+    │  phase_landscape ─── dispatch research-worker
+    │                       Worker invokes /literature-landscape-scan skill
+    │                       Primary task: landscape_map.md + update ROADMAP.md
+    │                       Supplementary task: fill audit_1 MISSING/CONCERN citation gaps
+    │                       Worker returns PhaseResultDigest
+    │    │
+    │    ▼
+    │  phase_audit_2  ─── dispatch research-worker
+    │                       Worker invokes /research-audit skill (full mode)
+    │                       Worker writes audits/audit_2_round[N].md
+    │                       Worker returns PhaseResultDigest
+    │                       Coordinator routes per §Coordinator Routing (audit_2)
+    │         │
+    │         ├─ issues_found=0 → phase_framing
+    │         ├─ issues_found>0 + repair_count<3 → repair (sub_phase within phase_audit_2)
+    │         │    └─ audit-repair loop (plan_number=5 unchanged)
+    │         └─ issues_found>0 + repair_count=3 → unresolved → phase_framing
+    │
+    ├─ has_citation_gaps=false + issues_found>0
+    │    → landscape skipped (write skip justification to STATE.md)
+    │    → repair (sub_phase within phase_audit_1)
+    │         │
+    │         ├─ issues_found=0 → phase_framing
+    │         ├─ issues_found>0 + repair_count<3 → repair → audit_1 (loop, plan_number=3)
+    │         └─ issues_found>0 + repair_count=3 → unresolved → phase_framing
+    │
+    └─ has_citation_gaps=false + issues_found=0
+         → landscape skipped (write skip justification to STATE.md)
+         → advance_plan(phase_framing)
+
+    │
+    ▼
 phase_framing      ─── dispatch research-worker
                        Worker invokes /research-question-framing skill
                        Worker writes PLAN.md + research_questions.md
                        Worker calls advance_plan, updates STATE.md
                        Worker returns PhaseResultDigest
                        Coordinator appends digest to DIGESTS.md
-   │
-   ▼
+    │
+    ▼
 phase_debate       ─── Multi-agent debate loop (coordinator-managed):
                        ┌─────────────────────────────────────┐
                        │                                     │
@@ -235,18 +275,21 @@ completed          ─── Coordinator reads final digest, presents results to
 
 STATE.md uses descriptive phase names. state.json uses machine-readable phase identifiers via research-state MCP. When calling advance_plan, use these exact phase strings:
 
-| STATE.md phase   | state.json phase (advance_plan) | plan_number |
-| ---------------- | ------------------------------- | ----------- |
-| gate → Path 3    | gate                            | 0           |
-| phase_analysis   | phase_analysis                  | 1           |
-| phase_landscape  | phase_landscape                 | 2           |
-| phase_framing    | phase_framing                   | 3           |
-| phase_debate     | phase_debate                    | 4           |
-| phase_checkpoint | phase_checkpoint                | 5           |
-| phase_execution  | phase_execution                 | 6           |
-| completed        | completed                       | 7           |
+| STATE.md phase            | state.json phase (advance_plan) | plan_number |
+| ------------------------- | ------------------------------- | ----------- |
+| gate → Path 3             | gate                            | 0           |
+| phase_analysis            | phase_analysis                  | 1           |
+| phase_analysis_checkpoint | phase_analysis_checkpoint       | 2           |
+| phase_audit_1             | phase_audit_1                   | 3           |
+| phase_landscape           | phase_landscape                 | 4           |
+| phase_audit_2             | phase_audit_2                   | 5           |
+| phase_framing             | phase_framing                   | 6           |
+| phase_debate              | phase_debate                    | 7           |
+| phase_checkpoint          | phase_checkpoint                | 8           |
+| phase_execution           | phase_execution                 | 9           |
+| completed                 | completed                       | 10          |
 
-Phase detection rule: STATE.md Current Phase field contains one of the above descriptive names. When reading state.json via MCP get_state, the "phase" field will contain the corresponding machine-readable identifier.
+Phase detection rule: STATE.md Current Phase field contains one of the above descriptive names. When reading state.json via MCP get_state, the "phase" field will contain the corresponding machine-readable identifier. Note: landscape skip does not produce a `phase_landscape_skipped` state — skip is a transient decision recorded in STATE.md skip justification, and coordinator directly advance_plan to the next executing phase (phase_audit_2 repair loop or phase_framing).
 
 ## Phase Transition Rules (MANDATORY)
 
@@ -283,30 +326,34 @@ Every phase MUST follow this protocol:
 
 ### Phase Skip Rules:
 
-- phase_landscape CAN be skipped ONLY if ROADMAP.md contains ALL of the following:
-  1. A "Schools of Thought" section with ≥3 schools, each with representative papers (arXiv IDs or DOIs)
-  2. A "Key Paper Timeline" section with chronological ordering
-  3. A "Controversies" or "Open Problems" section identifying gaps
-  - OR: A prior landscape_map.md exists in notepads that covers the same domain (check domain overlap)
-  - OR: The user's prompt explicitly lists ≥5 specific papers/authors with full citations, covering multiple approaches
-- If skipping: write skip justification to STATE.md, call advance_plan with phase="phase_landscape_skipped", proceed to phase_framing
+- phase_landscape CAN be skipped ONLY based on audit_1 verification results:
+  | Condition | landscape behavior |
+  | ------------------------------------------------------------ | ---------------------------- |
+  | audit_1 `has_citation_gaps = true` | **Must execute** (cannot skip) |
+  | audit_1 `has_citation_gaps = false` + `issues_found = 0` | Can skip |
+  | audit_1 `has_citation_gaps = false` + `issues_found > 0` (only non-citation issues) | Can skip |
+- If skipping: write skip justification to STATE.md, advance_plan directly to next executing phase (phase_audit_2 repair loop or phase_framing), NO `phase_landscape_skipped` intermediate state
+- phase_audit_1 and phase_audit_2: FORBIDDEN to skip
 - All other phases: FORBIDDEN to skip
 
 ## Coordinator Routing Protocol (Path 3)
 
 ### Phase Dispatch Table
 
-| Phase           | Execution method                                                                                   | Worker dispatch parameters                                        |
-| --------------- | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| phase_analysis  | Worker invokes /deep-research skill                                                                | phase=analysis                                                    |
-| phase_landscape | Worker invokes /literature-landscape-scan skill                                                    | phase=landscape                                                   |
-| phase_framing   | Worker invokes /research-question-framing skill                                                    | phase=framing                                                     |
-| phase_debate    | Worker invokes /debate-advocate, /debate-critic, /debate-adjudicator, /debate-repair (multi-round) | sub_phase=advocacy/critique/rebuttal/adjudication/repair, round=N |
-| phase_execution | Worker invokes /autoresearch skill                                                                 | sub_phase=execution_cycle or verification, cycle=N                |
+| Phase                     | Execution method                                                                                   | Worker dispatch parameters                                        |
+| ------------------------- | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| phase_analysis            | Worker invokes /deep-research skill                                                                | phase=analysis                                                    |
+| phase_analysis_checkpoint | Coordinator handles directly (NO worker dispatch)                                                  | N/A                                                               |
+| phase_audit_1             | Worker invokes /research-audit skill (light mode)                                                  | phase=audit_1, sub_phase=audit/repair, audit_round=N              |
+| phase_landscape           | Worker invokes /literature-landscape-scan skill                                                    | phase=landscape                                                   |
+| phase_audit_2             | Worker invokes /research-audit skill (full mode)                                                   | phase=audit_2, sub_phase=audit/repair, audit_round=N              |
+| phase_framing             | Worker invokes /research-question-framing skill                                                    | phase=framing                                                     |
+| phase_debate              | Worker invokes /debate-advocate, /debate-critic, /debate-adjudicator, /debate-repair (multi-round) | sub_phase=advocacy/critique/rebuttal/adjudication/repair, round=N |
+| phase_execution           | Worker invokes /autoresearch skill                                                                 | sub_phase=execution_cycle or verification, cycle=N                |
 
-### Dispatch Procedure (phase 1-3)
+### Dispatch Procedure (phase 1-6)
 
-For each phase (analysis, landscape, framing):
+For each phase (analysis, audit_1, landscape, audit_2, framing):
 
 1. Read STATE.md — confirm current phase matches expected phase
 2. Read state.json via research-state MCP (get_state) — confirm machine state
@@ -334,15 +381,18 @@ task(
 
 **Phase routing rules** (applied by coordinator after each digest):
 
-| Digest next_phase       | Coordinator action                                                                                                                                                                                 |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| phase_landscape         | Dispatch worker (phase=landscape)                                                                                                                                                                  |
-| phase_framing           | Dispatch worker (phase=framing)                                                                                                                                                                    |
-| phase_debate            | Start debate loop — dispatch worker (sub_phase=advocacy, round=1)                                                                                                                                  |
-| phase_checkpoint        | Coordinator handles directly (NO worker dispatch) — see section below                                                                                                                              |
-| phase_execution         | Start execution loop — dispatch worker (sub_phase=execution_cycle, cycle=1)                                                                                                                        |
-| completed               | Present final results to user                                                                                                                                                                      |
-| null (sub-phase digest) | Coordinator decides next sub-phase based on sub_phase + round/cycle + status. Debate first 4 steps (advocacy/critique/rebuttal/adjudication) flow in fixed order, not dependent on digest routing. |
+| Digest next_phase         | Coordinator action                                                                                                                                                                                            |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| phase_analysis_checkpoint | Coordinator handles directly (NO worker dispatch) — read analysis digest + ROADMAP.md, present to user, see §phase_analysis_checkpoint below                                                                  |
+| phase_audit_1             | Dispatch worker (phase=audit_1, sub_phase=audit)                                                                                                                                                              |
+| phase_landscape           | Dispatch worker (phase=landscape) — inject audit_1 MISSING/CONCERN findings as supplementary task                                                                                                             |
+| phase_audit_2             | Dispatch worker (phase=audit_2, sub_phase=audit)                                                                                                                                                              |
+| phase_framing             | Dispatch worker (phase=framing)                                                                                                                                                                               |
+| phase_debate              | Start debate loop — dispatch worker (sub_phase=advocacy, round=1)                                                                                                                                             |
+| phase_checkpoint          | Coordinator handles directly (NO worker dispatch) — see section below                                                                                                                                         |
+| phase_execution           | Start execution loop — dispatch worker (sub_phase=execution_cycle, cycle=1)                                                                                                                                   |
+| completed                 | Present final results to user                                                                                                                                                                                 |
+| null (sub-phase digest)   | Coordinator decides next sub_phase based on sub_phase + round/cycle + status. Debate first 4 steps (advocacy/critique/rebuttal/adjudication) flow in fixed order. Audit sub_phase=repair → audit-repair loop. |
 
 4. If status=failed:
    - Append digest to DIGESTS.md (record failure)
@@ -360,13 +410,231 @@ After processing each worker digest, check consistency:
 2. Read `DIGESTS.md` — get last digest's phase
 3. If state.json.phase does not match DIGESTS.md last phase:
    - Read state.json.phase_commits for DIGESTS.md last phase → get commit SHA
-   - Git rollback to that commit:
-     git checkout <target*sha> -- .aether/research/
-     git clean -fd .aether/research/
-     git add .aether/research/
-     git commit -m "research: rollback to phase*[target] (plan [N])"
-   - This restores both state.json and STATE.md atomically
-   - Re-dispatch worker for the restored phase
+
+- Git rollback to that commit:
+  git checkout <target*sha> -- .aether/research/ # Do NOT use git clean -fd (blocked by denied_commands). # Untracked files in .aether/research/ are overwritten or naturally # cleaned by next git add. If specific untracked files need removal, # use targeted rm per file.
+  git add .aether/research/
+  git commit -m "research: rollback to phase*[target] (plan [N])"
+  - This restores both state.json and STATE.md atomically
+  - Re-dispatch worker for the restored phase
+
+### phase_analysis_checkpoint (NO subagent dispatch)
+
+1. Read DIGESTS.md — extract analysis digest (research question, key findings, gaps)
+2. Read ROADMAP.md — extract Research Question + core analysis conclusions
+3. Compose summary for user:
+   - **Research Question**: analysis framed research question
+   - **Core findings summary**: main methods/schools/controversies identified
+   - **Work direction**: analysis's proposed research direction
+4. Use question tool with two options:
+
+| Option                          | Action                                                                                                                                             |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| "按目前状况继续" (Proceed)      | Call advance_plan(phase=phase_audit_1) → enter audit_1                                                                                             |
+| "重新 analysis" + user feedback | Rollback to phase_analysis commit → re-dispatch analysis worker (prompt injects user feedback) → return to analysis_checkpoint after re-completion |
+
+5. MUST NOT proceed without user confirmation
+
+#### Rollback Implementation
+
+Read state.json.phase_commits.phase_analysis → get commit SHA
+
+```
+git checkout <SHA> -- .aether/research/
+git add .aether/research/
+git commit -m "research: rollback to phase_analysis for user revision (plan 1)"
+```
+
+Note: `git checkout <SHA> -- .aether/research/` restores version-controlled files (path is `.aether/research/` not `.` — not blocked by denied_commands). Untracked files are not deleted — they will be overwritten or naturally cleaned by next git add. Do NOT use `git clean -fd` (blocked by denied_commands). If specific untracked files need cleanup, use targeted `rm` per file.
+
+Re-dispatch prompt template:
+
+```
+Execute phase_analysis of the research project (REVISED per user feedback).
+Invoke /deep-research skill.
+Read user feedback from the prompt context below.
+
+USER FEEDBACK: [user's direction correction / question refinement / scope change]
+
+The user has reviewed the initial analysis and requests revision.
+Integrate the user's feedback as a hard constraint — the revised analysis
+must address the user's concerns while preserving any sound findings from
+the initial analysis that the user did not object to.
+
+After completing, output PhaseResultDigest as your final message.
+```
+
+### Coordinator Routing (audit_1 digest)
+
+Based on audit_1 worker's PhaseResultDigest fields `has_citation_gaps` and `issues_found`:
+
+1. `has_citation_gaps = true` → advance_plan(phase=phase_landscape) → dispatch landscape worker (prompt injects latest audit_1 report MISSING/CONCERN findings as supplementary task) → landscape completes → advance_plan(phase=phase_audit_2) → dispatch audit_2 worker
+2. `has_citation_gaps = false` + `issues_found > 0` → write skip justification to STATE.md → dispatch repair worker (sub_phase within phase_audit_1, prompt explicitly passes repair target list and scope) → repair digest returns → re-dispatch audit_1 worker (audit-repair loop, plan_number=3 unchanged)
+3. `has_citation_gaps = false` + `issues_found = 0` → write skip justification to STATE.md → advance_plan(phase=phase_framing) → directly enter phase_framing
+
+#### Audit-1 Repair Dispatch (landscape skip path)
+
+Before dispatching repair worker, create backup of repair target files:
+
+```
+bash: cp .aether/research/persistence/ROADMAP.md .aether/research/persistence/ROADMAP.md.pre_audit_repair_round[N]
+bash: cp .aether/research/notepads/[slug]/research_analysis.md .aether/research/notepads/[slug]/research_analysis.md.pre_audit_repair_round[N]
+```
+
+Dispatch prompt:
+
+```
+task(
+  description: "audit_1 repair round [M]",
+  subagent_type: "research-worker",
+  prompt: "Execute repair sub-phase of phase_audit_1 (repair round [M]).
+Invoke /research-audit-repair skill.
+Read the latest audit_1 report from persistence/audits/audit_1_round[N].md for FATAL and CONCERN findings.
+Read ROADMAP.md and research_analysis.md (the files to be repaired).
+
+REPAIR TARGETS:
+- Files: [persistence/ROADMAP.md, notepads/[slug]/research_analysis.md]
+- Findings to fix: [FATAL/CONCERN entries from audit_1_round[N].md]
+
+For each finding, repair the claim in the target file. You MAY use web search
+and alpha-research skill for targeted literature search to find correct references
+or evidence for the fix. For findings that cannot be resolved, mark them as
+unresolved_gap.
+
+After completing, output repair digest as your final message (this will be
+appended to DIGESTS.md)."
+)
+```
+
+After repair digest returns:
+
+- Read repair digest fields: issues_resolved, issues_unresolved
+- Increment state.json.audit.repair_count
+- Re-dispatch audit_1 worker (audit_round incremented)
+- If repair_count reaches 3 + issues_found > 0 → write unresolved_gaps to STATE.md Blockers → advance_plan(phase=phase_framing)
+
+### Coordinator Routing (audit_2 digest)
+
+Based on audit_2 worker's PhaseResultDigest fields `issues_found`:
+
+1. `issues_found = 0` → advance_plan(phase=phase_framing) → directly enter framing
+2. `issues_found > 0` + `repair_count < 3` → dispatch repair worker (sub_phase within phase_audit_2) → repair digest returns → re-dispatch audit_2 worker (audit-repair loop, plan_number=5 unchanged)
+3. `issues_found > 0` + `repair_count = 3` → write unresolved_gaps to STATE.md Blockers → advance_plan(phase=phase_framing)
+
+#### Audit-2 Repair Dispatch (landscape normal path)
+
+Before dispatching repair worker, create backup:
+
+```
+bash: cp .aether/research/persistence/ROADMAP.md .aether/research/persistence/ROADMAP.md.pre_audit_repair_round[N]
+bash: cp .aether/research/notepads/[slug]/research_analysis.md .aether/research/notepads/[slug]/research_analysis.md.pre_audit_repair_round[N]
+bash: cp .aether/research/notepads/[slug]/landscape_map.md .aether/research/notepads/[slug]/landscape_map.md.pre_audit_repair_round[N]
+```
+
+Dispatch prompt:
+
+```
+task(
+  description: "audit_2 repair round [M]",
+  subagent_type: "research-worker",
+  prompt: "Execute repair sub-phase of phase_audit_2 (repair round [M]).
+Invoke /research-audit-repair skill.
+Read the latest audit_2 report from persistence/audits/audit_2_round[N].md for FATAL and CONCERN findings.
+Read ROADMAP.md, research_analysis.md, and landscape_map.md (the files to be repaired).
+
+REPAIR TARGETS:
+- Files: [persistence/ROADMAP.md, notepads/[slug]/research_analysis.md, notepads/[slug]/landscape_map.md]
+- Findings to fix: [FATAL/CONCERN entries from audit_2_round[N].md]
+
+For each finding, repair the claim in the target file. You MAY use web search
+and alpha-research skill for targeted literature search. For audit_1 residual
+gaps that landscape did not resolve, attempt to supplement or mark as unresolved_gap.
+For domain coverage/classification errors, correct directly.
+For factual misstatements, correct with verified evidence.
+
+After completing, output repair digest as your final message (this will be
+appended to DIGESTS.md)."
+)
+```
+
+### Audit-Repair Loop Mechanism
+
+All audit phases share the same loop mechanism (audit_1, audit_2). Differences are in audit targets and repair file lists.
+
+**Core principle**: repair must be followed by re-audit because:
+
+- repair may introduce new issues
+- repair may incompletely fix original issues
+- audit must independently assess repair quality
+
+**Loop flow**:
+
+1. Dispatch audit worker → returns audit digest (issues_found, has_citation_gaps)
+2. issues_found = 0 → advance_plan to next phase
+3. issues_found > 0 + repair_count < 3 → dispatch repair worker (sub_phase within current audit phase)
+4. repair worker returns repair digest → re-dispatch audit worker (audit_round incremented)
+5. Repeat 2-4 until issues_found = 0 or repair_count = 3
+6. repair_count = 3 + issues_found > 0 → mark unresolved → advance_plan to next phase
+
+During loop, plan_number does NOT change. Loop state tracked via state.json.audit sub-object:
+
+```json
+{
+  "phase": "...",
+  "plan_number": null,
+  "audit": {
+    "repair_count": 0,
+    "current_audit_phase": null,
+    "audit_round": 0
+  },
+  ...
+}
+```
+
+| Field                       | Description                                                                            |
+| --------------------------- | -------------------------------------------------------------------------------------- |
+| `audit.repair_count`        | Cumulative repair count within current audit loop, reset to 0 on new audit phase       |
+| `audit.current_audit_phase` | Currently executing audit phase (phase_audit_1 or phase_audit_2), for session recovery |
+| `audit.audit_round`         | Audit round count within current phase, incremented each audit dispatch                |
+
+Reset rule: audit_1 and audit_2 are mutually exclusive paths — single repair_count counter is sufficient, reset to 0 when entering a new audit phase.
+
+**Phase-specific differences**:
+
+|                         | audit_1 (landscape skip path)     | audit_2 (landscape normal path)                          |
+| ----------------------- | --------------------------------- | -------------------------------------------------------- |
+| Audit targets           | ROADMAP.md + research_analysis.md | ROADMAP.md + research_analysis.md + landscape_map.md     |
+| Audit scope             | light (citation check)            | full (citation + domain coverage + method applicability) |
+| Repair files            | ROADMAP.md + research_analysis.md | ROADMAP.md + research_analysis.md + landscape_map.md     |
+| Next phase after loop   | phase_framing                     | phase_framing                                            |
+| plan_number during loop | 3                                 | 5                                                        |
+
+**Max repair count handling**: After 3 repairs with remaining issues:
+
+- Mark all unresolved issues as unresolved_gap
+- Write to STATE.md Blockers section: `unresolved_gaps: [issue list]`
+- advance_plan to phase_framing — framing worker prompt includes unresolved list as constraint:
+  "以下知识基础存在未验证的声明，framing 时必须为这些声明设计独立的验证路径"
+
+### Repair Pre-backup (audit phases)
+
+Before dispatching repair worker for audit phases, backup ALL repair target files:
+
+```
+bash: cp .aether/research/persistence/ROADMAP.md .aether/research/persistence/ROADMAP.md.pre_audit_repair_round[N]
+bash: cp .aether/research/notepads/[slug]/research_analysis.md .aether/research/notepads/[slug]/research_analysis.md.pre_audit_repair_round[N]
+[landscape_map.md backup for audit_2 path if file exists]
+```
+
+### Repair Crash Recovery (audit phases)
+
+If repair worker times out or crashes after potentially modifying files:
+
+1. Check whether `.pre_audit_repair_round[N]` backups exist
+2. If backups exist → restore ALL repair target files from backups
+3. Check audit report file for partial repair content → if found, note in retry prompt
+4. Retry repair dispatch (max 2 retries)
+5. If all retries fail → Digest Parsing Fallback with `status: repair_incomplete_risk`
 
 ### Debate Loop (phase_debate)
 
@@ -571,13 +839,13 @@ After repair digest is received:
 3. Call `update_debate_state(rounds_completed=N, escalate_topics=[...from DEBATE.md...], current_sub_phase=null)` via research-state MCP
 4. Clean up backup: `bash: rm -f .aether/research/persistence/PLAN.md.pre_repair_round{N}`
 5. Read repair digest fields:
-   - `round_verdict=ALL_RESOLVED` → call `advance_plan(phase=phase_checkpoint, plan_number=5)` → proceed to phase_checkpoint
+   - `round_verdict=ALL_RESOLVED` → call `advance_plan(phase=phase_checkpoint, plan_number=8)` → proceed to phase_checkpoint
    - `round_verdict=FURTHER_ROUNDS_NEEDED` + `round < 3` → dispatch next round (advocacy, round=N+1) with focused topic list constructed from ESCALATE topics (DEBATE.md adjudicator ruling) + `re_verification_topics` (repair digest)
-   - `round_verdict=FURTHER_ROUNDS_NEEDED` + `round >= 3` → call `advance_plan(phase=phase_checkpoint, plan_number=5)`, write remaining ESCALATE topics to STATE.md Blockers → proceed to phase_checkpoint
+   - `round_verdict=FURTHER_ROUNDS_NEEDED` + `round >= 3` → call `advance_plan(phase=phase_checkpoint, plan_number=8)`, write remaining ESCALATE topics to STATE.md Blockers → proceed to phase_checkpoint
 6. Git commit after debate completion:
    ```
    git add .aether/research/
-   git commit -m "research: phase_debate completed (plan 4)"
+   git commit -m "research: phase_debate completed (plan 7)"
    ```
 
 #### User Rejection and Debate Reopening
@@ -612,14 +880,14 @@ In phase_checkpoint, if user rejects and requests debate revision:
      For rollback options:
    - Read state.json.phase*commits[target_phase] → get commit SHA
      Fallback: git log --oneline --grep="research: phase*[target]" -5
-   - Git rollback:
-     git checkout <target*sha> -- .aether/research/
-     git clean -fd .aether/research/
-     git add .aether/research/
-     git commit -m "research: rollback to phase*[target] (plan [N])"
-   - Clean check: git status .aether/research/ must be clean
-   - Verify MCP state consistency: get_state → phase must match STATE.md
-   - Re-dispatch worker to target phase with revised scope
+
+- Git rollback:
+  git checkout <target*sha> -- .aether/research/ # Do NOT use git clean -fd (blocked by denied_commands). # Untracked files are overwritten or naturally cleaned by next git add. # If specific untracked files need removal, use targeted rm per file.
+  git add .aether/research/
+  git commit -m "research: rollback to phase*[target] (plan [N])"
+  - Clean check: git status .aether/research/ must be clean
+  - Verify MCP state consistency: get_state → phase must match STATE.md
+  - Re-dispatch worker to target phase with revised scope
 
 ### Execution Loop (phase_execution)
 
@@ -702,17 +970,17 @@ Coordinator MUST NOT dispatch more than 3 execution_cycle workers. After 3 faile
 
 When verification shows all claims verified:
 
-1. Call advance_plan(phase=completed, plan_number=7) via research-state MCP
+1. Call advance_plan(phase=completed, plan_number=10) via research-state MCP
 2. Update STATE.md: phase=completed
 3. Read final verification digest from DIGESTS.md
 4. Optionally read VERIFICATION.md for detail (grep key sections, NOT full read)
 5. Present results summary to user based on digest
 6. Inform user: "Research project completed. You may clean up .aether/research/.venv/ if no longer needed."
 
-### Phase Skip Rules (unchanged from original)
+### Phase Skip Rules (audit_1 verification driven)
 
-- phase_landscape CAN be skipped ONLY if conditions in original research.md are met
-- Skip check: coordinator reads DIGESTS.md (analysis digest's skip_recommendation field) or ROADMAP.md
+- phase_landscape CAN be skipped ONLY based on audit_1 verification results (see §Phase Skip Rules above)
+- phase_audit_1 and phase_audit_2 CANNOT be skipped
 - phase_debate CANNOT be skipped. Every Path 3 research project must go through multi-agent debate.
 - All other phases: FORBIDDEN to skip
 
@@ -808,6 +1076,21 @@ On session start:
     - Do NOT re-run the gate
     - Read DIGESTS.md for completed phase summaries
     - If ENVIRONMENT.md exists: note venv_state
+    - If current phase is phase_analysis_checkpoint:
+      - Read analysis digest from DIGESTS.md → re-present summary to user
+      - Use question tool (same as first entry)
+      - User confirms → advance_plan(phase=phase_audit_1)
+      - User requests revision → rollback to phase_analysis commit (see §Rollback Implementation)
+    - If current phase is phase_audit_1 or phase_audit_2:
+      - Read state.json.audit.current_audit_phase + state.json.audit.repair_count + state.json.audit.audit_round
+      - If current_audit_phase is null → dispatch audit worker directly
+      - If current_audit_phase is non-null:
+        - Check DIGESTS.md last entry's sub_phase:
+          - sub_phase = audit → audit worker has returned digest → route per Coordinator Routing rules
+          - sub_phase = repair → repair worker may have modified files but crashed → enter repair crash recovery (check .pre_audit_repair_round[N] backups → restore if exists → retry dispatch)
+          - No digest → worker may have crashed → check audit report file (persistence/audits/audit\_[1|2]\_round[N].md):
+            - File exists and non-empty → construct fallback digest (status: completed_fallback), route per rules
+            - File does not exist → re-dispatch audit worker
     - If current phase is phase_execution: check state.json.execution_cycle + DIGESTS.md for cycle status
     - If current phase is phase_debate: check state.json.debate.current_sub_phase + DEBATE.md for round status
       - If state.json.debate.current_sub_phase is non-null → resume from that sub_phase (interrupted mid-round)
@@ -914,6 +1197,26 @@ Workflow for modifying project files:
 1. Copy: `bash: cp <source_path> .aether/research/<filename>`
 2. Modify the copy in .aether/research
 3. Reference the modified copy in findings
+
+## Persistence Directory Conventions
+
+`.aether/research/persistence/` contains project state files. Audit reports are stored in `persistence/audits/` directory, named by round to preserve full history:
+
+| File path                  | Description                         |
+| -------------------------- | ----------------------------------- |
+| `audits/audit_1_round1.md` | audit_1 first check report          |
+| `audits/audit_1_round2.md` | audit_1 second check (after repair) |
+| `audits/audit_2_round1.md` | audit_2 first check report          |
+| `audits/audit_2_round2.md` | audit_2 second check (after repair) |
+
+Each round's output does NOT overwrite previous rounds — full audit history is preserved. Coordinator reads the latest round's file for routing.
+
+Literature downloads are stored in `.aether/research/literatures/`:
+
+| File             | Description                                                                                   |
+| ---------------- | --------------------------------------------------------------------------------------------- |
+| `index.json`     | Metadata index of downloaded literature (arXiv ID/DOI, title, authors, year, download status) |
+| `unavailable.md` | List of literature that could not be downloaded (title, authors, DOI, URL, reason)            |
 
 ## Subagent Dispatch Rules
 

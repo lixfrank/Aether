@@ -57,6 +57,11 @@ def _default_state() -> dict:
         "progress": {"completed_plans": [], "total_plans": 0},
         "phase_commits": {},
         "execution_cycle": 0,
+        "audit": {
+            "repair_count": 0,
+            "current_audit_phase": None,
+            "audit_round": 0,
+        },
     }
 
 
@@ -92,6 +97,8 @@ def _read_state_safe(project_dir: Path) -> dict:
         state["conventions"] = {}
     if not isinstance(state.get("progress"), dict):
         state["progress"] = defaults["progress"]
+    if not isinstance(state.get("audit"), dict):
+        state["audit"] = defaults["audit"]
     return state
 
 
@@ -249,7 +256,10 @@ def get_state(project_dir: str) -> dict[str, Any]:
 VALID_PHASES = [
     "gate",
     "phase_analysis",
+    "phase_analysis_checkpoint",
+    "phase_audit_1",
     "phase_landscape",
+    "phase_audit_2",
     "phase_framing",
     "phase_debate",
     "phase_checkpoint",
@@ -321,6 +331,19 @@ def advance_plan(
             },
         )
 
+    if phase in ("phase_audit_1", "phase_audit_2"):
+        state.setdefault(
+            "audit",
+            {
+                "repair_count": 0,
+                "current_audit_phase": phase,
+                "audit_round": 0,
+            },
+        )
+        state["audit"]["repair_count"] = 0
+        state["audit"]["current_audit_phase"] = phase
+        state["audit"]["audit_round"] = 0
+
     _write_state(pd, state)
     return _stable_response(
         {
@@ -387,6 +410,64 @@ def update_debate_state(
     return _stable_response(
         {
             "debate": state["debate"],
+        }
+    )
+
+
+VALID_AUDIT_PHASES = {"phase_audit_1", "phase_audit_2"}
+VALID_AUDIT_SUB_PHASES = {"audit", "repair", "null"}
+
+
+@mcp.tool(annotations=MUTATING_NON_DESTRUCTIVE)
+def update_audit_state(
+    project_dir: str,
+    repair_count: int | None = None,
+    current_audit_phase: str | None = None,
+    audit_round: int | None = None,
+) -> dict[str, Any]:
+    """Update audit-specific fields in state.json.
+    Only callable during phase_audit_1 or phase_audit_2.
+    All parameters are optional — only provided fields are updated.
+    repair_count: cumulative repair attempts within current audit loop (reset to 0 on new audit phase).
+    current_audit_phase: phase_audit_1 or phase_audit_2.
+    audit_round: current audit round number within the phase.
+    """
+    pd = _resolve_project_dir(project_dir)
+    state = _read_state_safe(pd)
+
+    current = state.get("phase", "")
+    if current not in VALID_AUDIT_PHASES:
+        return _stable_error(
+            f"update_audit_state only callable during phase_audit_1 or phase_audit_2, current phase: {current}"
+        )
+
+    if current_audit_phase is not None:
+        cap = str(current_audit_phase)
+        if cap not in VALID_AUDIT_PHASES:
+            return _stable_error(
+                f"Invalid current_audit_phase: '{cap}'. Must be one of: {sorted(VALID_AUDIT_PHASES)}"
+            )
+
+    state.setdefault(
+        "audit",
+        {
+            "repair_count": 0,
+            "current_audit_phase": None,
+            "audit_round": 0,
+        },
+    )
+
+    if repair_count is not None:
+        state["audit"]["repair_count"] = int(repair_count)
+    if current_audit_phase is not None:
+        state["audit"]["current_audit_phase"] = str(current_audit_phase)
+    if audit_round is not None:
+        state["audit"]["audit_round"] = int(audit_round)
+
+    _write_state(pd, state)
+    return _stable_response(
+        {
+            "audit": state["audit"],
         }
     )
 
@@ -754,6 +835,8 @@ def _check_skill_chain(project_dir: Path) -> dict:
         "gpd_reviewer_gpd_errors": "gpd-errors",
         "gpd_reviewer_gpd_conventions": "gpd-conventions",
         "gpd_reviewer_gpd_domain_check": "gpd-domain-check",
+        "research_worker_audit": "research-audit",
+        "research_worker_audit_repair": "research-audit-repair",
     }
     for key, skill_name in skill_refs_map.items():
         found = _find_skill_md(project_dir, skill_name)
@@ -1304,6 +1387,8 @@ PERSISTENCE_WHITELIST = {
     "DEBATE.md",
 }
 
+PERSISTENCE_WHITELIST_DIRS = {"audits"}
+
 
 def _scan_output_dir(pd: Path) -> list[Path]:
     output_root = pd / OUTPUT_DIR
@@ -1335,7 +1420,12 @@ def _is_persistence_non_whitelisted(path: Path, pd: Path) -> bool:
     if not rel.startswith(OUTPUT_DIR + "/persistence/"):
         return False
     filename = path.name
-    return filename not in PERSISTENCE_WHITELIST and not filename.endswith(".lock")
+    if filename in PERSISTENCE_WHITELIST or filename.endswith(".lock"):
+        return False
+    parent_name = path.parent.name
+    if parent_name in PERSISTENCE_WHITELIST_DIRS:
+        return False
+    return True
 
 
 @mcp.tool(annotations=READ_ONLY)

@@ -1,16 +1,18 @@
 ---
 name: literature-landscape-scan
 description: |
-  Phase 2 (phase_landscape) of the Path 3 research state machine.
+  Phase 4 (phase_landscape) of the Path 3 research state machine.
   Scans literature landscape for a research topic. Produces a structured landscape_map.md
   with domain map, school classification, key paper timeline, controversy annotations,
-  and open problem list. Can be skipped if ROADMAP.md already contains sufficient
-  literature coverage. Integrates with alpha-research, alphaxiv, and research-question-framing.
+  and open problem list. Landscape execution is determined by audit_1 (has_citation_gaps=true
+  → must execute; has_citation_gaps=false → can skip). When executed, landscape has dual
+  responsibility: primary task (domain mapping) + supplementary task (filling audit_1
+  citation gaps). Integrates with alpha-research, alphaxiv, and research-question-framing.
 ---
 
 # Literature Landscape Scan — phase_landscape
 
-This skill implements **Phase 2** of the Path 3 research state machine. It expands the literature coverage beyond Phase 1's initial analysis.
+This skill implements **Phase 4** of the Path 3 research state machine. It expands the literature coverage beyond Phase 1's initial analysis.
 
 ## Lifecycle Contract
 
@@ -22,27 +24,30 @@ This skill implements **Phase 2** of the Path 3 research state machine. It expan
 2. `.aether/research/persistence/ROADMAP.md` — Updated with landscape findings (schools, papers, controversies)
 3. `.aether/research/persistence/STATE.md` — Updated with phase=phase_landscape completed
 
-**State transition**: phase_landscape → phase_framing
+**State transition**: phase_landscape → phase_audit_2
 
 **MUST NOT**: Write PLAN.md (that is phase_framing's responsibility). Overwrite ROADMAP.md — only append/update the landscape section.
 
-**Skip condition**: This phase CAN be skipped ONLY if ROADMAP.md contains ALL of the following:
+**Skip condition**: This phase CAN be skipped ONLY based on audit_1 verification results:
 
-- A "Schools of Thought" section with ≥3 schools, each with representative papers (arXiv IDs or DOIs)
-- A "Key Paper Timeline" section with chronological ordering
-- A "Controversies" or "Open Problems" section identifying gaps
-  OR: A prior landscape_map.md exists in notepads that covers the same domain (check domain overlap)
-  OR: The user's prompt explicitly lists ≥5 specific papers/authors with full citations, covering multiple approaches
-- If skipping: write skip justification to STATE.md, call advance_plan via research-state MCP with phase="phase_landscape_skipped", proceed to phase_framing
+- audit_1 `has_citation_gaps = true` → landscape **must execute** (cannot skip)
+- audit_1 `has_citation_gaps = false` + `issues_found = 0` → can skip
+- audit_1 `has_citation_gaps = false` + `issues_found > 0` (only non-citation issues) → can skip
+- If skipping: write skip justification to STATE.md, coordinator directly advance_plan to next executing phase (phase_audit_2 repair loop or phase_framing), NO phase_landscape_skipped intermediate state
+
+**Dual responsibility when executed**:
+
+- Primary task: Produce landscape_map.md (domain map, school classification, key paper timeline, controversies)
+- Supplementary task: Fill audit_1 citation gaps (MISSING and CONCERN entries from latest audit_1 report)
 
 ## Procedure
 
 ### Step 1: Read Current State
 
-1. Read `.aether/research/persistence/STATE.md` — confirm phase is phase_analysis completed
+1. Read `.aether/research/persistence/STATE.md` — confirm phase is phase_audit_1 completed (landscape dispatched after audit_1 found citation gaps)
 2. Read `.aether/research/persistence/ROADMAP.md` — understand project scope and question
 3. Read `.aether/research/notepads/<slug>/research_analysis.md` — review Phase 1 findings
-4. Check skip condition: Does ROADMAP.md already contain sufficient landscape coverage?
+4. Read the latest audit_1 report from `.aether/research/persistence/audits/` for citation gap findings (MISSING and CONCERN entries) — supplementary task context
 5. Read state.json via research-state MCP (`get_state`)
 6. Check `convention_lock_status` via research-conventions MCP if physics domain
 
@@ -88,23 +93,25 @@ For papers classified as representative or key in the landscape:
    - Representative papers of each school (arXiv IDs / DOIs)
    - Foundational and influential papers in the timeline
    - Papers central to identified controversies
-2. **Prepare batch file**: Create `key_papers.json` with metadata:
+   - Papers from audit_1 suggested_search that were found during supplementary task
+2. **Dedup against existing downloads**: Check `.aether/research/literatures/index.json` before downloading — skip papers already downloaded (arXiv ID/DOI match, same dedup logic as phase_analysis)
+3. **Prepare batch file**: Create `key_papers.json` with metadata:
    ```json
    [
      {"arxiv_id": "2401.12345", "doi": "...", "title": "...", "authors": "...", "year": 2024, "relevance": "representative"},
      ...
    ]
    ```
-3. **Run download script**:
+4. **Run download script**:
    ```bash
    uv run .aether/skills/literature-review/scripts/download_paper.py --batch key_papers.json --output .aether/research/literatures --relevance representative
    ```
-4. **Record results**: Successfully downloaded papers go to `literatures/index.json`; unavailable papers go to `literatures/unavailable.md` (title, authors, journal, DOI, URL, reason)
-5. **Do NOT block on failures**: If a paper has no OA version, note it in unavailable.md and proceed — landscape scan focuses on mapping, not full archiving
+5. **Record results**: Successfully downloaded papers go to `literatures/index.json`; unavailable papers go to `literatures/unavailable.md` (title, authors, journal, DOI, URL, reason)
+6. **Do NOT block on failures**: If a paper has no OA version, note it in unavailable.md and proceed — landscape scan focuses on mapping, not full archiving
 
-### Step 5: Map the Landscape
+### Step 5: Map the Landscape (Primary + Supplementary Tasks)
 
-Classify papers into a structured landscape:
+**Primary task**: Classify papers into a structured landscape:
 
 1. **Schools of Thought**: Group papers by theoretical framework or methodology
    - Name each school
@@ -120,6 +127,14 @@ Classify papers into a structured landscape:
 4. **Open Problems (gap_list)**: List unsolved questions and gaps
    - Each problem: description, significance, difficulty level, related school(s)
    - This gap_list feeds directly into research-question-framing skill
+
+**Supplementary task (audit_1 citation gap filling)**:
+
+5. **Audit gap filling**: For each MISSING/CONCERN entry from audit_1 report's `suggested_search`:
+   - Perform targeted search to find supporting references
+   - Integrate found references into ROADMAP.md (where they support existing claims)
+   - Mark supplemented literature in landscape_map.md with `[audit-gap-fill]` annotation
+   - Record which audit_1 finding each gap-fill addresses
 
 ### Step 6: Write Landscape Map
 
@@ -178,7 +193,7 @@ Append landscape findings to ROADMAP.md:
    - phase: phase_landscape completed
    - key decisions: [landscape decisions]
    - blockers: [any gaps in coverage]
-   - next_action: enter phase_framing
+   - next_action: enter phase_audit_2
 2. Call `advance_plan` via research-state MCP
 3. Output a PhaseResultDigest as your final message (see Step 9). The coordinator will route to the next phase based on the digest.
 
@@ -211,7 +226,7 @@ phase_result_digest:
   output_paths:
     landscape_map: notepads/[slug]/landscape_map.md
     literatures_index: research/literatures/index.json
-  next_phase: phase_framing
+  next_phase: phase_audit_2
 ```
 
 MUST NOT output any other text after this YAML block.

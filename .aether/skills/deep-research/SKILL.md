@@ -22,9 +22,9 @@ This skill implements **Phase 1** of the Path 3 research state machine. It is in
 2. `.aether/research/persistence/STATE.md` — Updated with phase=phase_analysis completed
 3. `.aether/research/notepads/<slug>/research_analysis.md` — Detailed analysis with citations
 
-**State transition**: phase_analysis → phase_landscape (or phase_framing if landscape is skipped)
+**State transition**: phase_analysis → phase_analysis_checkpoint (coordinator presents summary to user for direction confirmation)
 
-**MUST NOT**: Write PLAN.md (that is phase_framing's responsibility). Write VERIFICATION.md (that is phase_execution's responsibility).
+**MUST NOT**: Write PLAN.md (that is phase_framing's responsibility). Write VERIFICATION.md (that is phase_execution's responsibility). Write audit reports (that is research-audit's responsibility).
 
 ## Procedure
 
@@ -48,12 +48,46 @@ This skill implements **Phase 1** of the Path 3 research state machine. It is in
 - **Web**: Use websearch/webfetch for supplementary context
 - For physics literature: use alpha-research skill for initial search, then alphaxiv overview for deeper understanding
 
+### Step 3.5: Download Referenced Papers
+
+1. Collect all arXiv IDs / DOIs referenced in the analysis
+2. Check `.aether/research/literatures/index.json` for already downloaded literature (by arXiv ID/DOI) → skip duplicates
+3. Prepare `papers_to_download.json` compatible with `download_paper.py --batch` input:
+   ```json
+   [
+     {
+       "arxiv_id": "2305.12345",
+       "doi": "10.1234/journal.2023.123",
+       "title": "Paper title",
+       "first_author": "Smith",
+       "year": 2023,
+       "relevance": "phase_analysis"
+     }
+   ]
+   ```
+   Field notes:
+   - arxiv_id: required for arXiv papers; at least one of arxiv_id/doi must be filled
+   - doi: required for non-arXiv papers; at least one of arxiv_id/doi must be filled
+   - title: recommended for file naming and unavailable.md
+   - first_author: recommended for file naming; fallback from authors field
+   - authors: optional, comma-separated string or array
+   - year: recommended for indexing and unavailable.md
+   - relevance: optional, source tag (phase_analysis / phase_landscape)
+   - Dedup: arxiv_id priority match, then doi. Entries with neither → skip download, record in unavailable.md (reason: "No arXiv ID or DOI provided")
+4. Run download script:
+   ```bash
+   uv run .aether/skills/literature-review/scripts/download_paper.py --batch papers_to_download.json --output .aether/research/literatures
+   ```
+5. Record download results to index.json and unavailable.md
+6. Do NOT block on individual download failures
+
 ### Step 4: Synthesize Findings
 
 - Identify patterns, themes, and key insights
 - Note areas of consensus and disagreement
 - Map the research landscape at a high level (schools, approaches, methods)
 - Identify what is known vs what needs further investigation
+- Prioritize local literature copies (literatures/) for citation verification over secondary web search
 
 ### Step 5: Write ROADMAP.md
 
@@ -150,7 +184,7 @@ Write to `.aether/research/notepads/<slug>/research_analysis.md`:
    - phase: phase_analysis completed
    - key decisions: [what was decided]
    - blockers: [any identified]
-   - next_action: enter phase_landscape (or phase_framing if skip justified)
+   - next_action: enter phase_analysis_checkpoint (coordinator presents summary to user)
 2. Call `advance_plan` via research-state MCP
 3. Output a PhaseResultDigest as your final message (see Step 8). The coordinator will route to the next phase based on the digest.
 
@@ -179,8 +213,8 @@ phase_result_digest:
   output_paths:
     roadmap: persistence/ROADMAP.md
     analysis: notepads/[slug]/research_analysis.md
-  next_phase: phase_landscape
-  skip_recommendation: null | "[justification if landscape phase can be skipped]"
+  next_phase: phase_analysis_checkpoint
+  skip_recommendation: null | "[justification if landscape phase can be skipped — advisory only, actual skip decision made by audit_1]"
 ```
 
 MUST NOT output any other text after this YAML block. The coordinator parses this digest to route the next phase.
