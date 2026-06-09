@@ -261,6 +261,7 @@ VALID_PHASES = [
     "phase_landscape",
     "phase_audit_2",
     "phase_framing",
+    "phase_audit_3",
     "phase_debate",
     "phase_checkpoint",
     "phase_execution",
@@ -331,7 +332,7 @@ def advance_plan(
             },
         )
 
-    if phase in ("phase_audit_1", "phase_audit_2"):
+    if phase in ("phase_audit_1", "phase_audit_2", "phase_audit_3"):
         state.setdefault(
             "audit",
             {
@@ -414,7 +415,7 @@ def update_debate_state(
     )
 
 
-VALID_AUDIT_PHASES = {"phase_audit_1", "phase_audit_2"}
+VALID_AUDIT_PHASES = {"phase_audit_1", "phase_audit_2", "phase_audit_3"}
 VALID_AUDIT_SUB_PHASES = {"audit", "repair", "null"}
 
 
@@ -426,10 +427,10 @@ def update_audit_state(
     audit_round: int | None = None,
 ) -> dict[str, Any]:
     """Update audit-specific fields in state.json.
-    Only callable during phase_audit_1 or phase_audit_2.
+    Only callable during phase_audit_1, phase_audit_2, or phase_audit_3.
     All parameters are optional — only provided fields are updated.
     repair_count: cumulative repair attempts within current audit loop (reset to 0 on new audit phase).
-    current_audit_phase: phase_audit_1 or phase_audit_2.
+    current_audit_phase: phase_audit_1, phase_audit_2, or phase_audit_3.
     audit_round: current audit round number within the phase.
     """
     pd = _resolve_project_dir(project_dir)
@@ -438,7 +439,7 @@ def update_audit_state(
     current = state.get("phase", "")
     if current not in VALID_AUDIT_PHASES:
         return _stable_error(
-            f"update_audit_state only callable during phase_audit_1 or phase_audit_2, current phase: {current}"
+            f"update_audit_state only callable during phase_audit_1, phase_audit_2, or phase_audit_3, current phase: {current}"
         )
 
     if current_audit_phase is not None:
@@ -837,6 +838,8 @@ def _check_skill_chain(project_dir: Path) -> dict:
         "gpd_reviewer_gpd_domain_check": "gpd-domain-check",
         "research_worker_audit": "research-audit",
         "research_worker_audit_repair": "research-audit-repair",
+        "research_worker_audit_reasoning": "research-audit-reasoning",
+        "research_worker_audit_repair_reasoning": "research-audit-repair-reasoning",
     }
     for key, skill_name in skill_refs_map.items():
         found = _find_skill_md(project_dir, skill_name)

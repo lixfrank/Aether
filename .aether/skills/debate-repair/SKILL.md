@@ -68,6 +68,37 @@ Structural repairs may rewrite related section(s), but MUST maintain consistency
 5. **Add fallback plans** (common for plan resilience gaps): Add conditional branches in PLAN.md Execution Plan (if assumption X fails → use method Y), ensure fallback plans have corresponding Acceptance Tests.
 6. **Elevate sub-questions** (common for maturity-reliability imbalance): Elevate immature methods to independent sub-questions, change original question's method to "use method after sub-question verification passes".
 
+**Structural repair — framing_reasoning.md boundary**:
+
+When structural repair modifies question structure (split/merge/add), debate-repair **does NOT update framing_reasoning.md reasoning chain content**. Instead:
+
+- Add a staleness marker at the corresponding Gap section header in framing_reasoning.md: `[debate_repair_modified: question structure changed — see PLAN.md and research_questions.md for current version]`
+- This marker does NOT modify reasoning chain content — it only marks the correspondence between reasoning chain and current question structure as potentially outdated
+- For new questions with no reasoning chain: `[new question from debate_repair: [Qn] — no reasoning chain, see PLAN.md]`
+- For PoC questions added during debate: `[new question from debate_repair: [Qn_c] PoC — no reasoning chain, see PLAN.md]`
+
+**Structural repair — research_questions.md backup**:
+
+Before modifying research_questions.md for question structure changes (split/merge/add):
+
+```
+bash: cp .aether/research/notepads/[slug]/research_questions.md .aether/research/notepads/[slug]/research_questions.md.pre_debate_repair_round[N]
+```
+
+This backup is for crash recovery. Clean up after repair digest is written:
+
+```
+bash: rm -f .aether/research/notepads/[slug]/research_questions.md.pre_debate_repair_round[N]
+```
+
+**Structural repair — dependency data authority shift**:
+
+After debate-repair modifies question structure, dependency data (Dependency Graph, Execution Order) authority shifts:
+
+- **Before debate-repair**: framing_reasoning.md is authoritative source
+- **After debate-repair modifies question structure**: PLAN.md Execution Plan becomes authoritative source for dependency data — because debate-repair only modifies PLAN.md, framing_reasoning.md's dependency data may be outdated
+- research_questions.md Depends_on/Required_by references should point to PLAN.md Execution Plan (not framing_reasoning.md) after question structure changes
+
 **Exploratory repair** (ESCALATE topics):
 
 Do NOT make definitive changes to claims or acceptance tests — the information is insufficient to rule. Instead:
@@ -97,6 +128,14 @@ After repair, verify:
 3. Cross-question consistency: repair has not introduced contradictory premises or conventions
 4. Environment Requirements completeness: new/modified methods have corresponding environment requirement declarations
 5. Exploratory repair consistency: conditional branches are internally coherent, exploration steps do not conflict with existing Execution Plan
+6. **Dependency Consistency Verification** (mandatory after any question structure change — split/merge/add/fallback/critical_change):
+   a. If questions were split/merged/added → verify PLAN.md Execution Plan includes all new cycles
+   b. If question structure unchanged but method changed → verify no new inter-question dependencies introduced by the new method
+   c. Verify PLAN.md Execution Plan has no circular dependencies (execution order is consistent)
+   d. Verify research_questions.md Depends_on/Required_by quick references match PLAN.md Execution Plan Dependencies
+   e. If any inconsistency found → fix it within the repair (do not leave for next round)
+
+Note: This dependency consistency check verifies PLAN.md and research_questions.md consistency, **NOT framing_reasoning.md** (framing_reasoning.md may be outdated but PLAN.md is the authoritative source after debate-repair).
 
 **Affected UPHELD Assessment** (mandatory):
 
@@ -175,6 +214,11 @@ phase_result_digest:
   re_verification_topics:
     - topic: "[topic name]"
       reason: "[why this UPHELD topic may be affected by the repairs]"
+  dependency_changes:
+    - type: [split / merge / add / critical_change / none]
+      affected_questions: [Q2 → Q2a, Q2b]
+      plan_execution_plan_changes: [cycle 2 split into cycle 2 (Q2a) and cycle 3 (Q2b)]
+      framing_reasoning_staleness_markers_added: [Gap 2 section]
   next_phase: phase_checkpoint | phase_debate
   output_paths:
     debate_log: "persistence/DEBATE.md"
@@ -189,6 +233,7 @@ Where:
 - `repairs_applied`: number of REVISE+CONCEDED+ESCALATE topics that were processed
 - `repair_scope`: count of local, structural, and exploratory repairs
 - `re_verification_topics`: list of UPHELD topics that may be affected by the repairs + repaired REVISE/CONCEDED topics that need re-verification (may be empty). Coordinator passes this directly to next round's dispatch prompt
+- `dependency_changes`: **mandatory** — even if no changes, must output `type: none` to confirm dependency check was executed. `framing_reasoning_staleness_markers_added` records locations in framing_reasoning.md where staleness markers were added
 - `next_phase`: `phase_checkpoint` if ALL_RESOLVED, `phase_debate` if FURTHER_ROUNDS_NEEDED and round < 3
 
 If execution failed:
@@ -212,6 +257,9 @@ phase_result_digest:
 - Do NOT skip consistency verification
 - Do NOT skip modification records — structural and exploratory repairs may have impact beyond the repair scope itself, ALL modified sections MUST be faithfully recorded
 - Do NOT skip affected UPHELD assessment — the `re_verification_topics` field is required even if empty
+- **Do NOT update framing_reasoning.md reasoning chain content** — debate-repair only modifies PLAN.md and research_questions.md. When question structure changes, add staleness marker `[debate_repair_modified: ...]` to corresponding Gap section header in framing_reasoning.md, but do NOT modify the reasoning chain itself
+- **Do NOT skip Dependency Consistency Verification** after question structure changes — the `dependency_changes` field is mandatory even if `type: none`
+- **Backup research_questions.md** before any question structure change (split/merge/add)
 
 ## Subagent Dispatch Rules
 

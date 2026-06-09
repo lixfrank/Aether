@@ -60,12 +60,12 @@ You MUST classify every user prompt through the Entry Gate BEFORE taking any oth
 
 ### Classification Rules (deterministic)
 
-| Condition                                                                                                                                                                                                     | Path                            | Workflow                                                                                                                          |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| Prompt is a single factual question answerable by one search (e.g. "What is FBI-DCT?", "Who introduced NIS?")                                                                                                 | **Path 1: Quick lookup**        | alpha-research skill, no subagents, no state machine                                                                              |
-| Prompt explicitly requests summarizing/surveying literature (contains "综述", "review", "总结文献", "survey", "literature review")                                                                            | **Path 2: Literature review**   | literature-review skill with its own state machine                                                                                |
-| Prompt contains research intent ("研究", "investigate", "research") + multi-phase description, OR requests feasibility analysis, method comparison, experimental verification, or any task requiring >1 phase | **Path 3: Research project**    | Full state machine (analysis → analysis_checkpoint → audit_1 → [landscape] → audit_2 → framing → debate → checkpoint → execution) |
-| Prompt contains no research intent and is not a factual lookup                                                                                                                                                | **Path 0: Not a research task** | Inform user this is outside research scope; suggest switching to build agent                                                      |
+| Condition                                                                                                                                                                                                     | Path                            | Workflow                                                                                                                                    |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Prompt is a single factual question answerable by one search (e.g. "What is FBI-DCT?", "Who introduced NIS?")                                                                                                 | **Path 1: Quick lookup**        | alpha-research skill, no subagents, no state machine                                                                                        |
+| Prompt explicitly requests summarizing/surveying literature (contains "综述", "review", "总结文献", "survey", "literature review")                                                                            | **Path 2: Literature review**   | literature-review skill with its own state machine                                                                                          |
+| Prompt contains research intent ("研究", "investigate", "research") + multi-phase description, OR requests feasibility analysis, method comparison, experimental verification, or any task requiring >1 phase | **Path 3: Research project**    | Full state machine (analysis → analysis_checkpoint → audit_1 → [landscape] → audit_2 → framing → audit_3 → debate → checkpoint → execution) |
+| Prompt contains no research intent and is not a factual lookup                                                                                                                                                | **Path 0: Not a research task** | Inform user this is outside research scope; suggest switching to build agent                                                                |
 
 4. After classification, write the decision to STATE.md:
 
@@ -175,16 +175,47 @@ phase_audit_1     ─── dispatch research-worker
          → landscape skipped (write skip justification to STATE.md)
          → advance_plan(phase_framing)
 
-    │
-    ▼
+│
+     ▼
 phase_framing      ─── dispatch research-worker
-                       Worker invokes /research-question-framing skill
-                       Worker writes PLAN.md + research_questions.md
-                       Worker calls advance_plan, updates STATE.md
-                       Worker returns PhaseResultDigest
-                       Coordinator appends digest to DIGESTS.md
-    │
-    ▼
+                        Worker invokes /research-question-framing skill
+                        Worker writes PLAN.md + research_questions.md + framing_reasoning.md
+                        Worker calls advance_plan, updates STATE.md
+                        Worker returns PhaseResultDigest
+                        Coordinator appends digest to DIGESTS.md
+     │
+     ▼
+phase_audit_3     ─── dispatch research-worker
+                        Worker invokes /research-audit-reasoning skill
+                        Worker writes audits/audit_3_round[N].md
+                        Worker returns PhaseResultDigest (has_structural_incompleteness, issues_found, low_confidence_questions)
+                        Coordinator routes per §Coordinator Routing (audit_3)
+     │
+     ├─ has_structural_incompleteness=true → re-dispatch framing worker (覆盖旧产出, max 1 retry)
+     │    → framing retry prompt injects missing info
+     │    → framing 产出覆盖旧产出 → phase_audit_3 (重新审计)
+     │    → framing retry 1次仍不完整 → 带 unresolved 进 debate
+     │
+     ├─ has_structural_incompleteness=false + issues_found=0 → phase_debate
+     │
+     ├─ has_structural_incompleteness=false + issues_found>0 + repair_count<3
+     │    → dispatch repair worker (sub_phase within phase_audit_3)
+     │    → repair → audit_3 (audit-repair loop, plan_number=7 unchanged)
+     │
+     ├─ has_structural_incompleteness=false + issues_found>0 + repair_count=3 + has LOW confidence
+     │    → coordinator asks user (3 options):
+     │       ├─ Option 1: landscape supplement → supplement worker → audit_2 → framing → audit_3
+     │       ├─ Option 2: mark infeasible → STATE.md Blockers → phase_debate (inject infeasible list)
+     │       ├─ Option 3: continue (accept LOW) → phase_debate (inject LOW confidence hint)
+     │
+     ├─ has_structural_incompleteness=false + issues_found>0 + repair_count=3 + no LOW confidence
+     │    → unresolved_reasoning_gaps → STATE.md Blockers → phase_debate (inject unresolved list)
+     │
+     └─ LOW confidence (Type B confirmed after landscape supplement)
+        → coordinator dispatches framing repair worker (PoC question addition)
+        → framing repair → phase_audit_3 (verify PoC reasoning chain)
+     │
+     ▼
 phase_debate       ─── Multi-agent debate loop (coordinator-managed):
                        ┌─────────────────────────────────────┐
                        │                                     │
@@ -284,10 +315,11 @@ STATE.md uses descriptive phase names. state.json uses machine-readable phase id
 | phase_landscape           | phase_landscape                 | 4           |
 | phase_audit_2             | phase_audit_2                   | 5           |
 | phase_framing             | phase_framing                   | 6           |
-| phase_debate              | phase_debate                    | 7           |
-| phase_checkpoint          | phase_checkpoint                | 8           |
-| phase_execution           | phase_execution                 | 9           |
-| completed                 | completed                       | 10          |
+| phase_audit_3             | phase_audit_3                   | 7           |
+| phase_debate              | phase_debate                    | 8           |
+| phase_checkpoint          | phase_checkpoint                | 9           |
+| phase_execution           | phase_execution                 | 10          |
+| completed                 | completed                       | 11          |
 
 Phase detection rule: STATE.md Current Phase field contains one of the above descriptive names. When reading state.json via MCP get_state, the "phase" field will contain the corresponding machine-readable identifier. Note: landscape skip does not produce a `phase_landscape_skipped` state — skip is a transient decision recorded in STATE.md skip justification, and coordinator directly advance_plan to the next executing phase (phase_audit_2 repair loop or phase_framing).
 
@@ -333,7 +365,7 @@ Every phase MUST follow this protocol:
   | audit_1 `has_citation_gaps = false` + `issues_found = 0` | Can skip |
   | audit_1 `has_citation_gaps = false` + `issues_found > 0` (only non-citation issues) | Can skip |
 - If skipping: write skip justification to STATE.md, advance_plan directly to next executing phase (phase_audit_2 repair loop or phase_framing), NO `phase_landscape_skipped` intermediate state
-- phase_audit_1 and phase_audit_2: FORBIDDEN to skip
+- phase_audit_1, phase_audit_2, and phase_audit_3 CANNOT be skipped
 - All other phases: FORBIDDEN to skip
 
 ## Coordinator Routing Protocol (Path 3)
@@ -348,12 +380,13 @@ Every phase MUST follow this protocol:
 | phase_landscape           | Worker invokes /literature-landscape-scan skill                                                    | phase=landscape                                                   |
 | phase_audit_2             | Worker invokes /research-audit skill (full mode)                                                   | phase=audit_2, sub_phase=audit/repair, audit_round=N              |
 | phase_framing             | Worker invokes /research-question-framing skill                                                    | phase=framing                                                     |
+| phase_audit_3             | Worker invokes /research-audit-reasoning skill                                                     | phase=audit_3, sub_phase=audit/repair, audit_round=N              |
 | phase_debate              | Worker invokes /debate-advocate, /debate-critic, /debate-adjudicator, /debate-repair (multi-round) | sub_phase=advocacy/critique/rebuttal/adjudication/repair, round=N |
 | phase_execution           | Worker invokes /autoresearch skill                                                                 | sub_phase=execution_cycle or verification, cycle=N                |
 
-### Dispatch Procedure (phase 1-6)
+### Dispatch Procedure (phase 1-7)
 
-For each phase (analysis, audit_1, landscape, audit_2, framing):
+For each phase (analysis, audit_1, landscape, audit_2, framing, audit_3):
 
 1. Read STATE.md — confirm current phase matches expected phase
 2. Read state.json via research-state MCP (get_state) — confirm machine state
@@ -388,6 +421,7 @@ task(
 | phase_landscape           | Dispatch worker (phase=landscape) — inject audit_1 MISSING/CONCERN findings as supplementary task                                                                                                             |
 | phase_audit_2             | Dispatch worker (phase=audit_2, sub_phase=audit)                                                                                                                                                              |
 | phase_framing             | Dispatch worker (phase=framing)                                                                                                                                                                               |
+| phase_audit_3             | Dispatch worker (phase=audit_3, sub_phase=audit)                                                                                                                                                              |
 | phase_debate              | Start debate loop — dispatch worker (sub_phase=advocacy, round=1)                                                                                                                                             |
 | phase_checkpoint          | Coordinator handles directly (NO worker dispatch) — see section below                                                                                                                                         |
 | phase_execution           | Start execution loop — dispatch worker (sub_phase=execution_cycle, cycle=1)                                                                                                                                   |
@@ -559,7 +593,7 @@ appended to DIGESTS.md)."
 
 ### Audit-Repair Loop Mechanism
 
-All audit phases share the same loop mechanism (audit_1, audit_2). Differences are in audit targets and repair file lists.
+All audit phases share the same loop mechanism (audit_1, audit_2, audit_3). Differences are in audit targets, repair file lists, and routing.
 
 **Core principle**: repair must be followed by re-audit because:
 
@@ -569,7 +603,7 @@ All audit phases share the same loop mechanism (audit_1, audit_2). Differences a
 
 **Loop flow**:
 
-1. Dispatch audit worker → returns audit digest (issues_found, has_citation_gaps)
+1. Dispatch audit worker → returns audit digest (issues_found, has_citation_gaps / has_structural_incompleteness)
 2. issues_found = 0 → advance_plan to next phase
 3. issues_found > 0 + repair_count < 3 → dispatch repair worker (sub_phase within current audit phase)
 4. repair worker returns repair digest → re-dispatch audit worker (audit_round incremented)
@@ -591,30 +625,285 @@ During loop, plan_number does NOT change. Loop state tracked via state.json.audi
 }
 ```
 
-| Field                       | Description                                                                            |
-| --------------------------- | -------------------------------------------------------------------------------------- |
-| `audit.repair_count`        | Cumulative repair count within current audit loop, reset to 0 on new audit phase       |
-| `audit.current_audit_phase` | Currently executing audit phase (phase_audit_1 or phase_audit_2), for session recovery |
-| `audit.audit_round`         | Audit round count within current phase, incremented each audit dispatch                |
+| Field                       | Description                                                                                            |
+| --------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `audit.repair_count`        | Cumulative repair count within current audit loop, reset to 0 on new audit phase                       |
+| `audit.current_audit_phase` | Currently executing audit phase (phase_audit_1, phase_audit_2, or phase_audit_3), for session recovery |
+| `audit.audit_round`         | Audit round count within current phase, incremented each audit dispatch                                |
 
-Reset rule: audit_1 and audit_2 are mutually exclusive paths — single repair_count counter is sufficient, reset to 0 when entering a new audit phase.
+Reset rule: audit_1, audit_2, and audit_3 are mutually exclusive paths — single repair_count counter is sufficient, reset to 0 when entering a new audit phase. Additional reset scenarios for audit_3:
+
+- framing retry (structural incompleteness → re-dispatch framing → audit_3): repair_count reset to 0 — new framing output, first audit
+- landscape supplement → audit_2 → framing → audit_3: repair_count reset to 0 — entire knowledge base and framing output updated, first audit
 
 **Phase-specific differences**:
 
-|                         | audit_1 (landscape skip path)     | audit_2 (landscape normal path)                          |
-| ----------------------- | --------------------------------- | -------------------------------------------------------- |
-| Audit targets           | ROADMAP.md + research_analysis.md | ROADMAP.md + research_analysis.md + landscape_map.md     |
-| Audit scope             | light (citation check)            | full (citation + domain coverage + method applicability) |
-| Repair files            | ROADMAP.md + research_analysis.md | ROADMAP.md + research_analysis.md + landscape_map.md     |
-| Next phase after loop   | phase_framing                     | phase_framing                                            |
-| plan_number during loop | 3                                 | 5                                                        |
+|                         | audit_1 (landscape skip path)      | audit_2 (landscape normal path)                          | audit_3 (reasoning chain)                                              |
+| ----------------------- | ---------------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Audit targets           | ROADMAP.md + research_analysis.md  | ROADMAP.md + research_analysis.md + landscape_map.md     | framing_reasoning.md + PLAN.md + research_questions.md                 |
+| Audit scope             | light (citation check)             | full (citation + domain coverage + method applicability) | reasoning chain + dependency structure + cross-file consistency        |
+| Audit skill             | /research-audit                    | /research-audit                                          | /research-audit-reasoning                                              |
+| Repair files            | ROADMAP.md + research_analysis.md  | ROADMAP.md + research_analysis.md + landscape_map.md     | framing_reasoning.md + PLAN.md + rq.md + ROADMAP.md + landscape_map.md |
+| Repair skill            | /research-audit-repair             | /research-audit-repair                                   | /research-audit-repair-reasoning                                       |
+| Next phase after loop   | phase_framing (or phase_landscape) | phase_framing                                            | phase_debate (or phase_framing if structural incompleteness)           |
+| plan_number during loop | 3                                  | 5                                                        | 7                                                                      |
 
 **Max repair count handling**: After 3 repairs with remaining issues:
 
-- Mark all unresolved issues as unresolved_gap
-- Write to STATE.md Blockers section: `unresolved_gaps: [issue list]`
-- advance_plan to phase_framing — framing worker prompt includes unresolved list as constraint:
-  "以下知识基础存在未验证的声明，framing 时必须为这些声明设计独立的验证路径"
+- Mark all unresolved issues as unresolved_gap (audit_1/2) or unresolved_reasoning_gap (audit_3)
+- Write to STATE.md Blockers section: `unresolved_gaps: [issue list]` (audit_1/2) or `unresolved_reasoning_gaps: [issue list]` (audit_3)
+- advance_plan to next phase — framing worker prompt (audit_1/2) or debate worker prompt (audit_3) includes unresolved list as constraint
+
+### Repair Pre-backup (audit phases)
+
+Before dispatching repair worker for audit phases, backup ALL repair target files:
+
+```
+bash: cp .aether/research/persistence/ROADMAP.md .aether/research/persistence/ROADMAP.md.pre_audit_repair_round[N]
+bash: cp .aether/research/notepads/[slug]/research_analysis.md .aether/research/notepads/[slug]/research_analysis.md.pre_audit_repair_round[N]
+[landscape_map.md backup for audit_2 path if file exists]
+```
+
+### Coordinator Routing (audit_3 digest)
+
+Based on audit_3 worker's PhaseResultDigest fields `issues_found`, `has_structural_incompleteness`, and LOW confidence presence:
+
+1. `has_structural_incompleteness = true` → coordinator re-dispatches framing worker (NOT git rollback, directly overwrite old output). Prompt injects missing info: "Previous framing produced incomplete reasoning chains for gaps [list]. Preserve reasoning chains that were complete, reconstruct only the incomplete ones." Framing retry max 1 time — 2nd time still incomplete → carry unresolved into debate.
+2. `has_structural_incompleteness = false` + `issues_found = 0` → advance_plan(phase=phase_debate) → enter debate (reasoning chain reliable)
+3. `has_structural_incompleteness = false` + `issues_found > 0` + `repair_count < 3` → dispatch repair worker (sub_phase within phase_audit_3) → repair digest returns → re-dispatch audit_3 worker (audit-repair loop, plan_number=7 unchanged)
+4. `has_structural_incompleteness = false` + `issues_found > 0` + `repair_count = 3` → coordinator checks for LOW confidence questions:
+   a. **Has LOW confidence** → coordinator uses question tool to ask user (3 options):
+   - **Option 1: Execute landscape supplement** (recommended) — coordinator dispatches landscape supplement worker → audit_2 → framing → audit_3
+   - **Option 2: Mark as infeasible** — write infeasible_gap to STATE.md Blockers → phase_debate (inject infeasible list)
+   - **Option 3: Continue execution (accept LOW confidence)** — phase_debate (inject LOW confidence hint)
+     b. **No LOW confidence** → mark unresolved_reasoning_gaps → write to STATE.md Blockers → advance_plan(phase=phase_debate) → debate worker prompt injects unresolved list
+
+#### Audit-3 Repair Dispatch
+
+Before dispatching repair worker, create backup:
+
+```
+bash: cp .aether/research/notepads/[slug]/framing_reasoning.md .aether/research/notepads/[slug]/framing_reasoning.md.pre_audit_repair_round[N]
+bash: cp .aether/research/persistence/PLAN.md .aether/research/persistence/PLAN.md.pre_audit_repair_round[N]
+bash: cp .aether/research/notepads/[slug]/research_questions.md .aether/research/notepads/[slug]/research_questions.md.pre_audit_repair_round[N]
+bash: cp .aether/research/persistence/ROADMAP.md .aether/research/persistence/ROADMAP.md.pre_audit_repair_round[N]
+[landscape_map.md backup if file exists]
+```
+
+Dispatch prompt:
+
+```
+task(
+  description: "audit_3 repair round [M]",
+  subagent_type: "research-worker",
+  prompt: "Execute repair sub-phase of phase_audit_3 (repair round [M]).
+Invoke /research-audit-repair-reasoning skill.
+Read the latest audit_3 report from persistence/audits/audit_3_round[N].md for FATAL and CONCERN findings.
+Read framing_reasoning.md, PLAN.md, research_questions.md, ROADMAP.md, and landscape_map.md (if exists) — the files to be repaired.
+
+REPAIR TARGETS:
+- Files: [notepads/[slug]/framing_reasoning.md, persistence/PLAN.md, notepads/[slug]/research_questions.md, persistence/ROADMAP.md, notepads/[slug]/landscape_map.md]
+- Findings to fix: [FATAL/CONCERN entries from audit_3_round[N].md]
+
+REPAIR SCOPE PER FINDING TYPE:
+- Reasoning chain jump steps → reconstruct missing intermediate steps (significance argument, tractability argument) by citing relevant passages from ROADMAP.md and landscape_map.md
+- Solution paths omissions → review landscape_map.md §Schools of Thought or ROADMAP.md §Analysis for omitted approaches; add missing paths with citation evidence
+- Tractability confidence mismatches → adjust confidence level OR supplement evidence from ROADMAP/landscape to justify current level
+- PLAN.md Claims ↔ reasoning chain inconsistency → synchronize Claim derived_from/tractability/question fields with corrected reasoning chain
+- Dependency issues (missing deps, false deps, critical labeling errors) → update framing_reasoning.md §Inter-Question Dependencies + §Dependency Graph + §Execution Order; synchronize research_questions.md Depends_on/Required_by and PLAN.md Execution Plan
+- Circular dependencies → break cycle by redesigning question assumptions (replace inter-question dependency with knowledge-base assumption or introduce independent verification)
+- Unresolved knowledge gaps not considered → add mitigation notes in reasoning chain §Unresolved Knowledge Gaps
+
+For each finding, you MAY use web search and alpha-research skill for targeted literature search
+to find additional evidence for reasoning chain reconstruction. For findings that cannot be resolved,
+mark them as unresolved_reasoning_gap.
+
+BACKTRACK SCOPE LIMIT (ROADMAP.md / landscape_map.md):
+- You MAY modify ROADMAP.md and landscape_map.md to supplement citations and arguments
+  that support reasoning chain reconstruction, BUT:
+  1. AT MOST 1 backtrack modification pass — if one pass is insufficient to fill a reasoning
+     gap, mark that gap as unresolved_reasoning_gap rather than making further modifications.
+  2. ONLY supplement citations and arguments — do NOT modify the core content of existing
+     claims (factual statements, method applicability ranges, etc.). audit_1/2 has already
+     verified the factual accuracy of these files; audit_3 repair must not overturn verified claims.
+  3. Mark any supplemented content with 'audit_3_repair_supplement' tag in the respective files.
+
+MANDATORY: After any dependency structure change, verify (权威源一致性检查):
+a. Dependency Graph has no circular dependencies (topological sort succeeds)
+b. Execution Order is consistent with updated Dependency Graph
+c. framing_reasoning.md §Inter-Question Dependencies matches Dependency Graph
+d. PLAN.md Execution Plan Dependencies references match framing_reasoning.md §Inter-Question Dependencies
+e. research_questions.md Depends_on/Required_by quick references match framing_reasoning.md §Inter-Question Dependencies
+f. framing_reasoning.md 为权威源——所有依赖修改先在 framing_reasoning.md 中完成，然后机械同步 research_questions.md 和 PLAN.md 的引用
+
+After completing, output repair digest as your final message (this will be
+appended to DIGESTS.md)."
+)
+```
+
+After repair digest returns:
+
+- Read repair digest fields: chains_repaired, chains_unresolved
+- Increment state.json.audit.repair_count via update_audit_state MCP
+- Re-dispatch audit_3 worker (audit_round incremented)
+- If repair_count reaches 3 + issues_found > 0 → route per §Coordinator Routing (audit_3 digest) #4
+
+#### Audit-3 Framing Re-dispatch (structural incompleteness)
+
+When `has_structural_incompleteness = true`, coordinator re-dispatches framing worker. **NOT git rollback — directly overwrite old output**. Framing retry max 1 time.
+
+Dispatch prompt:
+
+```
+task(
+  description: "framing re-dispatch (structural incompleteness retry)",
+  subagent_type: "research-worker",
+  prompt: "Execute phase_framing of the research project (RE-DISPATCH due to structural incompleteness in reasoning chains).
+Invoke /research-question-framing skill.
+Read ROADMAP.md, landscape_map.md (if exists), research_analysis.md, and STATE.md for current context.
+
+Previous framing produced incomplete reasoning chains for gaps [list of gaps with missing chains].
+Preserve reasoning chains that were complete, reconstruct only the incomplete ones.
+
+You MUST produce complete reasoning chains for ALL gaps this time. Each Gap → Question Mapping
+must contain: Significance Argument + Solution Paths Survey + Tractability Argument +
+Assumptions Introduced + Inter-Question Dependencies + Derived Question.
+
+After completing, output PhaseResultDigest as your final message."
+)
+```
+
+Framing retry tracking:
+
+- Record framing_retry_count in STATE.md (max 1)
+- If 2nd framing still has structural incompleteness → carry unresolved into debate
+
+#### LOW Confidence → Landscape Supplement
+
+When coordinator confirms user chose Option 1 (landscape supplement), dispatch landscape supplement worker. **Soft supplement**: preserve all existing output, supplement search on existing basis, NOT hard rollback (git checkout).
+
+Dispatch prompt:
+
+```
+task(
+  description: "landscape supplement (LOW confidence gap fill)",
+  subagent_type: "research-worker",
+  prompt: "Execute supplementary landscape search (landscape supplement phase).
+Invoke /literature-landscape-scan skill.
+Read existing landscape_map.md, ROADMAP.md, and research_analysis.md for current context.
+
+SUPPLEMENTARY TASK ONLY — Do NOT redo the entire landscape.
+The previous landscape search found insufficient evidence for the following areas:
+
+Missing areas identified by audit_3:
+- [具体缺失方向 1: e.g. 'no method found for [category]']
+- [具体缺失方向 2: e.g. 'only WEAK evidence for [approach]']
+
+Search strategy adjustments:
+- Expand keyword scope to adjacent domains
+- Check recent preprints (last 6 months)
+- Search non-arXiv sources (INSPIRE-HEP, Semantic Scholar, PubMed, etc.)
+- For each missing area, attempt ≥3 distinct search queries
+
+Update existing landscape_map.md and ROADMAP.md with supplementary findings.
+Mark supplementary entries as 'audit_3_gap_fill' in landscape_map.md.
+
+PRIMARY TASK: Complete supplementary search first. Then complete primary landscape task if any remaining gaps.
+After completing, output PhaseResultDigest as your final message."
+)
+```
+
+After landscape supplement completes:
+
+- advance_plan(phase=phase_audit_2) → dispatch audit_2 worker (standard path branch rules)
+- audit_2 passes → advance_plan(phase=phase_framing) → dispatch framing worker (new framing based on updated knowledge base)
+- framing completes → advance_plan(phase=phase_audit_3) → dispatch audit_3 worker
+- audit_3: confidence no longer LOW → advance_plan(phase=phase_debate)
+- audit_3: confidence still LOW → confirmed Type B → coordinator dispatches framing repair worker for PoC question addition
+
+Landscape supplement max 1 execution. 1st supplement still LOW → confirm Type B, no 2nd attempt.
+
+#### Type B: PoC Question Addition
+
+When coordinator confirms Type B (landscape supplement still LOW), dispatch framing repair worker for PoC question addition.
+
+Dispatch prompt:
+
+```
+task(
+  description: "framing repair Type B (PoC question addition)",
+  subagent_type: "research-worker",
+  prompt: "Execute framing repair for Type B (Frontier Problem) question addition (repair round [M]).
+Read framing_reasoning.md, PLAN.md, research_questions.md for current context.
+
+TASK: Add Proof-of-Concept (PoC) question(s) for frontier problem question [Qn].
+
+The question [Qn] has tractability LOW after landscape supplement — confirming that
+the method path requires feasibility verification before full execution.
+
+For [Qn], design PoC question(s) that verify the core feasibility assumptions of [Qn]'s
+method path. PoC questions must:
+1. Be proper research questions with full SMED/PICO/General definition, falsification criterion,
+   measurement method, and evidence kind
+2. Verify core feasibility assumptions (not the full claim) using simplified cases
+3. Have tractability MEDIUM (simplified case + partial evidence for each component)
+4. Have critical dependency: [Qn_c] → [Qn] (if PoC fails, [Qn]'s method premise is invalid)
+
+You MAY add 0, 1, or multiple PoC questions depending on [Qn]'s method structure:
+- 0 PoC: If even PoC cannot be designed → choose downgrade to exploratory question OR mark infeasible
+- 1 PoC: Most common — one simplified verification question
+- Multiple PoCs: If [Qn]'s method has multiple independent core assumptions
+
+For each PoC question added, write a complete reasoning chain subsection following the same
+schema as regular questions (Significance Argument + Solution Paths Survey + Tractability Argument +
+Assumptions Introduced + Inter-Question Dependencies + Derived Question), with content adapted
+for the simplified case.
+
+MANDATORY: After any dependency structure change, verify (权威源一致性检查):
+a. Dependency Graph has no circular dependencies
+b. Execution Order is consistent with updated Dependency Graph
+c. framing_reasoning.md §Inter-Question Dependencies matches Dependency Graph
+d. PLAN.md Execution Plan Dependencies references match framing_reasoning.md
+e. research_questions.md Depends_on/Required_by matches framing_reasoning.md
+
+After completing, output repair digest as your final message."
+)
+```
+
+#### Infeasible Gap Marking
+
+When user chooses Option 2 (mark infeasible) or agent determines question cannot be researched:
+
+1. **Do NOT delete the question** — mark as infeasible_gap
+2. Write to STATE.md Blockers section:
+
+```
+infeasible_gaps:
+  - question: [Qn — question title]
+    gap: [gap description]
+    reason: [foundation_insufficient_after_supplement / no_method_available / user_decision]
+    tractability: LOW
+    LOW_type: [foundation_insufficient / frontier_problem]
+```
+
+3. Mark the question's claim in PLAN.md as `status: infeasible` (not deleted, preserved for user review)
+4. advance_plan(phase=phase_debate) → debate worker prompt injects infeasible list
+
+#### LOW Confidence User Confirmation (question tool)
+
+When coordinator needs user confirmation for LOW confidence:
+
+```
+audit_3 发现 question [Qn] 的 tractability 为 LOW (evidence insufficient)。
+LOW 类型: [foundation_insufficient / frontier_problem]。
+LOW 原因: [具体证据不足的说明]。
+
+选择:
+
+1. 执行 landscape 补缺（推荐 — 在已有文献基础上补充搜索）
+2. 标记为 infeasible — 不补缺，继续但标注此 question 不可行
+3. 继续执行（不补缺不标记）— 接受 LOW confidence 不确定性，进入 debate 时注入 LOW confidence 提示
+```
 
 ### Repair Pre-backup (audit phases)
 
@@ -685,6 +974,59 @@ If repair worker times out or crashes after potentially modifying PLAN.md:
 3. Check DEBATE.md for partial repair report content — if found, note in retry prompt: "Ignore incomplete repair report at end of DEBATE.md"
 4. Retry repair dispatch (max 2 retries)
 5. If all retries fail → enter Digest Parsing Fallback with `status: repair_incomplete_risk`, present to user
+
+#### Debate Worker Prompt Injection (audit_3 context)
+
+When audit_3 reached max repair count with unresolved reasoning gaps:
+
+```
+NOTE: The following reasoning chains have unresolved gaps from audit_3.
+These gaps mean the corresponding claims' derivation from knowledge base
+is not fully verified. You MUST pay extra attention to these claims during
+debate — assess whether the unresolved reasoning gaps materially affect
+the claims' soundness.
+
+Unresolved reasoning gaps:
+[list from STATE.md Blockers]
+```
+
+When debate input contains PoC questions (Type B: Frontier Problem):
+
+```
+NOTE: The following questions were added as Proof-of-Concept (PoC) questions
+to verify method feasibility for frontier problems (Type B: tractability LOW
+after landscape supplement). These questions are NOT redundant — they address
+distinct feasibility assumptions that the original questions depend on.
+Do NOT apply redundancy or granularity critique to these questions without
+considering their role as critical prerequisites for the original questions.
+
+PoC questions: [list from framing_reasoning.md §Inter-Question Dependencies
+where dependency type = critical and dependency description includes "method feasibility"]
+```
+
+When debate input contains infeasible_gap:
+
+```
+NOTE: The following questions were marked as infeasible (foundation insufficient
+after audit_3). These questions are kept for record — do NOT remove them.
+Assess whether the remaining questions can still produce meaningful results
+without these infeasible questions.
+
+Infeasible questions: [list from STATE.md Blockers]
+```
+
+When debate input includes LOW confidence (user chose Option 3):
+
+```
+NOTE: Question [Qn] has tractability LOW (evidence insufficient for the selected
+method path). Debate should assess whether this uncertainty is acceptable for
+the research plan — can the question still produce meaningful results despite
+low method feasibility confidence?
+
+LOW confidence question: [Qn — description from framing_reasoning.md §Tractability Argument]
+```
+
+These are NOT new debate topics — they are **prefatory notes** injected into the debate dispatch prompt, letting advocate/critic/adjudicator know the special background before evaluating standard debate topics.
 
 #### Round 1: Full Debate (5 dispatches)
 
@@ -839,13 +1181,13 @@ After repair digest is received:
 3. Call `update_debate_state(rounds_completed=N, escalate_topics=[...from DEBATE.md...], current_sub_phase=null)` via research-state MCP
 4. Clean up backup: `bash: rm -f .aether/research/persistence/PLAN.md.pre_repair_round{N}`
 5. Read repair digest fields:
-   - `round_verdict=ALL_RESOLVED` → call `advance_plan(phase=phase_checkpoint, plan_number=8)` → proceed to phase_checkpoint
+   - `round_verdict=ALL_RESOLVED` → call `advance_plan(phase=phase_checkpoint, plan_number=9)` → proceed to phase_checkpoint
    - `round_verdict=FURTHER_ROUNDS_NEEDED` + `round < 3` → dispatch next round (advocacy, round=N+1) with focused topic list constructed from ESCALATE topics (DEBATE.md adjudicator ruling) + `re_verification_topics` (repair digest)
-   - `round_verdict=FURTHER_ROUNDS_NEEDED` + `round >= 3` → call `advance_plan(phase=phase_checkpoint, plan_number=8)`, write remaining ESCALATE topics to STATE.md Blockers → proceed to phase_checkpoint
+   - `round_verdict=FURTHER_ROUNDS_NEEDED` + `round >= 3` → call `advance_plan(phase=phase_checkpoint, plan_number=9)`, write remaining ESCALATE topics to STATE.md Blockers → proceed to phase_checkpoint
 6. Git commit after debate completion:
    ```
    git add .aether/research/
-   git commit -m "research: phase_debate completed (plan 7)"
+   git commit -m "research: phase_debate completed (plan 8)"
    ```
 
 #### User Rejection and Debate Reopening
@@ -970,7 +1312,7 @@ Coordinator MUST NOT dispatch more than 3 execution_cycle workers. After 3 faile
 
 When verification shows all claims verified:
 
-1. Call advance_plan(phase=completed, plan_number=10) via research-state MCP
+1. Call advance_plan(phase=completed, plan_number=11) via research-state MCP
 2. Update STATE.md: phase=completed
 3. Read final verification digest from DIGESTS.md
 4. Optionally read VERIFICATION.md for detail (grep key sections, NOT full read)
@@ -1081,16 +1423,20 @@ On session start:
       - Use question tool (same as first entry)
       - User confirms → advance_plan(phase=phase_audit_1)
       - User requests revision → rollback to phase_analysis commit (see §Rollback Implementation)
-    - If current phase is phase_audit_1 or phase_audit_2:
+    - If current phase is phase_audit_1, phase_audit_2, or phase_audit_3:
       - Read state.json.audit.current_audit_phase + state.json.audit.repair_count + state.json.audit.audit_round
       - If current_audit_phase is null → dispatch audit worker directly
       - If current_audit_phase is non-null:
         - Check DIGESTS.md last entry's sub_phase:
           - sub_phase = audit → audit worker has returned digest → route per Coordinator Routing rules
           - sub_phase = repair → repair worker may have modified files but crashed → enter repair crash recovery (check .pre_audit_repair_round[N] backups → restore if exists → retry dispatch)
-          - No digest → worker may have crashed → check audit report file (persistence/audits/audit\_[1|2]\_round[N].md):
+          - No digest → worker may have crashed → check audit report file (persistence/audits/audit\_[1|2|3]\_round[N].md):
             - File exists and non-empty → construct fallback digest (status: completed_fallback), route per rules
             - File does not exist → re-dispatch audit worker
+    - If current phase is phase_audit_3 with has_structural_incompleteness or LOW confidence:
+      - Check framing_reasoning.md exists and non-empty → if exists, continue audit_3
+      - If framing_reasoning.md missing → re-dispatch framing worker (structural incompleteness recovery)
+      - If landscape supplement in progress: check landscape_map.md for audit_3_gap_fill entries → if present, construct fallback digest and continue audit_2 → framing → audit_3; if not present, re-dispatch landscape supplement worker
     - If current phase is phase_execution: check state.json.execution_cycle + DIGESTS.md for cycle status
     - If current phase is phase_debate: check state.json.debate.current_sub_phase + DEBATE.md for round status
       - If state.json.debate.current_sub_phase is non-null → resume from that sub_phase (interrupted mid-round)
@@ -1208,6 +1554,8 @@ Workflow for modifying project files:
 | `audits/audit_1_round2.md` | audit_1 second check (after repair) |
 | `audits/audit_2_round1.md` | audit_2 first check report          |
 | `audits/audit_2_round2.md` | audit_2 second check (after repair) |
+| `audits/audit_3_round1.md` | audit_3 first check report          |
+| `audits/audit_3_round2.md` | audit_3 second check (after repair) |
 
 Each round's output does NOT overwrite previous rounds — full audit history is preserved. Coordinator reads the latest round's file for routing.
 

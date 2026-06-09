@@ -101,6 +101,8 @@ phase_audit_1 (plan_number=3, 循环期间不变)
 
 ### Phase Mapping 更新
 
+> **注意**：以下 Phase Mapping 表为 Layer 3.11 完成后的编号（含 audit_3）。Layer 3.10 原始编号为 phase_audit_3=7（不存在）、phase_debate=7、phase_checkpoint=8、phase_execution=9、completed=10。Layer 3.11 实施后统一更新为以下编号。
+
 | STATE.md phase            | state.json phase (advance_plan) | plan_number | 备注                                |
 | ------------------------- | ------------------------------- | ----------- | ----------------------------------- |
 | gate → Path 3             | gate                            | 0           |                                     |
@@ -110,10 +112,11 @@ phase_audit_1 (plan_number=3, 循环期间不变)
 | phase_landscape           | phase_landscape                 | 4           |                                     |
 | phase_audit_2             | phase_audit_2                   | 5           | audit-repair 循环在此 phase 内完成  |
 | phase_framing             | phase_framing                   | 6           |                                     |
-| phase_debate              | phase_debate                    | 7           |                                     |
-| phase_checkpoint          | phase_checkpoint                | 8           |                                     |
-| phase_execution           | phase_execution                 | 9           |                                     |
-| completed                 | completed                       | 10          |                                     |
+| phase_audit_3             | phase_audit_3                   | 7           | **Layer 3.11 新增**                 |
+| phase_debate              | phase_debate                    | 8           |                                     |
+| phase_checkpoint          | phase_checkpoint                | 9           |                                     |
+| phase_execution           | phase_execution                 | 10          |                                     |
+| completed                 | completed                       | 11          |                                     |
 
 > **注意**：landscape 跳过时不产生 `phase_landscape_skipped` 中间状态。coordinator 在 STATE.md 写入 skip justification，然后直接 `advance_plan` 到下一个执行的 phase（phase_audit_2 repair 循环 或 phase_framing）。DIGESTS.md 中不会有 landscape digest 条目。
 
@@ -458,23 +461,23 @@ state.json 扩展结构：
 }
 ```
 
-| 字段                        | 说明                                                                                |
-| --------------------------- | ----------------------------------------------------------------------------------- |
-| `audit.repair_count`        | 当前 audit 循环内的 repair 累计次数，进入新 audit phase 时重置为 0                  |
-| `audit.current_audit_phase` | 当前执行的 audit phase（`phase_audit_1` 或 `phase_audit_2`），用于 session recovery |
-| `audit.audit_round`         | 当前 audit phase 已执行的 audit round 数，每次派遣 audit worker 后递增              |
+| 字段                        | 说明                                                                                                 |
+| --------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `audit.repair_count`        | 当前 audit 循环内的 repair 累计次数，进入新 audit phase 时重置为 0                                   |
+| `audit.current_audit_phase` | 当前执行的 audit phase（`phase_audit_1`、`phase_audit_2` 或 `phase_audit_3`），用于 session recovery |
+| `audit.audit_round`         | 当前 audit phase 已执行的 audit round 数，每次派遣 audit worker 后递增                               |
 
-重置规则：由于 audit_1 和 audit_2 不会同时出现（互斥路径），单一 `repair_count` 计数器足够——每次进入新 audit phase 时重置为 0。
+重置规则：由于 audit_1 和 audit_2 不会同时出现（互斥路径），单一 `repair_count` 计数器足够——每次进入新 audit phase 时重置为 0。Layer 3.11 新增 audit_3 后同样遵循此规则——三个 audit phase 互斥（顺序推进），进入新 phase 时重置 repair_count。额外重置场景见 Layer 3.11 §repair_count 重置规则。
 
 ### Phase-specific 差异
 
-|                      | audit_1（landscape 跳过路径）     | audit_2（landscape 正常路径）                        |
-| -------------------- | --------------------------------- | ---------------------------------------------------- |
-| 审计对象             | ROADMAP.md + research_analysis.md | ROADMAP.md + research_analysis.md + landscape_map.md |
-| 审计范围             | light（引用核查）                 | full（引用核查 + 领域覆盖 + 方法适用性）             |
-| 修复文件             | ROADMAP.md + research_analysis.md | ROADMAP.md + research_analysis.md + landscape_map.md |
-| 循环后下一 phase     | phase_framing                     | phase_framing                                        |
-| 循环期间 plan_number | 3                                 | 5                                                    |
+|                      | audit_1（landscape 跳过路径）     | audit_2（landscape 正常路径）                        | audit_3（推理链审计，Layer 3.11 新增）                                 |
+| -------------------- | --------------------------------- | ---------------------------------------------------- | ---------------------------------------------------------------------- |
+| 审计对象             | ROADMAP.md + research_analysis.md | ROADMAP.md + research_analysis.md + landscape_map.md | framing_reasoning.md + PLAN.md + research_questions.md                 |
+| 审计范围             | light（引用核查）                 | full（引用核查 + 领域覆盖 + 方法适用性）             | reasoning chain + dependency structure + cross-file consistency        |
+| 修复文件             | ROADMAP.md + research_analysis.md | ROADMAP.md + research_analysis.md + landscape_map.md | framing_reasoning.md + PLAN.md + rq.md + ROADMAP.md + landscape_map.md |
+| 循环后下一 phase     | phase_framing                     | phase_framing                                        | phase_debate（或 phase_framing if structural incompleteness）          |
+| 循环期间 plan_number | 3                                 | 5                                                    | 7                                                                      |
 
 ### 达到最大次数后的处理
 
