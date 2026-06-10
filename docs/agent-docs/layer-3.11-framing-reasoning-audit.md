@@ -660,18 +660,21 @@ PLAN.md Execution Plan 从单一计划改为多 Wave 结构（基于 framing_rea
 - Method: [method]
 - Tools: [packages]
 - Falsification test: [from acceptance test]
-- Dependencies: See framing_reasoning.md §Gap [N] → Inter-Question Dependencies (Q2 depends on Q1, critical)
-- Required input from Q1: [what Q1's conclusion provides to Q2 — 一句话概括]
+- Dependencies:
+  - Q1 (critical): Q1 的结论 [claim X] 为本 question 方法 [method Y] 提供初始参数 [具体参数名]。Q1 失败则本 question 无法执行。
+    - Fallback: 无（critical dependency，Q1 失败 → Q2 blocked）
+  - [或：Q1 (non-critical): ...]
+    - Fallback: 如果 Q1 结论不成立，可用替代假设 [Z] 尝试本 question（来源：framing_reasoning.md §Gap [N] → Inter-Question Dependencies 的 fallback path）
 - Output file: execution/Q2_EXECUTION.md
 
 #### Wave 3: Q4
 
 **Q4: [question title]**
 
-- [same structure, dependencies引用指向 framing_reasoning.md]
+- [same structure, Dependencies 为自包含型完整依赖描述]
 ```
 
-> **权威源规则**：PLAN.md Execution Plan 中每个 question 的 Dependencies 字段为引用型（指向 framing_reasoning.md §Inter-Question Dependencies），仅保留一句话 Required input 概要。完整依赖描述（critical/fallback/dependency description）在 framing_reasoning.md 中维护，PLAN.md 不重复存储。
+> **权威源规则**：PLAN.md Execution Plan 中每个 question 的 Dependencies 字段为**自包含型**——完整描述每个依赖的 dependency description、critical 标注及理由、fallback path（如有）。framing_reasoning.md §Inter-Question Dependencies 仍作为推理链层面的推导记录保留，但在 debate repair 后 PLAN.md 是依赖数据的权威源（framing_reasoning.md 可能标注 `[debate_repair_modified]` 但依赖描述未同步更新）。autoresearch 在 phase_execution 中读取依赖数据时以 PLAN.md 为首要来源，framing_reasoning.md 仅作为 fallback 参考（当 PLAN.md Dependencies 信息因 debate repair 遗漏而不完整时补充）。
 
 PLAN.md Environment Requirements 保持不变（所有 Wave 共用同一环境声明）。
 
@@ -911,9 +914,9 @@ MANDATORY: After any dependency structure change, verify (权威源一致性检�
 a. Dependency Graph has no circular dependencies (topological sort succeeds)
 b. Execution Order is consistent with updated Dependency Graph
 c. framing_reasoning.md §Inter-Question Dependencies matches Dependency Graph
-d. PLAN.md Execution Plan Dependencies references match framing_reasoning.md §Inter-Question Dependencies
+d. PLAN.md Execution Plan Dependencies are **self-contained** — each dependency includes: dependency description, critical=true/false with reasoning, fallback path (if non-critical). No reference-only pointers to framing_reasoning.md without the full description.
 e. research_questions.md Depends_on/Required_by quick references match framing_reasoning.md §Inter-Question Dependencies
-f. framing_reasoning.md 为权威源——所有依赖修改先在 framing_reasoning.md 中完成，然后机械同步 research_questions.md 和 PLAN.md 的引用
+f. framing_reasoning.md 为权威源 (during framing/audit_3 phase) — all dependency modifications are done first in framing_reasoning.md, then mechanically synced to research_questions.md and PLAN.md
 
 After completing, output repair digest as your final message (this will be
 appended to DIGESTS.md).
@@ -1108,7 +1111,7 @@ debate repair **不涉及更新 framing_reasoning.md**。理由：
 
 1. **职责边界**：debate repair 的 Integrity Rules 限定修复基于裁决理由和辩论证据，不引入裁决未涉及的新内容。framing_reasoning.md 的推理链条内容（Significance Argument、Solution Paths Survey、Tractability Argument、Derived Question 等）属于推理链层面，不属于 PLAN.md 结果层面的修复范围。
 2. **推理链完整性**：如果 debate repair 修改了 question 结构（split/merge/add），framing_reasoning.md 中对应的推理链段落会变得过时——但 debate repair 不负责重建推理链。这些过时段落应保留原样（标注为 `debate_repair_modified: question structure changed, reasoning chain may be outdated`），由后续流程（如新一轮 framing 或独立的 reasoning chain update）处理。
-3. **权威源规则调整**：debate repair 修改 PLAN.md 和 research_questions.md 时，**不机械同步 framing_reasoning.md**。依赖数据（Dependency Graph、Execution Order）的权威源从 framing_reasoning.md 转移到 PLAN.md Execution Plan——因为 debate repair 只修改 PLAN.md，framing_reasoning.md 的依赖数据可能过时。
+3. **权威源规则调整**：debate repair 修改 PLAN.md 和 research_questions.md 时，**不机械同步 framing_reasoning.md 推理链内容**（Significance Argument、Solution Paths Survey、Tractability Argument、Derived Question 等推理链层面内容不变）。但**依赖数据（Dependency Graph、Execution Order、Inter-Question Dependencies 的 critical/fallback/dependency description）的权威源从 framing_reasoning.md 转移到 PLAN.md Execution Plan**——因为 debate repair 修改 PLAN.md 时必须将 Dependencies 字段从引用型改为自包含型（包含完整的 critical 标注、fallback path 描述、dependency description），确保 PLAN.md 自身携带 phase_execution 所需的全部依赖信息。framing_reasoning.md 的依赖数据可能过时，但其推理链推导内容仍保留供审查。
 
 > **framing_reasoning.md 过时标注规则**：debate repair 在 PLAN.md 和 research_questions.md 中修改 question 结构后，必须在 framing_reasoning.md 对应的 Gap section 头部添加标注 `[debate_repair_modified: question structure changed — see PLAN.md and research_questions.md for current version]`。此标注不修改推理链内容，只是标记其与当前 question 结构的对应关系可能已过时。audit_3 后续轮次检查此标注时，应将过时的推理链-question 对应关系标注为 CONCERN（而非 FATAL——推理链本身的逻辑可能仍然有效，只是 question 结构变了）。
 
@@ -1122,14 +1125,14 @@ repair digest 写入后清理 backup：`rm -f .aether/research/notepads/[slug]/r
 
 debate repair 修改 question 结构后，依赖数据的更新范围：
 
-| Repair 类型                     | 依赖影响                                                                    | 更新范围（仅 PLAN.md 和 research_questions.md，不涉及 framing_reasoning.md）                                                                                                                                           |
-| ------------------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Split question (Q2 → Q2a + Q2b) | Q2 的所有上下游依赖需要分别分配到 Q2a 和 Q2b                                | 更新 PLAN.md Execution Plan（Q2 的 Wave 拆分为 Wave (Q2a) 和 Wave (Q2b)）；更新 research_questions.md Depends_on/Required_by；在 framing_reasoning.md §Gap section 头部添加过时标注                                    |
-| Merge questions (Q3 + Q4 → Q3') | Q3 和 Q4 的所有上下游依赖合并到 Q3'                                         | 同上，合并而非拆分；在 framing_reasoning.md §Gap section 头部添加过时标注                                                                                                                                              |
-| Add new question (Q5)           | Q5 需要声明与已有 question 的依赖关系                                       | 在 PLAN.md 新增 Q5 claim/Wave；在 research_questions.md 新增 Q5 定义 + Depends_on/Required_by；在 framing_reasoning.md 添加标注 `[new question from debate_repair: Q5 — no reasoning chain, see PLAN.md]`              |
-| Add PoC question (Q2c)          | Q2c 验证 Q2 的方法可行性前提；Q2c → Q2 是 critical dependency               | 在 PLAN.md 新增 Q2c claim/Wave + Q2 tractability LOW → MEDIUM；在 research_questions.md 新增 Q2c 定义；在 framing_reasoning.md 添加标注 `[new question from debate_repair: Q2c PoC — no reasoning chain, see PLAN.md]` |
-| Redesign verification path      | 通常不影响依赖，但如果新方法引入了对其他 question 结论的新依赖              | 检查新方法是否引入新 assumption → 如果 assumption 来源是其他 question 的结论 → 在 PLAN.md Execution Plan 新增依赖说明                                                                                                  |
-| Add fallback plan               | 不改变依赖边，但改变 critical 标注（critical → non-critical-with-fallback） | 更新 PLAN.md Execution Plan 的 fallback 说明                                                                                                                                                                           |
+| Repair 类型                     | 依赖影响                                                                    | 更新范围（PLAN.md Dependencies 必须为自包含型 + research_questions.md，不涉及 framing_reasoning.md 推理链内容）                                                                                                                                                                                                                                                                |
+| ------------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Split question (Q2 → Q2a + Q2b) | Q2 的所有上下游依赖需要分别分配到 Q2a 和 Q2b                                | 更新 PLAN.md Execution Plan（Q2 的 Wave 拆分为 Wave (Q2a) 和 Wave (Q2b)，每个新 question 的 Dependencies 字段必须包含完整的 critical/fallback/dependency description）；更新 research_questions.md Depends_on/Required_by；在 framing_reasoning.md §Gap section 头部添加过时标注                                                                                               |
+| Merge questions (Q3 + Q4 → Q3') | Q3 和 Q4 的所有上下游依赖合并到 Q3'                                         | 同上，合并而非拆分；合并后 question 的 Dependencies 字段必须完整描述所有继承的依赖关系；在 framing_reasoning.md §Gap section 头部添加过时标注                                                                                                                                                                                                                                  |
+| Add new question (Q5)           | Q5 需要声明与已有 question 的依赖关系                                       | 在 PLAN.md 新增 Q5 claim/Wave（Dependencies 字段必须完整声明 Q5 的所有依赖：critical/fallback/dependency description）；在 research_questions.md 新增 Q5 定义 + Depends_on/Required_by；在 framing_reasoning.md 添加标注 `[new question from debate_repair: Q5 — no reasoning chain, see PLAN.md]`                                                                             |
+| Add PoC question (Q2c)          | Q2c 验证 Q2 的方法可行性前提；Q2c → Q2 是 critical dependency               | 在 PLAN.md 新增 Q2c claim/Wave + Q2 tractability LOW → MEDIUM；Q2 的 Dependencies 字段新增 Q2c (critical) 的完整描述（"Q2c 的结论验证本 question 方法可行性前提，Q2c 失败则本 question 方法前提不成立，无 fallback"）；在 research_questions.md 新增 Q2c 定义；在 framing_reasoning.md 添加标注 `[new question from debate_repair: Q2c PoC — no reasoning chain, see PLAN.md]` |
+| Redesign verification path      | 通常不影响依赖，但如果新方法引入了对其他 question 结论的新依赖              | 检查新方法是否引入新 assumption → 如果 assumption 来源是其他 question 的结论 → 在 PLAN.md Execution Plan Dependencies 新增完整的依赖描述（critical/fallback/dependency description）                                                                                                                                                                                           |
+| Add fallback plan               | 不改变依赖边，但改变 critical 标注（critical → non-critical-with-fallback） | 更新 PLAN.md Execution Plan Dependencies：将对应依赖的 critical 改为 non-critical，新增 fallback path 完整描述（替代假设 + 适用范围 + 来源引用）                                                                                                                                                                                                                               |
 
 #### Repair 依赖一致性验证（新增强制步骤）
 
@@ -1141,10 +1144,12 @@ debate-repair skill 的 Step 4（Consistency Verification）新增子步骤：
   b. If question structure unchanged but method changed → verify no new inter-question dependencies introduced by the new method
   c. Verify PLAN.md Execution Plan has no circular dependencies (execution order is consistent)
   d. Verify research_questions.md Depends_on/Required_by quick references match PLAN.md Execution Plan Dependencies
-  e. If any inconsistency found → fix it within the repair (do not leave for next round)
+  e. Verify PLAN.md Execution Plan Dependencies are **self-contained** — each dependency includes: dependency description, critical=true/false with reasoning, fallback path (if non-critical). No reference-only pointers to framing_reasoning.md without the full description.
+  f. Verify all newly added/modified questions have complete Dependencies fields (not just reference pointers)
+  g. If any inconsistency found → fix it within the repair (do not leave for next round)
 ```
 
-> **注意**：此验证检查 PLAN.md 和 research_questions.md 之间的一致性，**不检查 framing_reasoning.md**（framing_reasoning.md 可能过时但 PLAN.md 是 debate 后的权威源）。
+> **注意**：此验证检查 PLAN.md 和 research_questions.md 之间的一致性，以及 PLAN.md Dependencies 字段的自包含完整性。**不检查 framing_reasoning.md 推理链内容**（framing_reasoning.md 推理链可能过时但 PLAN.md 是 debate 后的权威源）。
 
 repair digest 新增字段：
 
@@ -1250,31 +1255,34 @@ Step 结构重构：原 Step 2→3→4→5→6 重构为 Step 2→3→4→5→6�
 
 ## 实现改动清单
 
-| 改动项                                                                                                                                        | 类型 | 文件                                                      |
-| --------------------------------------------------------------------------------------------------------------------------------------------- | ---- | --------------------------------------------------------- |
-| 新增 phase_audit_3 到状态机                                                                                                                   | 修改 | `.aether/agent/research.md`                               |
-| 新增 audit_3 路径分支（repair loop / structural incompleteness → framing 重试 / LOW confidence → landscape supplement / unresolved → debate） | 修改 | `.aether/agent/research.md`                               |
-| 更新 Phase Mapping 表（plan_number 全链 +1）                                                                                                  | 修改 | `.aether/agent/research.md`                               |
-| 新增 audit_3 coordinator routing（含 has_structural_incompleteness 路由 + LOW confidence 用户确认路由）                                       | 修改 | `.aether/agent/research.md`                               |
-| 新增 framing 重试派遣流程（structural incompleteness → 重新 framing，最多 1 次）                                                              | 新增 | `.aether/agent/research.md`                               |
-| 新增 landscape supplement 派遣流程（软补缺，不硬回滚）                                                                                        | 修改 | `.aether/agent/research.md`                               |
-| 新增 Type B PoC question 增添流程（framing repair worker 派遣）                                                                               | 修改 | `.aether/agent/research.md`                               |
-| 新增 infeasible_gap 标记机制（STATE.md Blockers + 不删除 question）                                                                           | 修改 | `.aether/agent/research.md`                               |
-| 新增 audit_3 repair_count 计数到 state.json                                                                                                   | 修改 | MCP 服务器源码                                            |
-| **新增 research-audit-reasoning skill**（独立 skill，8 步 Procedure，audit_3 专用）                                                           | 新增 | `.aether/skills/research-audit-reasoning/SKILL.md`        |
-| **新增 research-audit-repair-reasoning skill**（独立 repair skill，推理链重建 + 依赖修复）                                                    | 新增 | `.aether/skills/research-audit-repair-reasoning/SKILL.md` |
-| research-question-framing skill Step 重构（完整旧→新 Step 映射表）                                                                            | 修改 | `.aether/skills/research-question-framing/SKILL.md`       |
-| research_questions.md 新增 Depends_on + Required_by（移除 Dependency Graph section）                                                          | 修改 | `.aether/skills/research-question-framing/SKILL.md`       |
-| framing_reasoning.md 新增为 Lifecycle Contract Output                                                                                         | 修改 | `.aether/skills/research-question-framing/SKILL.md`       |
-| PLAN.md Execution Plan 改为多 Wave 结构                                                                                                       | 修改 | `.aether/skills/research-question-framing/SKILL.md`       |
-| debate-repair 不涉及 framing_reasoning.md 推理链更新 + 过时标注规则 + 备份机制                                                                | 修改 | `.aether/skills/debate-repair/SKILL.md`                   |
-| 更新 session recovery（audit_3 恢复逻辑 + landscape supplement 恢复 + framing re-dispatch 恢复）                                              | 修改 | `.aether/agent/research.md`                               |
-| 更新 debate worker 提示词模板（注入 unresolved_reasoning_gaps + infeasible_gap + PoC question + LOW confidence 说明）                         | 修改 | `.aether/agent/research.md`                               |
-| 新增 landscape supplement 派遣提示词模板（软补缺，保留已有产出）                                                                              | 新增 | `.aether/agent/research.md`                               |
-| 新增 Type B PoC question 增添派遣提示词模板                                                                                                   | 新增 | `.aether/agent/research.md`                               |
-| 新增 framing 重试派遣提示词模板（structural incompleteness 场景）                                                                             | 新增 | `.aether/agent/research.md`                               |
-| 更新 `research-agent-runtime-design.md` 状态机图                                                                                              | 修改 | `docs/agent-docs/research-agent-runtime-design.md`        |
-| 更新 `layer-3.10-audit-phase.md` Phase Mapping（plan_number 变更）                                                                            | 修改 | `docs/agent-docs/layer-3.10-audit-phase.md`               |
+| 改动项                                                                                                                                                                                                                         | 类型         | 文件                                                                                          |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------ | --------------------------------------------------------------------------------------------- |
+| 新增 phase_audit_3 到状态机                                                                                                                                                                                                    | 修改         | `.aether/agent/research.md`                                                                   |
+| 新增 audit_3 路径分支（repair loop / structural incompleteness → framing 重试 / LOW confidence → landscape supplement / unresolved → debate）                                                                                  | 修改         | `.aether/agent/research.md`                                                                   |
+| 更新 Phase Mapping 表（plan_number 全链 +1）                                                                                                                                                                                   | 修改         | `.aether/agent/research.md`                                                                   |
+| 新增 audit_3 coordinator routing（含 has_structural_incompleteness 路由 + LOW confidence 用户确认路由）                                                                                                                        | 修改         | `.aether/agent/research.md`                                                                   |
+| 新增 framing 重试派遣流程（structural incompleteness → 重新 framing，最多 1 次）                                                                                                                                               | 新增         | `.aether/agent/research.md`                                                                   |
+| 新增 landscape supplement 派遣流程（软补缺，不硬回滚）                                                                                                                                                                         | 修改         | `.aether/agent/research.md`                                                                   |
+| 新增 Type B PoC question 增添流程（framing repair worker 派遣）                                                                                                                                                                | 修改         | `.aether/agent/research.md`                                                                   |
+| 新增 infeasible_gap 标记机制（STATE.md Blockers + 不删除 question）                                                                                                                                                            | 修改         | `.aether/agent/research.md`                                                                   |
+| 新增 audit_3 repair_count 计数到 state.json                                                                                                                                                                                    | 修改         | MCP 服务器源码                                                                                |
+| **新增 research-audit-reasoning skill**（独立 skill，8 步 Procedure，audit_3 专用）                                                                                                                                            | 新增         | `.aether/skills/research-audit-reasoning/SKILL.md`                                            |
+| **新增 research-audit-repair-reasoning skill**（独立 repair skill，推理链重建 + 依赖修复）                                                                                                                                     | 新增         | `.aether/skills/research-audit-repair-reasoning/SKILL.md`                                     |
+| research-question-framing skill Step 重构（完整旧→新 Step 映射表）                                                                                                                                                             | 修改         | `.aether/skills/research-question-framing/SKILL.md`                                           |
+| research_questions.md 新增 Depends_on + Required_by（移除 Dependency Graph section）                                                                                                                                           | 修改         | `.aether/skills/research-question-framing/SKILL.md`                                           |
+| framing_reasoning.md 新增为 Lifecycle Contract Output                                                                                                                                                                          | 修改         | `.aether/skills/research-question-framing/SKILL.md`                                           |
+| PLAN.md Execution Plan 改为多 Wave 结构                                                                                                                                                                                        | 修改         | `.aether/skills/research-question-framing/SKILL.md`                                           |
+| PLAN.md Execution Plan Dependencies 字段从引用型改为自包含型（包含完整的 critical 标注、fallback path 描述、dependency description），确保 debate repair 后 PLAN.md 自身携带 phase_execution 所需的全部依赖信息                | **重大修改** | `.aether/skills/research-question-framing/SKILL.md` + `.aether/skills/debate-repair/SKILL.md` |
+| debate-repair Step 4 Dependency Consistency Verification 升级：新增自包含完整性检查（PLAN.md Dependencies 必须包含 critical/fallback/dependency description，不允许纯引用型指针）                                              | 修改         | `.aether/skills/debate-repair/SKILL.md`                                                       |
+| debate-repair 修改 question 结构时必须同步更新 PLAN.md Dependencies 为自包含型（split/merge/add/fallback 等场景的更新范围见 §debate repair 依赖数据更新范围）                                                                  | 修改         | `.aether/skills/debate-repair/SKILL.md`                                                       |
+| debate-repair 不涉及 framing_reasoning.md 推理链内容更新 + 过时标注规则 + 备份机制；但依赖数据权威源转移：PLAN.md Dependencies（自包含型）为首要权威源，framing_reasoning.md §Inter-Question Dependencies 仅作为 fallback 参考 | 修改         | `.aether/skills/debate-repair/SKILL.md`                                                       |
+| 更新 session recovery（audit_3 恢复逻辑 + landscape supplement 恢复 + framing re-dispatch 恢复）                                                                                                                               | 修改         | `.aether/agent/research.md`                                                                   |
+| 更新 debate worker 提示词模板（注入 unresolved_reasoning_gaps + infeasible_gap + PoC question + LOW confidence 说明）                                                                                                          | 修改         | `.aether/agent/research.md`                                                                   |
+| 新增 landscape supplement 派遣提示词模板（软补缺，保留已有产出）                                                                                                                                                               | 新增         | `.aether/agent/research.md`                                                                   |
+| 新增 Type B PoC question 增添派遣提示词模板                                                                                                                                                                                    | 新增         | `.aether/agent/research.md`                                                                   |
+| 新增 framing 重试派遣提示词模板（structural incompleteness 场景）                                                                                                                                                              | 新增         | `.aether/agent/research.md`                                                                   |
+| 更新 `research-agent-runtime-design.md` 状态机图                                                                                                                                                                               | 修改         | `docs/agent-docs/research-agent-runtime-design.md`                                            |
+| 更新 `layer-3.10-audit-phase.md` Phase Mapping（plan_number 变更）                                                                                                                                                             | 修改         | `docs/agent-docs/layer-3.10-audit-phase.md`                                                   |
 
 ---
 
@@ -1295,14 +1303,14 @@ Layer 3.10 未完成时，Layer 3.11 的 audit_3 可先定义但无法运行（�
 
 Layer 3.12（per-question execution）依赖本层产出的：
 
-| 依赖项                          | 来源                                              | Layer 3.12 如何使用                             |
-| ------------------------------- | ------------------------------------------------- | ----------------------------------------------- |
-| Dependency Graph                | framing_reasoning.md §Dependency Graph            | coordinator 确定每个 Wave 的 question 列表      |
-| Execution Order                 | framing_reasoning.md §Execution Order             | coordinator 按拓扑排序推进 question             |
-| critical dependency 标注        | framing_reasoning.md §Inter-Question Dependencies | Q1 失败时判断后续 question 是否 blocked         |
-| Fallback path                   | framing_reasoning.md §Inter-Question Dependencies | Q1 失败时自动降级尝试                           |
-| PLAN.md per-Wave Execution Plan | PLAN.md §Execution Plan                           | worker 知道当前 question 的方法、工具、前置依赖 |
-| Question-Claim mapping          | PLAN.md §Claims (question 字段)                   | 验证只针对当前 question 的 claims               |
+| 依赖项                                                  | 来源                                                      | Layer 3.12 如何使用                                                                                                                   |
+| ------------------------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| PLAN.md per-Wave Execution Plan (自包含型 Dependencies) | PLAN.md §Execution Plan                                   | autoresearch 确定每个 Wave 的 question 列表、排序、失败传播（critical/fallback/dependency description 全部自包含）                    |
+| Dependency Graph / Execution Order (参考源)             | framing_reasoning.md §Dependency Graph / §Execution Order | PLAN.md 是 debate repair 后的权威源；framing_reasoning.md 仅作为 fallback 参考（标注 `[debate_repair_modified]` 的 section 可能过时） |
+| Question-Claim mapping                                  | PLAN.md §Claims (question 字段)                           | 验证只针对当前 question 的 claims                                                                                                     |
+| tractability confidence                                 | PLAN.md §Claims (tractability 字段)                       | Wave 内 question 排序依据                                                                                                             |
+
+> **权威源规则**：debate repair 后，依赖数据（Dependency Graph、Execution Order、critical dependency、fallback path）的权威源是 PLAN.md Execution Plan Dependencies（自包含型）。framing_reasoning.md §Inter-Question Dependencies 仅作为 fallback 参考——autoresearch 以 PLAN.md 为首选，仅在 PLAN.md Dependencies 信息不完整时以 framing_reasoning.md 补充。
 
 Layer 3.12 未完成时，本层的产出仍有效——PLAN.md 的多 Wave Execution Plan 对当前一次性 execution 没有负面影响（一次性执行仍然可以读取 Wave 信息但忽略分步推进）。
 
@@ -1324,7 +1332,7 @@ Layer 3.12 未完成时，本层的产出仍有效——PLAN.md 的多 Wave Exec
 12. research_questions.md 每个 Question 的 Depends_on/Required_by 为引用型（指向 framing_reasoning.md + quick reference 概要）
 13. framing_reasoning.md 为 Lifecycle Contract Output（与 PLAN.md / research_questions.md / STATE.md 同列）
 14. PLAN.md Claims 新增 derived_from + tractability + question 字段
-15. PLAN.md Execution Plan 改为多 Wave 结构，Dependencies 为引用型（指向 framing_reasoning.md + 一句话 Required input 概要）
+15. PLAN.md Execution Plan 改为多 Wave 结构，Dependencies 为自包含型（包含完整的 critical 标注、fallback path 描述、dependency description；不再使用引用型指针指向 framing_reasoning.md）
 16. PhaseResultDigest 新增 dependency_graph + execution_order + reasoning_chain_paths + framing_reasoning output path
 17. `phase_audit_3` 可通过 coordinator 派遣 research-worker 调用 /research-audit-reasoning skill（独立 skill，不扩展 research-audit）
 18. AUDIT_3.md 产出结构正确（YAML Summary code block + Findings + PhaseResultDigest schema，has_citation_gaps 兼容性字段硬编码 false，has_structural_incompleteness 区分结构性缺失 vs 局部缺失）
@@ -1344,36 +1352,37 @@ Layer 3.12 未完成时，本层的产出仍有效——PLAN.md 的多 Wave Exec
 32. debate-repair **不涉及更新 framing_reasoning.md 推理链内容**，只修改 PLAN.md + research_questions.md
 33. debate-repair 修改 question 结构时在 framing_reasoning.md 对应 section 头部添加过时标注 `[debate_repair_modified: ...]`
 34. debate-repair 修改 question 结构时留备份（research_questions.md.pre_debate_repair_round[N]）
-35. debate-repair Step 4 新增 Dependency Consistency Verification（检查 PLAN.md + research_questions.md 一致性，不检查 framing_reasoning.md）
-36. debate-repair digest 新增 dependency_changes + framing_reasoning_staleness_markers_added 字段（mandatory）
-37. audit_3 repair 同步修复依赖关系问题
-38. phase mapping plan_number 正确更新（Layer 3.11 实施时统一更新所有引用）
-39. state.json repair_count 重置规则正确执行：
+35. debate-repair Step 4 Dependency Consistency Verification：检查 PLAN.md + research_questions.md 一致性 + **PLAN.md Dependencies 自包含完整性**（每个依赖必须包含 critical 标注 + fallback path 描述 + dependency description，不允许纯引用型指针）
+36. debate-repair 修改 question 结构时必须同步更新 PLAN.md Dependencies 为自包含型（split/merge/add/fallback 等场景见 §debate repair 依赖数据更新范围）
+37. debate-repair digest 新增 dependency_changes + framing_reasoning_staleness_markers_added 字段（mandatory）
+38. audit_3 repair 同步修复依赖关系问题
+39. phase mapping plan_number 正确更新（Layer 3.11 实施时统一更新所有引用）
+40. state.json repair_count 重置规则正确执行：
     - 进入 phase_audit_3 时重置为 0
     - framing 重试后重新进入 audit_3 时重置为 0
     - landscape supplement 后重新进入 audit_3 时重置为 0
     - audit_3 标准 audit-repair 循环内正常递增（0→1→2→3），不重置
-40. session recovery 可从 audit_3 中断点恢复，具体规则如下：
+41. session recovery 可从 audit_3 中断点恢复，具体规则如下：
     - audit_3 sub_phase recovery：与 audit_1/2 同构（读 state.json.audit.current_audit_phase + repair_count + audit_round → 按 audit/repair sub_phase 定位恢复点）
     - landscape supplement 中断恢复：检查 landscape_map.md 是否有 audit_3_gap_fill 标注条目 → 有则构造 fallback digest 继续 audit_2 → 无则重新派遣 landscape supplement worker
     - framing re-dispatch 中断恢复（structural incompleteness → 重新 framing）：检查 framing_reasoning.md 是否存在且非空 → 有则继续 audit_3 → 无则重新派遣 framing worker
-41. LOW confidence 由 framing worker 首次标注（Tractability Argument 中标注 confidence 和 LOW type），audit_3 只检查标注是否违反最低必要条件
-42. LOW confidence 统一默认为 Foundation Insufficient → 先尝试 landscape 补缺
-43. landscape 补缺为软补缺（在已有基础上补充搜索，不硬回滚 git checkout）
-44. landscape 补缺最多 1 次（第 2 次 LOW 确认 Type B）
-45. coordinator 使用 question tool 向用户确认 3 个选项：landscape 补缺 / 标记 infeasible / 继续执行（接受 LOW confidence）
-46. 补缺后流程：landscape supplement → phase_audit_2（标准路径分支规则）→ phase_framing → phase_audit_3
-47. 补缺后不再 LOW → Type A 证伪成功 → phase_debate
-48. 补缺后仍 LOW → 确认 Type B → coordinator 派遣 framing repair worker 增添 PoC question
-49. PoC question 为正规研究问题，推理链遵循完整 schema（Significance Argument + Solution Paths Survey + Tractability Argument + Assumptions Introduced + Inter-Question Dependencies + Derived Question），内容针对简化案例，Derived Question 包含完整 SMED/PICO/General 定义 + falsification + measurement + framework element 溯源
-50. PoC question 验证核心可行性假设，简化案例但不失真
-51. PoC → 原始 question 为 critical dependency
-52. 原始 question tractability LOW → MEDIUM（PoC 降低不确定性）
-53. agent 自行决定 PoC question 数量（0/1/多）——0 个时选择降级或标记 infeasible
-54. infeasible_gap 标记写入 STATE.md Blockers（不删除 question，保留记录）
-55. debate worker 提示词注入 infeasible_gap list + PoC question 说明 + LOW confidence 说明
-56. research-audit-reasoning skill 为独立 skill（不扩展 research-audit），8 步 Procedure 无条件分支
-57. research-audit-repair-reasoning skill 为独立 repair skill（不扩展 research-audit-repair）
+42. LOW confidence 由 framing worker 首次标注（Tractability Argument 中标注 confidence 和 LOW type），audit_3 只检查标注是否违反最低必要条件
+43. LOW confidence 统一默认为 Foundation Insufficient → 先尝试 landscape 补缺
+44. landscape 补缺为软补缺（在已有基础上补充搜索，不硬回滚 git checkout）
+45. landscape 补缺最多 1 次（第 2 次 LOW 确认 Type B）
+46. coordinator 使用 question tool 向用户确认 3 个选项：landscape 补缺 / 标记 infeasible / 继续执行（接受 LOW confidence）
+47. 补缺后流程：landscape supplement → phase_audit_2（标准路径分支规则）→ phase_framing → phase_audit_3
+48. 补缺后不再 LOW → Type A 证伪成功 → phase_debate
+49. 补缺后仍 LOW → 确认 Type B → coordinator 派遣 framing repair worker 增添 PoC question
+50. PoC question 为正规研究问题，推理链遵循完整 schema（Significance Argument + Solution Paths Survey + Tractability Argument + Assumptions Introduced + Inter-Question Dependencies + Derived Question），内容针对简化案例，Derived Question 包含完整 SMED/PICO/General 定义 + falsification + measurement + framework element 溯源
+51. PoC question 验证核心可行性假设，简化案例但不失真
+52. PoC → 原始 question 为 critical dependency
+53. 原始 question tractability LOW → MEDIUM（PoC 降低不确定性）
+54. agent 自行决定 PoC question 数量（0/1/多）——0 个时选择降级或标记 infeasible
+55. infeasible_gap 标记写入 STATE.md Blockers（不删除 question，保留记录）
+56. debate worker 提示词注入 infeasible_gap list + PoC question 说明 + LOW confidence 说明
+57. research-audit-reasoning skill 为独立 skill（不扩展 research-audit），8 步 Procedure 无条件分支
+58. research-audit-repair-reasoning skill 为独立 repair skill（不扩展 research-audit-repair）
 
 ---
 

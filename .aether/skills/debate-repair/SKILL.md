@@ -97,6 +97,7 @@ After debate-repair modifies question structure, dependency data (Dependency Gra
 
 - **Before debate-repair**: framing_reasoning.md is authoritative source
 - **After debate-repair modifies question structure**: PLAN.md Execution Plan becomes authoritative source for dependency data — because debate-repair only modifies PLAN.md, framing_reasoning.md's dependency data may be outdated
+- **PLAN.md Execution Plan Dependencies MUST be self-contained** — each dependency includes: dependency description, critical=true/false with reasoning, fallback path (if non-critical). No reference-only pointers to framing_reasoning.md without the full description. This ensures autoresearch can read all dependency information from PLAN.md alone during phase_execution.
 - research_questions.md Depends_on/Required_by references should point to PLAN.md Execution Plan (not framing_reasoning.md) after question structure changes
 
 **Exploratory repair** (ESCALATE topics):
@@ -129,13 +130,15 @@ After repair, verify:
 4. Environment Requirements completeness: new/modified methods have corresponding environment requirement declarations
 5. Exploratory repair consistency: conditional branches are internally coherent, exploration steps do not conflict with existing Execution Plan
 6. **Dependency Consistency Verification** (mandatory after any question structure change — split/merge/add/fallback/critical_change):
-   a. If questions were split/merged/added → verify PLAN.md Execution Plan includes all new cycles
+   a. If questions were split/merged/added → verify PLAN.md Execution Plan includes all new Waves
    b. If question structure unchanged but method changed → verify no new inter-question dependencies introduced by the new method
    c. Verify PLAN.md Execution Plan has no circular dependencies (execution order is consistent)
    d. Verify research_questions.md Depends_on/Required_by quick references match PLAN.md Execution Plan Dependencies
-   e. If any inconsistency found → fix it within the repair (do not leave for next round)
+   e. Verify PLAN.md Execution Plan Dependencies are **self-contained** — each dependency includes: dependency description, critical=true/false with reasoning, fallback path (if non-critical). No reference-only pointers to framing_reasoning.md without the full description.
+   f. Verify all newly added/modified questions have complete Dependencies fields (not just reference pointers)
+   g. If any inconsistency found → fix it within the repair (do not leave for next round)
 
-Note: This dependency consistency check verifies PLAN.md and research_questions.md consistency, **NOT framing_reasoning.md** (framing_reasoning.md may be outdated but PLAN.md is the authoritative source after debate-repair).
+Note: This dependency consistency check verifies PLAN.md and research_questions.md consistency, and **PLAN.md Dependencies self-contained completeness**. **NOT framing_reasoning.md** (framing_reasoning.md may be outdated but PLAN.md is the authoritative source after debate-repair).
 
 **Affected UPHELD Assessment** (mandatory):
 
@@ -217,7 +220,7 @@ phase_result_digest:
   dependency_changes:
     - type: [split / merge / add / critical_change / none]
       affected_questions: [Q2 → Q2a, Q2b]
-      plan_execution_plan_changes: [cycle 2 split into cycle 2 (Q2a) and cycle 3 (Q2b)]
+      plan_execution_plan_changes: [Wave 2 split into Wave 2 (Q2a) and Wave 3 (Q2b)]
       framing_reasoning_staleness_markers_added: [Gap 2 section]
   next_phase: phase_checkpoint | phase_debate
   output_paths:
@@ -259,6 +262,7 @@ phase_result_digest:
 - Do NOT skip affected UPHELD assessment — the `re_verification_topics` field is required even if empty
 - **Do NOT update framing_reasoning.md reasoning chain content** — debate-repair only modifies PLAN.md and research_questions.md. When question structure changes, add staleness marker `[debate_repair_modified: ...]` to corresponding Gap section header in framing_reasoning.md, but do NOT modify the reasoning chain itself
 - **Do NOT skip Dependency Consistency Verification** after question structure changes — the `dependency_changes` field is mandatory even if `type: none`
+- **PLAN.md Execution Plan Dependencies MUST be self-contained** — each dependency must include: dependency description, critical=true/false with reasoning, fallback path (if non-critical). Do NOT use reference-only pointers to framing_reasoning.md without the full description. autoresearch in phase_execution reads dependency data from PLAN.md as primary source.
 - **Backup research_questions.md** before any question structure change (split/merge/add)
 
 ## Subagent Dispatch Rules

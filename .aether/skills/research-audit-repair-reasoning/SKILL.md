@@ -89,9 +89,9 @@ For each repair task:
   a. Dependency Graph has no circular dependencies (topological sort succeeds)
   b. Execution Order is consistent with updated Dependency Graph
   c. framing_reasoning.md §Inter-Question Dependencies matches Dependency Graph
-  d. PLAN.md Execution Plan Dependencies references match framing_reasoning.md §Inter-Question Dependencies
+  d. PLAN.md Execution Plan Dependencies are **self-contained** — each dependency includes: dependency description, critical=true/false with reasoning, fallback path (if non-critical). No reference-only pointers to framing_reasoning.md without the full description.
   e. research_questions.md Depends_on/Required_by quick references match framing_reasoning.md §Inter-Question Dependencies
-  f. framing_reasoning.md 为权威源 — all dependency modifications are done first in framing_reasoning.md, then mechanically synced to research_questions.md and PLAN.md
+  f. framing_reasoning.md 为权威源 (during framing/audit_3 phase) — all dependency modifications are done first in framing_reasoning.md, then mechanically synced to research_questions.md and PLAN.md
 
   3.4 **Backtrack to ROADMAP/landscape** (optional, max 1 pass):
 
@@ -101,7 +101,7 @@ For each repair task:
   - ONLY supplement citations and arguments — do NOT modify core content of existing claims (factual statements, method applicability ranges, etc.). audit_1/2 has already verified factual accuracy.
   - Mark supplemented content with `audit_3_repair_supplement` tag in the respective files
 
-  3.5 **Mark unrepairable findings**:
+    3.5 **Mark unrepairable findings**:
 
 - If no reliable source can reconstruct a missing reasoning step → mark as `unresolved_reasoning_gap`
 - Add inline comment: `[unresolved_reasoning_gap: audit_3_round[N] finding #[M] — reasoning step cannot be reconstructed from available knowledge base]`
@@ -121,7 +121,7 @@ Before outputting digest, verify:
 5. Execution Order is consistent with Dependency Graph (topological sort)
 6. research_questions.md Depends_on/Required_by matches framing_reasoning.md
 7. PLAN.md Claims derived_from/tractability/question fields match framing_reasoning.md
-8. PLAN.md Execution Plan cycles match framing_reasoning.md §Execution Order
+8. PLAN.md Execution Plan Waves match framing_reasoning.md §Execution Order
 
 Note: This self-check is NOT a substitute for the next audit round — the next audit_3 worker independently verifies repair quality.
 

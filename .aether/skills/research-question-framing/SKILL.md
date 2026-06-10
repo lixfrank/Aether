@@ -20,7 +20,7 @@ This skill implements **Phase 6** of the Path 3 research state machine. It conve
 
 **Output** (MUST write all of these):
 
-1. `.aether/research/persistence/PLAN.md` — Contract with claims, deliverables, acceptance_tests, forbidden_proxies, **environment_requirements**. Claims include derived_from/tractability/question fields. Execution Plan is multi-cycle structure.
+1. `.aether/research/persistence/PLAN.md` — Contract with claims, deliverables, acceptance_tests, forbidden_proxies, **environment_requirements**. Claims include derived_from/tractability/question fields. Execution Plan is multi-Wave structure.
 2. `.aether/research/notepads/<slug>/research_questions.md` — Structured question framing with Depends_on/Required_by reference-type fields
 3. `.aether/research/notepads/<slug>/framing_reasoning.md` — Reasoning chain from knowledge base to questions (authoritative source for dependency data)
 4. `.aether/research/persistence/STATE.md` — Updated with phase=phase_framing completed
@@ -31,7 +31,7 @@ This skill implements **Phase 6** of the Path 3 research state machine. It conve
 
 **MUST NOT**: Execute experiments (that is phase_execution). Skip to phase_execution without phase_audit_3 and phase_debate.
 
-**权威源规则**: framing_reasoning.md is the authoritative source for all dependency data (Dependency Graph, Execution Order, Inter-Question Dependencies). research_questions.md contains only Depends_on/Required_by quick reference summaries. PLAN.md Execution Plan Dependencies fields are reference-type (point to framing_reasoning.md) with one-sentence Required input summaries. All dependency modifications are done first in framing_reasoning.md, then mechanically synced to research_questions.md and PLAN.md.
+**权威源规则**: framing_reasoning.md is the authoritative source for all dependency data (Dependency Graph, Execution Order, Inter-Question Dependencies) during framing and audit_3 phases. research_questions.md contains only Depends_on/Required_by quick reference summaries. PLAN.md Execution Plan Dependencies fields are **self-contained** — each dependency includes: dependency description, critical=true/false with reasoning, fallback path (if non-critical). No reference-only pointers to framing_reasoning.md without the full description. All dependency modifications are done first in framing_reasoning.md, then mechanically synced to research_questions.md and PLAN.md. After debate-repair modifies question structure, **PLAN.md Execution Plan Dependencies becomes the authoritative source** for dependency data — autoresearch reads PLAN.md as primary source, framing_reasoning.md only as fallback reference (when PLAN.md Dependencies info is incomplete after debate repair).
 
 ## Procedure
 
@@ -171,12 +171,12 @@ Q3 (independent, no prerequisite dependency)
 
 Execution Order (topological sort from Dependency Graph):
 
-| Cycle | Questions | Executable reason                                                                 |
-| ----- | --------- | --------------------------------------------------------------------------------- |
-| 1     | Q1, Q3    | No prerequisite dependency (Q1's assumptions from knowledge base, Q3 independent) |
-| 2     | Q2        | Depends on Q1 (execute after Q1 completes)                                        |
+| Wave | Questions | Executable reason                                                                 |
+| ---- | --------- | --------------------------------------------------------------------------------- |
+| 1    | Q1, Q3    | No prerequisite dependency (Q1's assumptions from knowledge base, Q3 independent) |
+| 2    | Q2        | Depends on Q1 (execute after Q1 completes)                                        |
 
-> Note: Within the same cycle, questions execute serially (Layer 3.12 specification), sorted by tractability confidence from high to low (HIGH > MEDIUM > LOW). Same confidence level sorted by Execution Order table ordering.
+> Note: Within the same Wave, questions execute serially (Layer 3.12 specification), sorted by tractability confidence from high to low (HIGH > MEDIUM > LOW). Same confidence level sorted by Execution Order table ordering.
 
 ### Step 7: Write Research Questions & Framing Reasoning
 
@@ -295,10 +295,10 @@ Q3 (independent)
 
 ## Execution Order (topological sort)
 
-| Cycle | Questions | Executable reason          |
-| ----- | --------- | -------------------------- |
-| 1     | Q1, Q3    | No prerequisite dependency |
-| 2     | Q2        | Depends on Q1              |
+| Wave | Questions | Executable reason          |
+| ---- | --------- | -------------------------- |
+| 1    | Q1, Q3    | No prerequisite dependency |
+| 2    | Q2        | Depends on Q1              |
 
 ## Unresolved Knowledge Gaps (from audit_1/2)
 
@@ -309,7 +309,7 @@ Q3 (independent)
 
 ### Step 8: Map to PLAN.md Contract
 
-Write to `.aether/research/persistence/PLAN.md`. Claims section includes derived_from/tractability/question fields (extracted from framing_reasoning.md §Derived Question). Execution Plan is multi-cycle structure based on framing_reasoning.md §Execution Order.
+Write to `.aether/research/persistence/PLAN.md`. Claims section includes derived_from/tractability/question fields (extracted from framing_reasoning.md §Derived Question). Execution Plan is multi-Wave structure based on framing_reasoning.md §Execution Order. Dependencies are **self-contained** — each dependency includes: dependency description, critical=true/false with reasoning, fallback path (if non-critical). No reference-only pointers without the full description.
 
 ```markdown
 # Research Plan — [Project Name]
@@ -342,9 +342,9 @@ Write to `.aether/research/persistence/PLAN.md`. Claims section includes derived
 - [Proxy 1]: [What shortcuts MUST NOT be used as evidence]
 - [Proxy 2]: [What sources MUST NOT be sole evidence]
 
-### Execution Plan (per-cycle, based on framing_reasoning.md §Execution Order)
+### Execution Plan (per-Wave, based on framing_reasoning.md §Execution Order)
 
-#### Cycle 1: Q1, Q3
+#### Wave 1: Q1, Q3
 
 **Q1: [question title]**
 
@@ -362,15 +362,18 @@ Write to `.aether/research/persistence/PLAN.md`. Claims section includes derived
 - Dependencies: none (independent)
 - Output file: execution/Q3_EXECUTION.md
 
-#### Cycle 2: Q2
+#### Wave 2: Q2
 
 **Q2: [question title]**
 
 - Method: [method]
 - Tools: [packages]
 - Falsification test: [from acceptance test]
-- Dependencies: See framing_reasoning.md §Gap [N] → Inter-Question Dependencies (Q2 depends on Q1, critical)
-- Required input from Q1: [what Q1's conclusion provides to Q2 — one sentence summary]
+- Dependencies:
+  - Q1 (critical): Q1's conclusion [claim X] provides initial parameter [specific parameter name] for this question's method [method Y]. Q1 failure means this question cannot execute.
+    - Fallback: none (critical dependency, Q1 failure → Q2 blocked)
+  - [OR: Q1 (non-critical): Q1's conclusion [claim X] provides initial parameter [parameter name] for this question's method [method Y].]
+    - Fallback: if Q1 conclusion doesn't hold, can use alternative assumption [Z] to attempt this question (source: framing_reasoning.md §Gap [N] → Inter-Question Dependencies fallback path)
 - Output file: execution/Q2_EXECUTION.md
 
 ### Environment Requirements
@@ -445,9 +448,9 @@ phase_result_digest:
         description: "[dependency description]"
     independent_questions: [Q3]
   execution_order:
-    - cycle: 1
+    - wave: 1
       questions: [Q1, Q3]
-    - cycle: 2
+    - wave: 2
       questions: [Q2]
   environment_requirements:
     - software: "[Python 3.11]"

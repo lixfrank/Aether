@@ -732,7 +732,7 @@ MANDATORY: After any dependency structure change, verify (权威源一致性检�
 a. Dependency Graph has no circular dependencies (topological sort succeeds)
 b. Execution Order is consistent with updated Dependency Graph
 c. framing_reasoning.md §Inter-Question Dependencies matches Dependency Graph
-d. PLAN.md Execution Plan Dependencies references match framing_reasoning.md §Inter-Question Dependencies
+d. PLAN.md Execution Plan Dependencies are **self-contained** — each dependency includes: dependency description, critical=true/false with reasoning, fallback path (if non-critical). No reference-only pointers to framing_reasoning.md without the full description.
 e. research_questions.md Depends_on/Required_by quick references match framing_reasoning.md §Inter-Question Dependencies
 f. framing_reasoning.md 为权威源——所有依赖修改先在 framing_reasoning.md 中完成，然后机械同步 research_questions.md 和 PLAN.md 的引用
 
@@ -863,7 +863,7 @@ MANDATORY: After any dependency structure change, verify (权威源一致性检�
 a. Dependency Graph has no circular dependencies
 b. Execution Order is consistent with updated Dependency Graph
 c. framing_reasoning.md §Inter-Question Dependencies matches Dependency Graph
-d. PLAN.md Execution Plan Dependencies references match framing_reasoning.md
+d. PLAN.md Execution Plan Dependencies are **self-contained** — each dependency includes: dependency description, critical=true/false with reasoning, fallback path (if non-critical). No reference-only pointers to framing_reasoning.md without the full description.
 e. research_questions.md Depends_on/Required_by matches framing_reasoning.md
 
 After completing, output repair digest as your final message."

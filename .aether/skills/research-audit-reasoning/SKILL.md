@@ -123,7 +123,7 @@ For each reasoning chain in the catalog:
 
 **4.4 Check execution order consistency** (CONCERN):
 
-- Question in Execution Order Cycle N depends on question in Cycle N or later → CONCERN (dependency not satisfied before execution)
+- Question in Execution Order Wave N depends on question in Wave N or later → CONCERN (dependency not satisfied before execution)
 
 **4.5 Check circular dependency** (FATAL):
 
@@ -158,7 +158,7 @@ For each reasoning chain in the catalog:
 
 **5.4 Check PLAN.md Execution Plan ↔ framing_reasoning.md Execution Order** (CONCERN):
 
-- Execution Plan cycles don't match framing_reasoning.md §Execution Order → CONCERN
+- Execution Plan Waves don't match framing_reasoning.md §Execution Order → CONCERN
 
 **5.5 Check framework element 溯源** (CONCERN):
 
@@ -203,7 +203,7 @@ dependency_issues: [N]
 circular_dependencies: [N]
 issues_found: [N]
 has_fatal_issues: [true/false]
-has_citation_gaps: false
+has_citation_gaps: false # Compatibility field — retained to match AUDIT_1/2 YAML schema format. Hardcoded to false for audit_3 (coordinator routing for audit_3 does not depend on this field; routing is based on issues_found and LOW confidence).
 has_structural_incompleteness: [true/false]
 ```
 ````
@@ -258,7 +258,12 @@ phase_result_digest:
     fatal: [N]
     missing: [N]
     concern: [N]
-  low_confidence_questions: []
+  low_confidence_questions:
+    - question: "[Qn]"
+      gap: "[gap description]"
+      tractability_confidence: LOW
+      LOW_type: [foundation_insufficient / frontier_problem]
+      LOW_reason: "[evidence insufficient description]"
   output_paths:
     audit_report: persistence/audits/audit_3_round[N].md
   next_phase: phase_audit_3 | phase_debate | phase_framing
