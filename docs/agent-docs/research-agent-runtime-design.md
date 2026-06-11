@@ -47,43 +47,45 @@ Research agent 是一个**多阶段、多代理协作的深度研究系统**，�
 
 ### 2.4 Skills（技能系统）
 
-| Skill                                        | 触发阶段                               | 核心产出                                                                    |
-| -------------------------------------------- | -------------------------------------- | --------------------------------------------------------------------------- | --------------- |
-| `deep-research`                              | phase_analysis                         | ROADMAP.md + research_analysis.md                                           |
-| `research-audit`                             | phase_audit_1 / phase_audit_2          | audits/audit\_[1                                                            | 2]\_round[N].md |
-| `research-audit-reasoning`                   | phase_audit_3                          | audits/audit_3_round[N].md                                                  |
-| `research-audit-repair`                      | phase_audit_1 / phase_audit_2 (repair) | 修复 ROADMAP.md + research_analysis.md + landscape_map.md                   |
-| `research-audit-repair-reasoning`            | phase_audit_3 (repair)                 | 修复 framing_reasoning.md + PLAN.md + rq.md + ROADMAP.md + landscape_map.md |
-| `literature-landscape-scan`                  | phase_landscape                        | landscape_map.md，更新 ROADMAP.md                                           |
-| `research-question-framing`                  | phase_framing                          | PLAN.md + research_questions.md + framing_reasoning.md                      |
-| `debate-advocate`                            | phase_debate (advocacy/rebuttal)       | advocacy brief/rebuttal → DEBATE.md                                         |
-| `debate-critic`                              | phase_debate (critique)                | critique → DEBATE.md                                                        |
-| `debate-adjudicator`                         | phase_debate (adjudication)            | ruling → DEBATE.md                                                          |
-| `debate-repair`                              | phase_debate (repair)                  | 修复 PLAN.md + research_questions.md                                        |
-| `autoresearch`                               | phase_execution                        | 环境探测 + 本地执行 + EXECUTION.md                                          |
-| `gpd-verification` / `research-verification` | phase_execution (verification)         | VERIFICATION.md                                                             |
-| `health-check`                               | session 启动 / 用户请求                | global_health.json + network_status.md                                      |
+| Skill                             | 触发阶段                                | 核心产出                                                                                                                |
+| --------------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | --------------- |
+| `deep-research`                   | phase_analysis                          | ROADMAP.md + research_analysis.md                                                                                       |
+| `research-audit`                  | phase_audit_1 / phase_audit_2           | audits/audit\_[1                                                                                                        | 2]\_round[N].md |
+| `research-audit-reasoning`        | phase_audit_3                           | audits/audit_3_round[N].md                                                                                              |
+| `research-audit-repair`           | phase_audit_1 / phase_audit_2 (repair)  | 修复 ROADMAP.md + research_analysis.md + landscape_map.md                                                               |
+| `research-audit-repair-reasoning` | phase_audit_3 (repair)                  | 修复 framing_reasoning.md + PLAN.md + rq.md + ROADMAP.md + landscape_map.md                                             |
+| `literature-landscape-scan`       | phase_landscape                         | landscape_map.md，更新 ROADMAP.md                                                                                       |
+| `research-question-framing`       | phase_framing                           | PLAN.md + research_questions.md + framing_reasoning.md                                                                  |
+| `debate-advocate`                 | phase_debate (advocacy/rebuttal)        | advocacy brief/rebuttal → DEBATE.md                                                                                     |
+| `debate-critic`                   | phase_debate (critique)                 | critique → DEBATE.md                                                                                                    |
+| `debate-adjudicator`              | phase_debate (adjudication)             | ruling → DEBATE.md                                                                                                      |
+| `debate-repair`                   | phase_debate (repair)                   | 修复 PLAN.md + research_questions.md                                                                                    |
+| `autoresearch`                    | phase_execution                         | per-question 推进管理器：Wave 排序 + question 串行 + execution + verification dispatch + decision + 失败传播 + 汇缩写入 |
+| `gpd-verifier`                    | phase_execution (autoresearch 内部派遣) | physics domain per-question verification + Qn_VERIFICATION.md (domain-specific part)                                    |
+| `research-verifier`               | phase_execution (autoresearch 内部派遣) | general domain per-question verification + Qn_VERIFICATION.md (general part)                                            |
+| `health-check`                    | session 启动 / 用户请求                 | global_health.json + network_status.md                                                                                  |
 
 ### 2.5 持久化层
 
 所有产出写入 `.aether/research/persistence/`：
 
-| 文件/目录               | 用途                                                                      |
-| ----------------------- | ------------------------------------------------------------------------- | --- | --------------------------------------- |
-| `STATE.md`              | 人类可读的项目状态（当前阶段、决策、阻塞、下一步）                        |
-| `state.json`            | 机器可读的项目状态（通过 MCP 管理，与 STATE.md 双重对应）                 |
-| `DIGESTS.md`            | 各阶段摘要的累积记录（coordinator 在每个阶段完成后追加）                  |
-| `ROADMAP.md`            | 研究路线图（analysis 阶段产出，landscape 阶段更新）                       |
-| `PLAN.md`               | 研究计划（framing 阶段产出，debate repair 修改）                          |
-| `research_questions.md` | 结构化研究问题（framing 阶段产出，debate repair 修改）                    |
-| `framing_reasoning.md`  | 推理链条（framing 阶段产出，audit_3 repair 修改，debate repair 标注过时） |
-| `landscape_map.md`      | 文献领域地图（landscape 阶段产出）                                        |
-| `DEBATE.md`             | 辩论全记录（每轮的 brief、critique、ruling、repair report）               |
-| `EXECUTION.md`          | 执行记录（execution 阶段产出）                                            |
-| `VERIFICATION.md`       | 验证报告（verification 阶段产出）                                         |
-| `ENVIRONMENT.md`        | 环境状态（venv、依赖等）                                                  |
-| `audits/`               | 审计报告目录（audit\_[1                                                   | 2   | 3]\_round[N].md，按轮次命名不覆盖历史） |
-| `literatures/`          | 已下载文献目录（index.json 元数据索引 + unavailable.md 不可下载列表）     |
+| 文件/目录                    | 用途                                                                                              |
+| ---------------------------- | ------------------------------------------------------------------------------------------------- | --- | --------------------------------------- |
+| `STATE.md`                   | 人类可读的项目状态（当前阶段、决策、阻塞、下一步）                                                |
+| `state.json`                 | 机器可读的项目状态（通过 MCP 管理，与 STATE.md 双重对应）                                         |
+| `DIGESTS.md`                 | 各阶段摘要的累积记录（coordinator 在每个阶段完成后追加）                                          |
+| `ROADMAP.md`                 | 研究路线图（analysis 阶段产出，landscape 阶段更新）                                               |
+| `PLAN.md`                    | 研究计划（framing 阶段产出，debate repair 修改）                                                  |
+| `research_questions.md`      | 结构化研究问题（framing 阶段产出，debate repair 修改）                                            |
+| `framing_reasoning.md`       | 推理链条（framing 阶段产出，audit_3 repair 修改，debate repair 标注过时）                         |
+| `landscape_map.md`           | 文献领域地图（landscape 阶段产出）                                                                |
+| `DEBATE.md`                  | 辩论全记录（每轮的 brief、critique、ruling、repair report）                                       |
+| `EXECUTION.md`               | 执行汇总（autoresearch 在执行结束时一次性写入，per-question 结果在 notepads/）                    |
+| `VERIFICATION.md`            | 验证汇总（autoresearch 在执行结束时一次性写入，per-question 结果在 notepads/）                    |
+| `ENVIRONMENT.md`             | 环境状态（autoresearch bash 探测 + 增量更新）                                                     |
+| `notepads/[slug]/execution/` | per-question 工作文件（Qn_REASONING.md + Qn_EXECUTION.md + Qn_VERIFICATION.md + \_cycle[N] 备份） |
+| `audits/`                    | 审计报告目录（audit\_[1                                                                           | 2   | 3]\_round[N].md，按轮次命名不覆盖历史） |
+| `literatures/`               | 已下载文献目录（index.json 元数据索引 + unavailable.md 不可下载列表）                             |
 
 ---
 
@@ -155,8 +157,9 @@ phase_debate        ── 多代理辩论循环（coordinator 管理）
 phase_checkpoint    ── coordinator 直接与用户确认（不派遣 worker）
    │                    必须用户确认才能推进
    ▼
-phase_execution     ── 执行循环（coordinator 管理）
-   │                    execution_cycle → verification → [retry 最多 3 次]
+phase_execution     ── 方案 D：coordinator 一次 dispatch autoresearch
+   │                    autoresearch 内部管理 per-question 推进
+   │                    Wave 排序 → question 串行 → execution → verification → decision → 失败传播 → retry
    ▼
 completed           ── 向用户呈现最终结果
 ```
@@ -179,16 +182,27 @@ completed           ── 向用户呈现最终结果
 
 前 4 步返回 minimal digest（4 字段），仅 repair 写完整 digest 到 DIGESTS.md。
 
-### 3.4 执行循环详情
+### 3.4 执行阶段详情（方案 D：per-question 推进）
 
 ```
-cycle 1:
-  worker (execution_cycle) → autoresearch → 探测环境 + 本地执行 → EXECUTION.md
-  worker (verification)    → gpd-verifier / research-verifier → VERIFICATION.md
-  │
-  [全部验证通过] → completed
-  [部分失败 + cycle < 3] → retry with revised strategy
-  [max retries] → 向用户呈现部分结果
+coordinator dispatches research-worker → autoresearch (一次派遣):
+  autoresearch 内部管理 per-question 推进循环:
+    │
+    ├─ Wave 1: [Q1, Q3] (sorted by tractability confidence)
+    │   ├─ Q1: local-executor → Q1_REASONING.md + Q1_EXECUTION.md
+    │   │   verification subagent(s) → Q1_VERIFICATION.md
+    │   │   decision → resolved / failed / retry / blocked
+    │   ├─ Q3: [same structure]
+    │
+    ├─ Wave 2: [Q2] (depends on Q1)
+    │   Q1 resolved → Q2 uses Q1 conclusion
+    │   Q1 failed + fallback → Q2 uses fallback assumption
+    │   Q1 failed + critical → Q2 blocked
+    │
+    ├─ All questions processed → write persistence/EXECUTION.md + VERIFICATION.md
+    │   → output final_execution_digest → coordinator → advance_plan(completed)
+    │
+    └─ Early abort: no pending questions → write partial 汇缩 → output digest
 ```
 
 ### 3.5 Session Recovery（会话恢复）
@@ -201,7 +215,7 @@ cycle 1:
 4. analysis_checkpoint 恢复：重新向用户呈现 analysis 摘要 → 用户确认或修正
 5. audit phase 恢复：读取 state.json.audit（repair_count, current_audit_phase, audit_round）→ 从中断点继续；repair 中断时恢复备份文件
 6. 辩论阶段恢复：检查 current_sub_phase → 从中断点继续；repair 中断时恢复 PLAN.md 备份
-7. 执行阶段恢复：检查 execution_cycle + DIGESTS.md → 从中断点继续
+7. 执行阶段恢复：检查 state.json.execution + persistence 汇缩文件 → 汇缩已存在则 advance_plan(completed)；未存在则检查 question_status → re-dispatch autoresearch 从中断点继续
 8. Git 一致性检查：验证 state.json.phase_commits 与 git log 匹配
 
 ---

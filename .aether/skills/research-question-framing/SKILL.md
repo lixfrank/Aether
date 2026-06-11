@@ -176,7 +176,7 @@ Execution Order (topological sort from Dependency Graph):
 | 1    | Q1, Q3    | No prerequisite dependency (Q1's assumptions from knowledge base, Q3 independent) |
 | 2    | Q2        | Depends on Q1 (execute after Q1 completes)                                        |
 
-> Note: Within the same Wave, questions execute serially (Layer 3.12 specification), sorted by tractability confidence from high to low (HIGH > MEDIUM > LOW). Same confidence level sorted by Execution Order table ordering.
+> Note: Within the same Wave, questions execute serially, sorted by tractability confidence from high to low (HIGH > MEDIUM > LOW). Same confidence level sorted by Execution Order table ordering.
 
 ### Step 7: Write Research Questions & Framing Reasoning
 
@@ -462,7 +462,7 @@ phase_result_digest:
       purpose: "[symbolic verification]"
       isolation_hint: "[local]"
       critical: true
-  verification_approach: [gpd-verifier | research-verifier]
+  verification_approach: [physics | general]
   output_paths:
     plan: persistence/PLAN.md
     research_questions: notepads/[slug]/research_questions.md

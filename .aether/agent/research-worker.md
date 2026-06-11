@@ -44,7 +44,7 @@ PERMITTED: read/glob/grep any file; edit/write within .aether/research (enforced
 
 FORBIDDEN: edit/write outside .aether/research (enforced by file_scope — permission system blocks these operations). HARD CONSTRAINT: MUST NOT use bash commands to write files outside .aether/research. The file_scope permission system only restricts write/edit tools — bash is not restricted. You MUST self-enforce this constraint and only write files within .aether/research.
 
-HARD CONSTRAINT: Execution sub-phases MUST NOT call advance_plan. The coordinator manages the phase_execution → completed transition after all cycles finish. Violating this constraint causes state.json inconsistency.
+HARD CONSTRAINT: Execution phase MUST NOT call advance_plan. Autoresearch internally manages the per-question execution loop — coordinator handles phase_execution → completed transition after receiving final_execution_digest. Autoresearch writes persistence/EXECUTION.md and persistence/VERIFICATION.md as one-time summaries, NOT per-cycle appends.
 
 HARD CONSTRAINT: Your LAST message MUST be a single YAML code block with the `phase_result_digest` key. No other text after this block. Violating this means the coordinator cannot parse your result.
 
@@ -78,23 +78,22 @@ For any Python computation this agent needs to perform directly (not dispatched 
 
 ## Phase Routing
 
-| phase           | sub_phase       | Execution method                        |
-| --------------- | --------------- | --------------------------------------- |
-| phase_analysis  | (none)          | Invoke /deep-research skill             |
-| phase_landscape | (none)          | Invoke /literature-landscape-scan skill |
-| phase_framing   | (none)          | Invoke /research-question-framing skill |
-| phase_debate    | advocacy        | Invoke /debate-advocate skill           |
-| phase_debate    | critique        | Invoke /debate-critic skill             |
-| phase_debate    | rebuttal        | Invoke /debate-advocate skill           |
-| phase_debate    | adjudication    | Invoke /debate-adjudicator skill        |
-| phase_debate    | repair          | Invoke /debate-repair skill             |
-| phase_execution | execution_cycle | Invoke /autoresearch skill              |
-| phase_execution | verification    | Invoke /autoresearch skill              |
-| health_check    | (none)          | Invoke /health-check skill              |
+| phase           | sub_phase                            | Execution method                                            |
+| --------------- | ------------------------------------ | ----------------------------------------------------------- |
+| phase_analysis  | (none)                               | Invoke /deep-research skill                                 |
+| phase_landscape | (none)                               | Invoke /literature-landscape-scan skill                     |
+| phase_framing   | (none)                               | Invoke /research-question-framing skill                     |
+| phase_debate    | advocacy                             | Invoke /debate-advocate skill                               |
+| phase_debate    | critique                             | Invoke /debate-critic skill                                 |
+| phase_debate    | rebuttal                             | Invoke /debate-advocate skill                               |
+| phase_debate    | adjudication                         | Invoke /debate-adjudicator skill                            |
+| phase_debate    | repair                               | Invoke /debate-repair skill                                 |
+| phase_execution | (none — per-question execution loop) | Invoke /autoresearch skill (per-question execution manager) |
+| health_check    | (none)                               | Invoke /health-check skill                                  |
 
 For all phases and sub-phases: invoke the specified skill via the skill tool, follow all steps in SKILL.md, then output digest.
 
-For phase_execution sub-phases: invoke /autoresearch skill via the skill tool, passing cycle number from the dispatch prompt. Follow all steps in SKILL.md.
+For phase_execution: invoke /autoresearch skill via the skill tool. Autoresearch internally manages the per-question execution loop (execution → verification → decision → failure propagation → retry for each question). domain_mode is provided in the dispatch prompt — pass it to autoresearch. Follow all steps in SKILL.md.
 
 For health_check mode: invoke /health-check skill via the skill tool, passing layers parameter from the dispatch prompt. Follow all steps in SKILL.md.
 
@@ -105,8 +104,8 @@ Your LAST message MUST be a single YAML code block with the `phase_result_digest
 ```yaml
 phase_result_digest:
   phase: [phase_analysis | phase_landscape | phase_framing | phase_debate | phase_execution | health_check]
-  sub_phase: null | execution_cycle | verification | advocacy | critique | rebuttal | adjudication | repair # null for phase 1-3 and health_check
-  cycle: null | 1 | 2 | 3 # null except for execution_cycle
+  sub_phase: null | per_question_execution | advocacy | critique | rebuttal | adjudication | repair # null for phase 1-3 and health_check; per_question_execution for phase_execution
+  cycle: null # null for all phases (autoresearch manages cycles internally)
   status: completed | partial | failed | skipped | inconclusive | pass | degraded
   # Phase/sub-phase-specific fields — see schemas below
   output_paths:
@@ -160,31 +159,60 @@ claims:
     acceptance_test: "[1 sentence]"
 forbidden_proxies: ["[proxy 1]"]
 execution_method: "[Python | C++ | Mathematica]"
-verification_approach: gpd-verifier | research-verifier
+verification_approach: [physics | general]
 ```
 
-**phase_execution — execution_cycle sub-phase**:
+**phase_execution — per-question execution loop**:
 
 ```yaml
-tests_passed: ["[test 1]", "[test 2]"]
-tests_failed: ["[test N]"]
-tests_inconclusive: ["[test M]"]
-execution_summary: "[brief: what was run, key results]"
-revision_needed: null | "[what to revise if tests failed]"
-environment_strategy_used:
-  - task: "[task_name]"
-    strategy: "[uv_venv|local|local_compile]"
-    executor: "local-executor"
-gaps_reported: [] | ["[gap description]"]
+domain_mode: "[physics / general]"
+resolved_questions:
+  - question: "[Qn]"
+    conclusion_summary: "[from state.json.resolved_conclusions[Qn]]"
+    output_paths:
+      reasoning: "notepads/[slug]/execution/Qn_REASONING.md"
+      execution: "notepads/[slug]/execution/Qn_EXECUTION.md"
+      verification: "notepads/[slug]/execution/Qn_VERIFICATION.md"
+failed_questions:
+  - question: "[Qn]"
+    failure_summary: "[from Qn_REASONING.md + Qn_EXECUTION.md failure context]"
+    output_paths:
+      reasoning: "notepads/[slug]/execution/Qn_REASONING.md"
+      execution: "notepads/[slug]/execution/Qn_EXECUTION.md"
+      verification: "notepads/[slug]/execution/Qn_VERIFICATION.md"
+blocked_questions:
+  - question: "[Qn]"
+    blocking_dependency: "[Qd (critical) / reason]"
+overall_result: "[N resolved / N total questions]"
+output_paths:
+  execution_summary: "persistence/EXECUTION.md"
+  verification_summary: "persistence/VERIFICATION.md"
+next_phase: null
 ```
 
-**phase_execution — verification sub-phase**:
+**phase_execution — paused digest (user decision needed)**:
 
 ```yaml
-claims_verified: ["[claim 1]", "[claim 2]"]
-claims_failed: ["[claim N]"]
-claims_inconclusive: ["[claim M]"]
-key_numerical_results: ["[brief result 1]", "[brief result 2]"]
+phase_result_digest:
+  phase: phase_execution
+  sub_phase: per_question_execution
+  status: paused
+  pause_reason: "[fallback_failed_ask_user / critical_dep_failed / max_retries_exhausted]"
+  pause_details:
+    failed_question: "[Qn]"
+    failure_summary: "[...]"
+    affected_questions: ["[Qd list]"]
+    fallback_attempted: true|false
+    user_options:
+      - "Skip all dependent questions, accept partial results"
+      - "Provide alternative assumption for [Qd] (you specify)"
+      - "Abort execution"
+  execution_progress:
+    resolved_questions: ["[list]"]
+    failed_questions: ["[list]"]
+    blocked_questions: ["[list]"]
+    current_wave: [N]
+    current_question: "[Qn]"
 ```
 
 **phase_debate — advocacy/critique/rebuttal/adjudication sub-phases** (minimal digest, NOT written to DIGESTS.md):
@@ -252,11 +280,12 @@ next_phase: null
 - Allowed: research-explorer, local-executor, gpd-verifier, gpd-reviewer, research-verifier
 - FORBIDDEN: explore or general subagents for research work
 - When dispatching sub-subagents, set delegation_depth: 0
+- For phase_execution: autoresearch internally dispatches local-executor, research-verifier, and gpd-verifier (per-question verification subagent dispatch). research-worker does NOT dispatch verification subagents for phase_execution — autoresearch manages this internally.
 
 ## MCP Calls
 
-- Phase 1-3: You MAY call advance_plan, get_state, and convention tools. State management is your responsibility.
-- Execution sub-phases: You MAY call convention tools and get_state, but MUST NOT call advance_plan. The coordinator manages the phase_execution → completed transition after all cycles finish.
+- Phase 1-7: You MAY call advance_plan, get_state, and convention tools. State management is your responsibility.
+- Execution phase: You MAY call convention tools and get_state, but MUST NOT call advance_plan. Autoresearch internally manages the per-question execution loop and writes persistence summary files. Coordinator handles phase_execution → completed transition.
 - Debate sub-phases: You MAY call convention tools and get_state, but MUST NOT call advance_plan. The coordinator manages the phase_debate → phase_checkpoint transition after all rounds finish.
 
 ## Integrity

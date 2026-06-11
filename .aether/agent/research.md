@@ -271,34 +271,28 @@ phase_checkpoint   ─── Coordinator reads DIGESTS.md (framing digest) + DEB
                        If rejected → re-dispatch worker for revised phase
   │
   ▼
-phase_execution    ─── Coordinator-managed execution loop:
-                       ┌─────────────────────────────────────┐
-                       │                                     │
-                       │  dispatch worker (sub_phase=         │
-                       │    execution_cycle, cycle=1)         │
-                        │    → local-executor → EXECUTION.md │
-                       │    → execution_cycle_digest          │
-                       │                                     │
-                       │  [tests_passed] → dispatch worker    │
-                       │    (sub_phase=verification)          │
-                       │    → gpd-verifier/research-verifier  │
-                       │    → VERIFICATION.md                 │
-                       │    → verification_digest             │
-                       │                                     │
-                       │  [all verified] → advance_plan(      │
-                       │    completed) → exit loop            │
-                       │                                     │
-                       │  [some failed, retries<3] →          │
-                       │    dispatch worker (sub_phase=       │
-                       │    execution_cycle, cycle=N+1)       │
-                       │    with revision strategy            │
-                       │    → loop back to verification       │
-                       │                                     │
-                       │  [max retries] → report to user      │
-                       │                                     │
-                       └─────────────────────────────────────┘
-  │
-  ▼
+phase_execution    ─── Coordinator dispatches autoresearch once:
+                        ┌─────────────────────────────────────┐
+                        │                                     │
+                        │  dispatch research-worker →         │
+                        │    invoke /autoresearch skill       │
+                        │    → autoresearch manages ALL       │
+                        │      per-question execution loop internally    │
+                        │    → output final_execution_digest  │
+                        │      or paused digest               │
+                        │                                     │
+                        │  [final digest status=completed/    │
+                        │   partial] → advance_plan(completed)│
+                        │                                     │
+                        │  [paused digest] → coordinator      │
+                        │    uses question tool → user        │
+                        │    decision → re-dispatch           │
+                        │    research-worker with user        │
+                        │    decision injected                │
+                        │                                     │
+                        └─────────────────────────────────────┘
+   │
+   ▼
 completed          ─── Coordinator reads final digest, presents results to user
 ```
 
@@ -372,17 +366,17 @@ Every phase MUST follow this protocol:
 
 ### Phase Dispatch Table
 
-| Phase                     | Execution method                                                                                   | Worker dispatch parameters                                        |
-| ------------------------- | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| phase_analysis            | Worker invokes /deep-research skill                                                                | phase=analysis                                                    |
-| phase_analysis_checkpoint | Coordinator handles directly (NO worker dispatch)                                                  | N/A                                                               |
-| phase_audit_1             | Worker invokes /research-audit skill (light mode)                                                  | phase=audit_1, sub_phase=audit/repair, audit_round=N              |
-| phase_landscape           | Worker invokes /literature-landscape-scan skill                                                    | phase=landscape                                                   |
-| phase_audit_2             | Worker invokes /research-audit skill (full mode)                                                   | phase=audit_2, sub_phase=audit/repair, audit_round=N              |
-| phase_framing             | Worker invokes /research-question-framing skill                                                    | phase=framing                                                     |
-| phase_audit_3             | Worker invokes /research-audit-reasoning skill                                                     | phase=audit_3, sub_phase=audit/repair, audit_round=N              |
-| phase_debate              | Worker invokes /debate-advocate, /debate-critic, /debate-adjudicator, /debate-repair (multi-round) | sub_phase=advocacy/critique/rebuttal/adjudication/repair, round=N |
-| phase_execution           | Worker invokes /autoresearch skill                                                                 | sub_phase=execution_cycle or verification, cycle=N                |
+| Phase                     | Execution method                                                                                   | Worker dispatch parameters                                                   |
+| ------------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| phase_analysis            | Worker invokes /deep-research skill                                                                | phase=analysis                                                               |
+| phase_analysis_checkpoint | Coordinator handles directly (NO worker dispatch)                                                  | N/A                                                                          |
+| phase_audit_1             | Worker invokes /research-audit skill (light mode)                                                  | phase=audit_1, sub_phase=audit/repair, audit_round=N                         |
+| phase_landscape           | Worker invokes /literature-landscape-scan skill                                                    | phase=landscape                                                              |
+| phase_audit_2             | Worker invokes /research-audit skill (full mode)                                                   | phase=audit_2, sub_phase=audit/repair, audit_round=N                         |
+| phase_framing             | Worker invokes /research-question-framing skill                                                    | phase=framing                                                                |
+| phase_audit_3             | Worker invokes /research-audit-reasoning skill                                                     | phase=audit_3, sub_phase=audit/repair, audit_round=N                         |
+| phase_debate              | Worker invokes /debate-advocate, /debate-critic, /debate-adjudicator, /debate-repair (multi-round) | sub_phase=advocacy/critique/rebuttal/adjudication/repair, round=N            |
+| phase_execution           | Worker invokes /autoresearch skill (per-question execution loop mode)                              | domain_mode=[physics/general] (coordinator-determined, injected into prompt) |
 
 ### Dispatch Procedure (phase 1-7)
 
@@ -424,7 +418,7 @@ task(
 | phase_audit_3             | Dispatch worker (phase=audit_3, sub_phase=audit)                                                                                                                                                              |
 | phase_debate              | Start debate loop — dispatch worker (sub_phase=advocacy, round=1)                                                                                                                                             |
 | phase_checkpoint          | Coordinator handles directly (NO worker dispatch) — see section below                                                                                                                                         |
-| phase_execution           | Start execution loop — dispatch worker (sub_phase=execution_cycle, cycle=1)                                                                                                                                   |
+| phase_execution           | Start per-question execution loop — dispatch research-worker (domain_mode injected by coordinator)                                                                                                            |
 | completed                 | Present final results to user                                                                                                                                                                                 |
 | null (sub-phase digest)   | Coordinator decides next sub_phase based on sub_phase + round/cycle + status. Debate first 4 steps (advocacy/critique/rebuttal/adjudication) flow in fixed order. Audit sub_phase=repair → audit-repair loop. |
 
@@ -1231,93 +1225,120 @@ In phase_checkpoint, if user rejects and requests debate revision:
   - Verify MCP state consistency: get_state → phase must match STATE.md
   - Re-dispatch worker to target phase with revised scope
 
-### Execution Loop (phase_execution)
+### Execution Phase (phase_execution) — autoresearch per-question execution loop
 
-phase_execution uses coordinator-managed loop, NOT single worker dispatch.
+phase_execution: coordinator dispatches research-worker once, autoresearch internally manages the per-question execution loop (execution → verification → decision → failure propagation → retry). Coordinator does NOT manage execution cycles or verification routing.
 
-#### Cycle 1
+#### domain_mode 确定规则
 
-1. Dispatch worker (sub_phase=execution_cycle, cycle=1):
+domain_mode 由 coordinator 从 framing digest 的 verification_approach 字段判断，注入 dispatch prompt:
 
-```
-task(
-  description: "execution cycle 1",
-  subagent_type: "research-worker",
-  prompt: "Execute execution_cycle (cycle 1) of phase_execution.
-Invoke /autoresearch skill. Read PLAN.md contract, probe environment, classify isolation strategy, dispatch executors.
-Domain: [from framing digest verification_approach].
-Cycle: 1.
-After completing, output execution_cycle_digest as your final message."
-)
-```
+| verification_approach 来源                     | domain_mode                                    | 确定方式                                                                                                                                  |
+| ---------------------------------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| framing digest 中有 verification_approach 字段 | 从字段值映射                                   | coordinator 读取 framing PhaseResultDigest 的 verification_approach（值域 {physics, general}），映射为 domain_mode 并注入 dispatch prompt |
+| framing digest 缺少 verification_approach 字段 | 从 PLAN.md Claims 推导                         | 所有 claim 引用 SMED framework → physics；引用 PICO → general；混合 → physics                                                             |
+| 无 framing digest（极端场景）                  | 从 framing_reasoning.md §Derived Question 推导 | framework=SMED → physics；framework=PICO → general；混合 → physics                                                                        |
 
-2. Read execution_cycle_digest from task_result
-3. Append to DIGESTS.md
-4. Decision based on digest.status:
-   - completed (all tests_passed) → proceed to verification
-   - partial (some tests_failed) → proceed to verification anyway (check what can be verified)
-   - failed → ask user: retry / revise / abort?
-   - inconclusive → proceed to verification (may get clearer results)
+domain_mode 是一次性决策——所有 question 使用相同 domain_mode。
 
-#### Verification (after each execution cycle)
+#### Initial dispatch (research-worker → /autoresearch)
 
-5. Dispatch worker (sub_phase=verification):
+1. Determine domain_mode per domain_mode determination rules below
+2. Dispatch research-worker with autoresearch invocation:
 
 ```
 task(
-  description: "verification after cycle [N]",
+  description: "phase_execution per-question execution",
   subagent_type: "research-worker",
-  prompt: "Execute verification sub-phase of phase_execution.
-Read EXECUTION.md and PLAN.md contract section.
-Domain: [physics or general, from framing digest].
-Verifier to dispatch: [EXPLICIT — coordinator specifies one of: gpd-verifier, research-verifier, or both gpd-verifier+research-verifier for physics].
-For physics domain: dispatch gpd-verifier first, then research-verifier for domain-agnostic checks.
-For non-physics domain: dispatch research-verifier only.
-After completing, output verification_digest as your final message."
+  prompt: "Execute phase_execution (per-question execution loop mode).
+Invoke /autoresearch skill.
+Read PLAN.md Execution Plan for per-Wave structure, question list, and Dependencies (self-contained).
+Read state.json.execution for current execution state (if session recovery, resume from current interruption point).
+Domain mode: [domain_mode — determined by coordinator, injected into prompt; autoresearch uses this value directly, does NOT自行判断domain_mode].
+
+You MUST manage per-question execution internally:
+1. Read PLAN.md → determine Waves and question sorting (tractability confidence, HIGH > MEDIUM > LOW)
+2. Read state.json.execution → resume from interruption point if needed
+3. Per-question loop: execution → verification → decision → failure propagation → retry
+4. Output final_execution_digest or paused digest
+
+MANDATORY: You MUST write persistence/EXECUTION.md and persistence/VERIFICATION.md as phase-level summaries when execution cannot proceed further (all Waves processed or early abort). You MUST NOT write per-question intermediate results to persistence/ — per-question outputs go to notepads/[slug]/execution/ only.
+MANDATORY: You MUST NOT skip verification for any question — every question must go through execution → verification → decision.
+MANDATORY: You MUST dispatch verification subagent directly (research-verifier for general mode, gpd-verifier + research-verifier for physics mode — domain_mode is provided above, do NOT read framing digest to determine it) — not through research-worker."
 )
 ```
 
-6. Read verification_digest from task_result
-7. Append to DIGESTS.md
-8. Decision based on digest:
-   - All claims_verified → call advance_plan(phase=completed) via research-state MCP → present results to user → completed
-   - Some claims_failed, cycle < 3 → retry with revised strategy
-   - Some claims_failed, cycle = 3 (max retries) → present partial results, ask user for decision
+#### Digest processing (after autoresearch returns)
 
-#### Retry (cycle 2-3)
+1. Extract YAML block from task_result — find last `yaml` code block with `phase_result_digest`
+2. Parse key fields: status, sub_phase, domain_mode
 
-9. Construct revision strategy based on previous cycle's execution_cycle_digest (revision_needed) and verification_digest (claims_failed)
-10. Dispatch worker (sub_phase=execution_cycle, cycle=N+1):
+**Status routing**:
+
+| Digest status | Coordinator action                                                                                                                                                     |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| completed     | Call advance_plan(phase=completed) → present results. persistence 汇缩 files already written by autoresearch.                                                          |
+| partial       | Call advance_plan(phase=completed) → present partial results + unresolved list. persistence 汇缩 files already written by autoresearch.                                |
+| paused        | Append paused digest to DIGESTS.md (1 entry) → use question tool to present pause reason and user options → await user decision → re-dispatch (see 用户决策恢复 below) |
+
+#### 用户决策恢复
+
+When digest status=paused:
+
+1. Append paused digest to DIGESTS.md (1 entry)
+2. Use question tool to present pause reason and options to user:
+
+```
+Question [Qn] execution paused. Reason: [pause_reason].
+Affected questions: [affected_questions list].
+
+Options:
+1. Skip all dependent questions, accept partial results
+2. Provide alternative assumption for [Qd] (you specify)
+3. Abort execution
+```
+
+3. After user decision, re-dispatch research-worker:
 
 ```
 task(
-  description: "execution cycle [N+1] (retry)",
+  description: "phase_execution per-question execution (re-dispatch after user decision)",
   subagent_type: "research-worker",
-  prompt: "Execute execution_cycle (cycle [N+1]) of phase_execution — RETRY.
-Invoke /autoresearch skill. Previous cycle [N] failed on: [tests_failed from previous execution_cycle_digest].
-Suggested revision: [revision_needed from previous execution_cycle_digest].
-Cycle: [N+1].
-Apply revision and re-dispatch executors.
-After completing, output execution_cycle_digest as your final message."
+  prompt: "Continue phase_execution (per-question execution loop) from pause point.
+Invoke /autoresearch skill.
+
+USER DECISION: [user's choice — e.g., "Skip all dependent questions" or "Provide alternative assumption: [content]" or "Abort execution"]
+
+Domain mode: [domain_mode — same as initial dispatch]
+
+Read state.json.execution for current execution state. Resume from current_wave/current_question.
+The paused question [Qn] should be handled per user decision:
+- If skip: mark [Qn] and all dependents as blocked → continue with remaining questions
+- If alternative assumption: inject user-provided assumption as fallback for [Qn] → continue
+- If abort: output final digest with partial results immediately
+
+Continue per-question execution per autoresearch skill procedure.
+After completing, output final_execution_digest or paused digest as your final message."
 )
 ```
 
-11. Loop back to step 2 (read digest → proceed to verification)
+#### phase_execution → completed
 
-#### Max retries: 3 execution cycles
+When autoresearch returns final_execution_digest with status=completed/partial:
 
-Coordinator MUST NOT dispatch more than 3 execution_cycle workers. After 3 failed cycles, present partial results to user and ask for manual intervention.
+1. Append digest to DIGESTS.md (1 entry)
+2. Call advance_plan(phase=completed, plan_number=11) via research-state MCP
+3. Update STATE.md: phase=completed
+4. Present results summary to user based on digest
+5. Inform user: "Research project completed."
 
-### phase_execution → completed
+#### Crash 兜底 (session recovery)
 
-When verification shows all claims verified:
+If autoresearch crashes and persistence 汇缩 files don't exist:
 
-1. Call advance_plan(phase=completed, plan_number=11) via research-state MCP
-2. Update STATE.md: phase=completed
-3. Read final verification digest from DIGESTS.md
-4. Optionally read VERIFICATION.md for detail (grep key sections, NOT full read)
-5. Present results summary to user based on digest
-6. Inform user: "Research project completed. You may clean up .aether/research/.venv/ if no longer needed."
+1. Coordinator reads state.json.execution → check question_status
+2. If all questions resolved/failed/blocked (no pending) → coordinator writes persistence/EXECUTION.md + persistence/VERIFICATION.md from state.json (crash兜底), then advance_plan(phase=completed)
+3. If question_status has pending → coordinator re-dispatches research-worker (prompt注入 recovery指令), autoresearch resumes from interruption point
 
 ### Phase Skip Rules (audit_1 verification driven)
 
@@ -1437,7 +1458,12 @@ On session start:
       - Check framing_reasoning.md exists and non-empty → if exists, continue audit_3
       - If framing_reasoning.md missing → re-dispatch framing worker (structural incompleteness recovery)
       - If landscape supplement in progress: check landscape_map.md for audit_3_gap_fill entries → if present, construct fallback digest and continue audit_2 → framing → audit_3; if not present, re-dispatch landscape supplement worker
-    - If current phase is phase_execution: check state.json.execution_cycle + DIGESTS.md for cycle status
+    - If current phase is phase_execution: check state.json.execution + persistence 汇缩 files
+      - Check persistence/EXECUTION.md + persistence/VERIFICATION.md whether they already exist
+      - Already exist → autoresearch completed 汇缩写入 → call advance_plan(phase=completed) → present results
+      - Not exist → check state.json.execution.question_status:
+        - All resolved/failed/blocked (no pending) → autoresearch crashed during 汇缩写入 → coordinator writes persistence 汇缩 from state.json (crash兜底) → advance_plan(phase=completed)
+        - Has pending → re-dispatch research-worker → autoresearch resumes from state.json.execution interruption point
     - If current phase is phase_debate: check state.json.debate.current_sub_phase + DEBATE.md for round status
       - If state.json.debate.current_sub_phase is non-null → resume from that sub_phase (interrupted mid-round)
       - If current_sub_phase was "repair" → check for PLAN.md.pre_repair_round{N} backup:
@@ -1569,6 +1595,7 @@ Literature downloads are stored in `.aether/research/literatures/`:
 ## Subagent Dispatch Rules
 
 - FORBIDDEN: Dispatching explore, general, research-explorer, gpd-verifier, or research-verifier directly for Path 3 phase work. All Path 3 phases and sub-phases are dispatched via research-worker subagent.
+- Exception: autoresearch (inside research-worker) dispatches verification subagents (research-verifier, gpd-verifier) directly for per-question verification — coordinator does NOT route verification.
 - Allowed for Path 3: research-worker only. Worker internally dispatches research-explorer/local-executor/verifiers with delegation_depth: 0.
 - Allowed for Path 2: literature-review skill handles its own subagent dispatch internally
 - explore/general: ONLY for non-research auxiliary tasks
@@ -1585,11 +1612,11 @@ Never fabricate sources. Never claim verification without evidence. Never overri
 
 Your turn MUST end with one of:
 
-- Dispatching research-worker subagent (to execute a phase or execution sub-phase)
+- Dispatching research-worker subagent (to execute a phase)
 - Processing a PhaseResultDigest (extracting and appending to DIGESTS.md)
-- Managing execution loop (dispatching execution_cycle or verification worker, deciding retry)
+- Handling paused digest from phase_execution (using question tool to ask user, then re-dispatch)
 - Calling advance_plan via MCP (ONLY when phase_execution completes)
-- Asking the user (ONLY in phase_checkpoint or after max retries)
+- Asking the user (ONLY in phase_checkpoint or when phase_execution pauses for user decision)
 
 FORBIDDEN: Ending a turn with raw analysis output without having entered a workflow phase.
 </system-reminder>

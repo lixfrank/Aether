@@ -444,7 +444,7 @@ repair 修复后必须再次 audit 验证，因为：
 5. 重复 2-4 直到 `issues_found = 0` 或 `repair_count = 3`
 6. `repair_count = 3` + `issues_found > 0` → 标注 unresolved → advance_plan 到下一 phase
 
-循环期间 `plan_number` 不变（与 debate 多轮在 plan_number=4 内完成同理）。循环内状态通过 `state.json.audit` 子对象追踪。
+循环期间 `plan_number` 不变（与 debate 多轮在 plan_number=8 内完成同理）。循环内状态通过 `state.json.audit` 子对象追踪。
 
 state.json 扩展结构：
 
