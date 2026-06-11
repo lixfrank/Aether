@@ -11,7 +11,7 @@ After substantive research results for a single question [Qn], before finalizing
 
 ## Parameters
 
-- **domain_mode**: `general` (default) or `physics`. Injected by autoresearch dispatch prompt. When domain_mode=physics, autoresearch dispatches gpd-verifier as a SEPARATE subagent — research-verification does NOT call gpd plugin skills internally. When domain_mode=general, execute standard 6-step Procedure below.
+- **domain_mode**: `general` (default) or `physics`. Injected by autoresearch dispatch prompt. When domain_mode=physics, autoresearch dispatches gpd-verifier as a SEPARATE subagent — research-verification does NOT call gpd plugin skills internally. When domain_mode=general, execute 8-step Procedure below.
 - **question**: Qn identifier (e.g., "Q1"). Only verify claims with `question=Qn` from PLAN.md §Claims.
 - **cycle**: execution cycle number for current question.
 
