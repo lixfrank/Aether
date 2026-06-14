@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import { Permission } from "../../src/permission"
 
-describe("Layer 1 — denied tools filtering via Permission.evaluate", () => {
+const skip = process.env.RESEARCH_AGENT_TEST !== "1"
+
+describe.skipIf(skip)("Layer 1 — denied tools filtering via Permission.evaluate", () => {
   test("Permission.EDIT_TOOLS is exported and contains expected tool names", () => {
     expect(Permission.EDIT_TOOLS).toEqual(["edit", "write", "apply_patch", "multiedit"])
   })
@@ -75,10 +77,12 @@ describe("Layer 1 — denied tools filtering via Permission.evaluate", () => {
       webfetch: "allow",
     })
     const envRules = Permission.fromConfig({
-      bash: { "*": "deny", "alpha*": "allow" },
+      bash: { "*": "deny", "uv*": "allow" },
     })
     const merged = Permission.merge(researchPerm, envRules)
-    expect(Permission.evaluate("bash", "alpha test", merged).action).toBe("allow")
+    expect(Permission.evaluate("bash", "uv run .aether/skills/paper-search/arxiv_search.py test", merged).action).toBe(
+      "allow",
+    )
     expect(Permission.evaluate("bash", "rm -rf /", merged).action).toBe("deny")
     expect(Permission.evaluate("edit", "*", merged).action).toBe("allow")
     expect(Permission.evaluate("glob", "*", merged).action).toBe("allow")

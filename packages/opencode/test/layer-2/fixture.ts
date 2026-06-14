@@ -42,7 +42,7 @@ export function makeResearchConfig(): Config.Agent {
     permission,
     fallback_models: ["anthropic/claude-sonnet-4-5"],
     mcp: { "research-conventions": true, "research-state": true },
-    env_scope: { allowed_commands: ["alpha", "curl", "rg", "grep", "git"] },
+    env_scope: { allowed_commands: ["uv", "curl", "rg", "grep", "git"] },
     output_dir: ".aether/research",
   }
 }
@@ -65,7 +65,7 @@ export function makeResearchExplorerConfig(): Config.Agent {
       read: "allow",
       external_directory: "ask",
     },
-    skill_refs: ["alpha-research", "arxiv-search"],
+    skill_refs: ["paper-search"],
     fallback_models: ["anthropic/claude-sonnet-4-5"],
     mcp: { "research-state": true },
   }

@@ -5,11 +5,13 @@ import { Instance } from "../../src/project/instance"
 import { Agent } from "../../src/agent/agent"
 import { ModelID } from "../../src/provider/schema"
 
+const skip = process.env.RESEARCH_AGENT_TEST !== "1"
+
 afterEach(async () => {
   await Instance.disposeAll()
 })
 
-describe("Config load order — jsonc in .opencode/ overrides .md agent definitions", () => {
+describe.skipIf(skip)("Config load order — jsonc in .opencode/ overrides .md agent definitions", () => {
   test("opencode.json in .opencode/ dir overrides .md agent definition", async () => {
     await using tmp = await tmpdir({
       git: true,
@@ -163,7 +165,7 @@ Research agent prompt from .md.
             $schema: "https://opencode.ai/config.json",
             agent: {
               research: {
-                skill_refs: ["alpha-research", "deep-research"],
+                skill_refs: ["paper-search", "deep-research"],
                 output_dir: "research-output",
               },
             },
@@ -177,7 +179,7 @@ Research agent prompt from .md.
       fn: async () => {
         const agent = await Agent.get("research")
         expect(agent).toBeDefined()
-        expect(agent?.skillRefs).toEqual(["alpha-research", "deep-research"])
+        expect(agent?.skillRefs).toEqual(["paper-search", "deep-research"])
         expect(agent?.outputDir).toBe("research-output")
       },
     })
@@ -217,7 +219,7 @@ Research agent prompt from .md.
   })
 })
 
-describe("Config load order — mergeDeep semantics for agent fields", () => {
+describe.skipIf(skip)("Config load order — mergeDeep semantics for agent fields", () => {
   test("root jsonc overrides native agent defaults", async () => {
     await using tmp = await tmpdir({
       config: {

@@ -342,7 +342,7 @@ for (const key of Object.keys(tools)) {
 ```
 T1.26: build agent（全权限）看到所有工具描述（不变）
 T1.27: plan agent（edit deny）不看到 edit/write/apply_patch/multiedit 工具描述
-T1.28: research agent（bash restricted）看到 alpha/docker 的 bash 工具，不看到 rm 的 bash 工具
+T1.28: research agent（bash restricted）看到 uv/docker 的 bash 工具，不看到 rm 的 bash 工具
 T1.29: EDIT_TOOLS export 后 prompt.ts 可正常 import 使用
 ```
 

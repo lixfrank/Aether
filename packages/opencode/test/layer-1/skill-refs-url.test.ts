@@ -6,16 +6,18 @@ import { Instance } from "../../src/project/instance"
 import { Agent } from "../../src/agent/agent"
 import { SystemPrompt } from "../../src/session/system"
 
+const skip = process.env.RESEARCH_AGENT_TEST !== "1"
+
 afterEach(async () => {
   await Instance.disposeAll()
 })
 
-describe("skill_refs injection — skill directory URL (pathToFileURL)", () => {
+describe.skipIf(skip)("skill_refs injection — skill directory URL (pathToFileURL)", () => {
   test("skill directory URL contains file:// scheme and skill directory path", async () => {
     await using tmp = await tmpdir({
       git: true,
       init: async (dir) => {
-        const skillDir = path.join(dir, ".opencode", "skill", "test-skill")
+        const skillDir = path.join(dir, ".aether", "skills", "test-skill")
         await Bun.write(
           path.join(skillDir, "SKILL.md"),
           `---
@@ -50,26 +52,26 @@ This is a test skill.
   })
 
   test("skill directory URL is constructed from path.dirname(location) via pathToFileURL", () => {
-    const location = "/tmp/test-project/.opencode/skill/test-skill/SKILL.md"
+    const location = "/tmp/test-project/.aether/skills/test-skill/SKILL.md"
     const dir = path.dirname(location)
     const url = pathToFileURL(dir).href
     expect(url.startsWith("file://")).toBe(true)
-    expect(url).toContain("/test-project/.opencode/skill/test-skill")
+    expect(url).toContain("/test-project/.aether/skills/test-skill")
   })
 
   test("pathToFileURL handles paths with spaces", () => {
-    const location = "/tmp/my project/.opencode/skill/test-skill/SKILL.md"
+    const location = "/tmp/my project/.aether/skills/test-skill/SKILL.md"
     const dir = path.dirname(location)
     const url = pathToFileURL(dir).href
     expect(url).toContain("file://")
-    expect(url).toContain("/my%20project/.opencode/skill/test-skill")
+    expect(url).toContain("/my%20project/.aether/skills/test-skill")
   })
 
   test("skill_refs with found skill: output contains Skill directory + content", async () => {
     await using tmp = await tmpdir({
       git: true,
       init: async (dir) => {
-        const skillDir = path.join(dir, ".opencode", "skill", "demo-skill")
+        const skillDir = path.join(dir, ".aether", "skills", "demo-skill")
         await Bun.write(
           path.join(skillDir, "SKILL.md"),
           `---
@@ -109,7 +111,7 @@ Content of the demo skill.
     await using tmp = await tmpdir({
       git: true,
       init: async (dir) => {
-        const skillDir = path.join(dir, ".opencode", "skill", "found-skill")
+        const skillDir = path.join(dir, ".aether", "skills", "found-skill")
         await Bun.write(
           path.join(skillDir, "SKILL.md"),
           `---

@@ -57,7 +57,7 @@ For each authorized item:
    - For others: mark as `install_failed`, inform user
 7. Verification success → mark as `installed`
 8. If `post_install_note` exists → inform user
-9. If `auto_installable == "partial"` → inform user they need to run `manual_step` (e.g., `alpha login`)
+9. If `auto_installable == "partial"` → inform user they need to run `manual_step` (e.g., web-based account setup)
 
 ### Step 5: Report Results
 

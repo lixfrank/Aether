@@ -7,7 +7,7 @@
 > 完成后，research mode 可通过 UI dropdown 进入并使用完整研究工作流。
 > **注意**：scale*decision 已从核心代码中移除（不再需要 system.ts 函数 + prompt.ts 注入），改为 prompt（markdown body）内文本，零核心文件改动。
 > **注意**：MCP 工具权限使用 MCP 工具 ID 格式（下划线，如 `research_conventions**`），与 `resolveTools` 中 MCP per-agent 过滤一致。
-> **注意**：bash 权限统一使用`env*scope.allowed_commands`声明，不再在 permission 中手动列出 bash 规则。env_scope 编译后自动生成`{bash, "*", deny}`+`{bash, "alpha\*", allow}` 等 deny-before-allow 规则。
+> **注意**：bash 权限统一使用`env*scope.allowed_commands`声明，不再在 permission 中手动列出 bash 规则。env_scope 编译后自动生成`{bash, "*", deny}`+`{bash, "uv*", allow}` 等 deny-before-allow 规则。
 
 ---
 
@@ -87,7 +87,7 @@ mcp:
   research-state: true
 env_scope:
   allowed_commands:
-    - alpha
+    - uv
     - curl
     - rg
     - grep
@@ -99,7 +99,7 @@ output_dir: research
 <system-reminder>
 # Research Mode — HARD CONSTRAINTS
 
-PERMITTED: read/glob/grep any file; edit/write within notepad; websearch/webfetch; knowledge_search; question; todowrite; task (research-explorer/gpd-verifier/gpd-reviewer); skill; bash (alpha/curl/rg/grep/git/docker only via env_scope); MCP (research-conventions, research-state).
+PERMITTED: read/glob/grep any file; edit/write within notepad; websearch/webfetch; knowledge_search; question; todowrite; task (research-explorer/gpd-verifier/gpd-reviewer); skill; bash (uv/curl/rg/grep/git via env_scope); MCP (research-conventions, research-state).
 
 FORBIDDEN: edit/write outside notepad; bash commands not in env_scope.allowed_commands.
 
@@ -107,7 +107,7 @@ FORBIDDEN: edit/write outside notepad; bash commands not in env_scope.allowed_co
 
 You have access to specialized research workflow skills. Route based on intent:
 
-- **Quick lookup** → Use alpha-research skill directly. No subagents.
+- **Quick lookup** → Use paper-search skill directly. No subagents.
 - **Deep research** → Invoke /deep-research skill. Uses research-explorer subagents.
 - **Systematic literature review** → Invoke /literature-review skill. Uses research-explorer subagents + structured review protocol.
 - **Experiment execution** → Dispatch sandbox-executor subagent via task tool. Uses docker sandbox.
@@ -173,7 +173,7 @@ permission:
   read: allow
   external_directory: ask
 skill_refs:
-  - alpha-research
+  - paper-search
 ---
 
 <system-reminder>
@@ -192,7 +192,7 @@ skill_refs:
 1. Start wide — broad queries to map the landscape
 2. Evaluate availability — assess what source types exist
 3. Progressively narrow — drill into specifics using discovered terminology
-4. Cross-source — use both websearch and alpha CLI for mixed topics
+4. Cross-source — use both websearch and paper-search skill for mixed topics
 
 # Source Quality
 
@@ -474,8 +474,8 @@ Cleanup: `docker stop <name> && docker rm <name>`
 
 | Skill | 文件 | 状态 |
 |---|---|---|
-| alpha-research | `.aether/skills/alpha-research/SKILL.md` | 已存在，auth-first + arxiv fallback |
-| arxiv-search | merged into alpha-research (arxiv-search mode) | 已合并 |
+| paper-search | `.aether/skills/paper-search/SKILL.md` | 已存在，arXiv API |
+| arxiv-search | merged into paper-search | 已合并 |
 | source-comparison | `.aether/skills/source-comparison/SKILL.md` | 已存在，mode-aware |
 | paper-code-audit | `.aether/skills/paper-code-audit/SKILL.md` | 已存在，mode-aware |
 | docker | `.aether/skills/docker/SKILL.md` | 已存在，工具性 skill（确定 docker 环境、编译项目、执行隔离计算） |
@@ -494,7 +494,7 @@ Cleanup: `docker stop <name> && docker rm <name>`
 T2.1: research.md 存在时，Agent.list() 包含 research agent
 T2.2: 从 UI dropdown 选择 research 后，permission 被 intersection 约束
 T2.3: 从 UI dropdown 选择 research 后，skill\*refs 生效（替换广播，只看到 skillRefs 指定的 skill 完整注入，无广播列表）
-T2.4: 从 UI dropdown 选择 research 后，env_scope.allowed_commands 生效（bash 限制到 alpha/docker 等，env_scope 编译为 deny-before-allow 规则）
+T2.4: 从 UI dropdown 选择 research 后，env_scope.allowed_commands 生效（bash 限制到 uv/curl 等，env_scope 编译为 deny-before-allow 规则）
 T2.5: /deep-research skill 被调用时，完整工作流执行
 T2.6: research-explorer subagent 可通过 task tool 调用
 T2.7: research-explorer 继承 explore 权限 + Integrity Commandments

@@ -62,7 +62,7 @@ You MUST classify every user prompt through the Entry Gate BEFORE taking any oth
 
 | Condition                                                                                                                                                                                                     | Path                            | Workflow                                                                                                                                    |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| Prompt is a single factual question answerable by one search (e.g. "What is FBI-DCT?", "Who introduced NIS?")                                                                                                 | **Path 1: Quick lookup**        | alpha-research skill, no subagents, no state machine                                                                                        |
+| Prompt is a single factual question answerable by one search (e.g. "What is FBI-DCT?", "Who introduced NIS?")                                                                                                 | **Path 1: Quick lookup**        | paper-search skill (直接调用，Path 1 only), no subagents, no state machine                                                                  |
 | Prompt explicitly requests summarizing/surveying literature (contains "综述", "review", "总结文献", "survey", "literature review")                                                                            | **Path 2: Literature review**   | literature-review skill with its own state machine                                                                                          |
 | Prompt contains research intent ("研究", "investigate", "research") + multi-phase description, OR requests feasibility analysis, method comparison, experimental verification, or any task requiring >1 phase | **Path 3: Research project**    | Full state machine (analysis → analysis_checkpoint → audit_1 → [landscape] → audit_2 → framing → audit_3 → debate → checkpoint → execution) |
 | Prompt contains no research intent and is not a factual lookup                                                                                                                                                | **Path 0: Not a research task** | Inform user this is outside research scope; suggest switching to build agent                                                                |
@@ -94,7 +94,7 @@ You MUST classify every user prompt through the Entry Gate BEFORE taking any oth
 
 # ═══════════════════════════════════════════════════════════
 
-Use alpha-research skill directly. No subagents, no state machine, no persistence files.
+Use paper-search skill directly. (Path 1: primary agent 直接调用 paper-search; Path 2/3: dispatch research-explorer subagent 加载 paper-search)
 Do NOT write ROADMAP.md, PLAN.md, or modify state.json.
 After answering, reset STATE.md Current Phase to "not yet started" and clear the Classification section. This ensures the next prompt will pass through the Entry Gate fresh.
 
@@ -525,7 +525,7 @@ REPAIR TARGETS:
 - Findings to fix: [FATAL/CONCERN entries from audit_1_round[N].md]
 
 For each finding, repair the claim in the target file. You MAY use web search
-and alpha-research skill for targeted literature search to find correct references
+and paper-search skill for targeted literature search to find correct references
 or evidence for the fix. For findings that cannot be resolved, mark them as
 unresolved_gap.
 
@@ -575,7 +575,7 @@ REPAIR TARGETS:
 - Findings to fix: [FATAL/CONCERN entries from audit_2_round[N].md]
 
 For each finding, repair the claim in the target file. You MAY use web search
-and alpha-research skill for targeted literature search. For audit_1 residual
+and paper-search skill for targeted literature search. For audit_1 residual
 gaps that landscape did not resolve, attempt to supplement or mark as unresolved_gap.
 For domain coverage/classification errors, correct directly.
 For factual misstatements, correct with verified evidence.
@@ -708,7 +708,7 @@ REPAIR SCOPE PER FINDING TYPE:
 - Circular dependencies → break cycle by redesigning question assumptions (replace inter-question dependency with knowledge-base assumption or introduce independent verification)
 - Unresolved knowledge gaps not considered → add mitigation notes in reasoning chain §Unresolved Knowledge Gaps
 
-For each finding, you MAY use web search and alpha-research skill for targeted literature search
+For each finding, you MAY use web search and paper-search skill for targeted literature search
 to find additional evidence for reasoning chain reconstruction. For findings that cannot be resolved,
 mark them as unresolved_reasoning_gap.
 
@@ -1550,7 +1550,7 @@ When uv is unavailable and user declines installation:
 - Do NOT call any MCP tool
 - Do NOT dispatch research-worker (worker depends on MCP)
 - Do NOT execute any Python script
-- Do NOT use SymPy verification, alpha search
+- Do NOT use SymPy verification
 - Only use LLM reasoning, basic bash commands (git, curl), local file read/write
 - Mark STATE.md `infrastructure: degraded`, details in `~/.aether/health/global_health.json`
 

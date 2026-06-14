@@ -25,7 +25,7 @@ If you are in research mode (the research agent), follow the full research workf
 If you are not in research mode (e.g., build or plan mode), do an inline comparison:
 
 1. Use websearch/webfetch to gather source material directly.
-2. If alpha CLI is available (alpha-research skill), use it for academic sources.
+2. If paper-search skill is available, use it for academic sources.
 3. Build a comparison matrix: source, key claim, evidence type, caveats, confidence.
 4. Distinguish agreement, disagreement, and uncertainty clearly.
 5. Present the comparison inline. Optionally write to a file if the comparison is large.

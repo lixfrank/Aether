@@ -12,7 +12,7 @@
 
 | 变更项                | 类型            | feat/research-agent 状态                | 当前分支状态 | 操作                        |
 | --------------------- | --------------- | --------------------------------------- | ------------ | --------------------------- |
-| **alpha-research**    | Skill           | 已存在（完整 auth-first 实现）          | **缺失**     | 从 feat/research-agent 端口 |
+| **paper-search**      | Skill           | 已存在（arXiv API + alphaxiv webfetch） | **存在**     | 无需端口                    |
 | **docker**            | Skill           | 已存在（完整 Feynman docker 内容）      | **缺失**     | 从 feat/research-agent 端口 |
 | **source-comparison** | Skill           | 已存在（mode-aware 实现）               | **缺失**     | 从 feat/research-agent 端口 |
 | **paper-code-audit**  | Skill           | 已存在（mode-aware 实现）               | **缺失**     | 从 feat/research-agent 端口 |
@@ -43,104 +43,59 @@ feat/research-agent 分支上的 skill frontmatter 包含 `category: Research` �
 
 ---
 
-## 2.1.1 alpha-research Skill
+## 2.1.1 paper-search Skill
 
 ### 来源
 
-`feat/research-agent` 分支 `.opencode/skills/alpha-research/SKILL.md`
+已存在于 `.aether/skills/paper-search/SKILL.md`（原 `alpha-research` skill 经 Layer 3.13 规范更新为 `paper-search`）
 
 ### 适配要点
 
-- 目录从 `.opencode/skills/` → `.aether/skills/`
-- Frontmatter 移除 `category: Research`（非 Skill.Info schema 字段，被静默忽略，移除避免误解）
-- 内容无需修改，auth-first + arxiv fallback 设计完整
+- 目录从 `.aether/skills/alpha-research/` → `.aether/skills/paper-search/`
+- skill name 从 `alpha-research` → `paper-search`
+- alpha CLI 命令全部移除（不存在），替换为 arXiv API 搜索 + alphaxiv webfetch 深度理解
+- Frontmatter 无 `category` 字段（非 Skill.Info schema 字段）
 
 ### 文件
 
-`.aether/skills/alpha-research/SKILL.md`
+`.aether/skills/paper-search/SKILL.md`
 
-### SKILL.md 内容（从 feat/research-agent 端口，移除 category）
+### SKILL.md 核心功能（无 alpha CLI）
 
 ````md
 ---
-name: alpha-research
-description: Search, read, and query research papers via the alpha CLI (alphaXiv-backed). Use for academic paper search, full-text reading, paper Q&A, code repository inspection, and annotation management.
+name: paper-search
+description: Search, read, and analyze research papers via arXiv API and alphaxiv webfetch. Use for academic paper search, full-text reading via alphaxiv overview, and citation extraction.
 ---
 
-# Alpha Research CLI
+# Paper Search
 
-Use the `alpha` CLI via bash for all paper research operations.
+Use arXiv API for search and alphaxiv webfetch for deep paper understanding.
 
-## Auth Check (CRITICAL — do this FIRST)
+## Search (arXiv API)
 
-Before using any alpha command, check authentication:
-
-```bash
-alpha status
-```
-````
-
-If the response indicates no authentication (or the command fails with an auth error):
-
-1. Tell the user: "The alpha CLI requires an alphaXiv account for paper search, reading, and Q&A. You can set up access by running `alpha login`, or I can guide you through the process."
-2. Wait for the user's response before proceeding.
-3. If the user explicitly declines ("I don't want to create an account" / "skip alpha" / "use arxiv instead" / "no"):
-   → Fall back to alpha-research arxiv-search mode (limited: titles and abstracts only, no full text, no Q&A, no annotations).
-   → For paper reading beyond abstracts, use `webfetch` on arxiv HTML pages where available.
-4. If the user agrees:
-   → Guide them through `alpha login` and then continue with alpha CLI.
-
-Do NOT silently skip alpha CLI mode without asking. Only fall back to arxiv-search mode when the user explicitly declines.
-
-## Commands
-
-| Command                              | Description                                                                                                                                     |
-| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `alpha search "<query>"`             | Search papers. Prefer `--mode semantic` by default; use `--mode keyword` only for exact-term lookup and `--mode agentic` for broader retrieval. |
-| `alpha get <arxiv-id-or-url>`        | Fetch paper content and any local annotation                                                                                                    |
-| `alpha get --full-text <arxiv-id>`   | Get raw full text instead of AI report                                                                                                          |
-| `alpha ask <arxiv-id> "<question>"`  | Ask a question about a paper's PDF                                                                                                              |
-| `alpha code <github-url> [path]`     | Read files from a paper's GitHub repo. Use `/` for overview                                                                                     |
-| `alpha annotate <paper-id> "<note>"` | Save a persistent annotation on a paper                                                                                                         |
-| `alpha annotate --clear <paper-id>`  | Remove an annotation                                                                                                                            |
-| `alpha annotate --list`              | List all annotations                                                                                                                            |
-
-## Auth Setup
+Search papers using the arXiv API:
 
 ```bash
-alpha login
+curl "http://export.arxiv.org/api/query?search_query=all:transformer+scaling+laws&max_results=10"
 ```
 
-This opens an authentication flow with alphaXiv. Once authenticated, `alpha status` will show the account info.
+## Deep Understanding (alphaxiv)
 
-## Examples
+After obtaining arXiv IDs from search, for papers requiring deeper analysis:
 
-```bash
-alpha search "transformer scaling laws"
-alpha search --mode agentic "efficient attention mechanisms for long context"
-alpha get 2106.09685
-alpha ask 2106.09685 "What optimizer did they use?"
-alpha code https://github.com/karpathy/nanoGPT src/model.py
-alpha annotate 2106.09685 "Key paper on LoRA - revisit for adapter comparison"
-```
+1. Construct alphaxiv overview URL: `https://alphaxiv.org/overview/<arxiv_id>`
+2. Use webfetch to retrieve the overview page
+3. The overview provides structured: Key Findings, Methodology, Limitations, Broader Impact
+4. Use overview content for research synthesis instead of relying solely on abstracts
+
+Fallback: if alphaxiv overview is unavailable, use the arXiv abstract from search results.
 
 ## When to use
 
-- Academic paper search, reading, Q&A → `alpha` CLI
+- Academic paper search, reading → paper-search skill (arXiv API + alphaxiv webfetch)
 - Current topics (products, releases, docs) → `websearch`
 - Mixed topics → combine both
-
-## Fallback Behavior
-
-When alpha is unavailable (user declined account):
-
-- Paper search: use alpha-research skill (arxiv-search mode)
-- Paper abstracts: `webfetch` on `https://arxiv.org/abs/<id>`
-- Paper full text (HTML): `webfetch` on `https://arxiv.org/html/<id>` (available for many papers)
-- Paper Q&A: NOT available without alpha — read the full text yourself and answer based on content
-- Code inspection: `webfetch` on GitHub repo pages (limited, no file-level access)
-- Annotations: NOT available without alpha
-
 ````
 
 ---
@@ -163,7 +118,7 @@ When alpha is unavailable (user declined account):
 
 ### SKILL.md 内容（从 feat/research-agent 端口，移除 category）
 
-```md
+````md
 ---
 name: docker
 description: Execute research code inside isolated Docker containers for safe replication, experiments, and benchmarks. Use when the user selects Docker as the execution environment or asks to run code safely, in isolation, or in a sandbox.
@@ -189,6 +144,7 @@ docker run --rm -v "$(pwd)":/workspace -w /workspace python:3.11 bash -c "
   pip install -r requirements.txt &&
   python train.py
 "
+```
 ````
 
 For projects with a Dockerfile:
@@ -291,7 +247,7 @@ If you are in research mode (the research agent), follow the full research workf
 If you are not in research mode (e.g., build or plan mode), do an inline comparison:
 
 1. Use websearch/webfetch to gather source material directly.
-2. If alpha CLI is available (alpha-research skill), use it for academic sources.
+2. Delegate literature search to research-explorer subagent (paper-search skill).
 3. Build a comparison matrix: source, key claim, evidence type, caveats, confidence.
 4. Distinguish agreement, disagreement, and uncertainty clearly.
 5. Present the comparison inline. Optionally write to a file if the comparison is large.
@@ -348,8 +304,8 @@ If you are in research mode (the research agent), follow the full research workf
 1. Classify intent in Phase 0 (Intent Gate).
 2. Plan audit: identify paper claims and corresponding code. Write plan to outputs/.plans/<slug>.md.
 3. Dispatch researcher subagents to:
-   - Read the paper (use alpha get / alpha ask for detailed Q&A)
-   - Inspect the code repo (use alpha code for file-level inspection)
+   - Read the paper (delegate to research-explorer subagent with paper-search skill)
+   - Inspect the code repo (use webfetch to read GitHub repo files)
 4. Compare claimed methods, defaults, metrics, and data handling against actual code.
 5. Call out: missing code, mismatches, ambiguous defaults, reproduction risks.
 6. Dispatch verifier subagent for citation anchoring.
@@ -360,7 +316,7 @@ If you are in research mode (the research agent), follow the full research workf
 If you are not in research mode:
 
 1. Use webfetch to read the paper (arxiv HTML or PDF).
-2. Use alpha code (if available) or webfetch to read the repo files.
+2. Use webfetch to read the repo files directly.
 3. Compare claims vs code inline.
 4. Present findings inline or write to a file.
 
@@ -585,7 +541,7 @@ docker stop <container> && docker rm <container>
 
 ```
 
-T2.1.1: alpha-research SKILL.md 存在于 .aether/skills/alpha-research/，auth-first 流程完整
+T2.1.1: paper-search SKILL.md 存在于 .aether/skills/paper-search/
 T2.1.2: docker SKILL.md 存在于 .aether/skills/docker/，GPU/persistent container/base image 内容完整
 T2.1.3: source-comparison SKILL.md 存在于 .aether/skills/source-comparison/，mode-aware 设计完整
 T2.1.4: paper-code-audit SKILL.md 存在于 .aether/skills/paper-code-audit/，mode-aware 设计完整
@@ -593,7 +549,7 @@ T2.1.5: sandbox-executor.md 存在于 .aether/agent/sandbox-executor.md，subage
 T2.1.6: sandbox-executor skill_refs 包含 docker + research-verification
 T2.1.7: sandbox-executor env_scope 限制 bash 到 docker/uv/python/pip/curl/git
 T2.1.8: sandbox-executor mcp 包含 research-conventions (只读) + research-state
-T2.1.9: research-explorer skill_refs 包含 alpha-research
+T2.1.9: research-explorer skill_refs 包含 paper-search
 T2.1.10: 所有端口 skill 的 frontmatter 无 category 字段
 T2.1.11: 删除新增 skills 和 sandbox-executor 后，核心行为不变
 
@@ -605,7 +561,6 @@ T2.1.11: 删除新增 skills 和 sandbox-executor 后，核心行为不变
 
 | 步骤 | 操作 | 文件 |
 |------|------|------|
-| 1 | 从 feat/research-agent 端口 alpha-research（移除 category） | `.aether/skills/alpha-research/SKILL.md` |
 | 2 | 从 feat/research-agent 端口 docker（移除 category） | `.aether/skills/docker/SKILL.md` |
 | 3 | 从 feat/research-agent 端口 source-comparison（移除 category） | `.aether/skills/source-comparison/SKILL.md` |
 | 4 | 从 feat/research-agent 端口 paper-code-audit（移除 category） | `.aether/skills/paper-code-audit/SKILL.md` |

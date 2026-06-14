@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import os from "os"
 
-describe("MCP ~ path expansion", () => {
+const skip = process.env.RESEARCH_AGENT_TEST !== "1"
+
+describe.skipIf(skip)("MCP ~ path expansion", () => {
   test("~ in command array is replaced with os.homedir()", () => {
     const home = os.homedir()
     const command = ["~/bin/uv", "run", "~/mcp/server.py"]

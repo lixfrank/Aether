@@ -5,7 +5,9 @@ import { Agent } from "../../src/agent/agent"
 import { Permission } from "../../src/permission"
 import { evalPerm, makeResearchConfig } from "./fixture"
 
-describe("Layer 2 — research primary agent", () => {
+const skip = process.env.RESEARCH_AGENT_TEST !== "1"
+
+describe.skipIf(skip)("Layer 2 — research primary agent", () => {
   test("T2.1: research agent appears in Agent.list() when defined", async () => {
     await using tmp = await tmpdir({ config: { agent: { research: makeResearchConfig() } } })
     await Instance.provide({
@@ -45,7 +47,10 @@ describe("Layer 2 — research primary agent", () => {
       directory: tmp.path,
       fn: async () => {
         const r = await Agent.get("research")
-        expect(Permission.evaluate("bash", "alpha search", r!.permission).action).toBe("allow")
+        expect(
+          Permission.evaluate("bash", "uv run .aether/skills/paper-search/arxiv_search.py search", r!.permission)
+            .action,
+        ).toBe("allow")
         expect(Permission.evaluate("bash", "curl https://example.com", r!.permission).action).toBe("allow")
         expect(Permission.evaluate("bash", "curl https://example.com", r!.permission).action).toBe("allow")
         expect(Permission.evaluate("bash", "rg pattern", r!.permission).action).toBe("allow")

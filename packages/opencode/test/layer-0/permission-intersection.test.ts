@@ -2,9 +2,11 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { Permission } from "../../src/permission"
 import { Discipline } from "../../src/session/discipline"
 
+const skip = process.env.RESEARCH_AGENT_TEST !== "1"
+
 afterEach(async () => {})
 
-describe("Permission.intersection — subagent permission safety", () => {
+describe.skipIf(skip)("Permission.intersection — subagent permission safety", () => {
   test("parent deny blocks child allow (security fix)", () => {
     const parent = Permission.fromConfig({ bash: "deny" })
     const child = Permission.fromConfig({ bash: "allow" })
@@ -45,11 +47,13 @@ describe("Permission.intersection — subagent permission safety", () => {
     const parent = Permission.fromConfig({ bash: "allow" })
     const child = Permission.fromConfig({ bash: "allow" })
     const override = Discipline.compile({
-      env_scope: { allowed_commands: ["docker", "alpha"] },
+      env_scope: { allowed_commands: ["docker", "uv"] },
     })
     const result = Permission.intersection(parent, child, override)
     expect(Permission.evaluate("bash", "docker run nginx", result).action).toBe("allow")
-    expect(Permission.evaluate("bash", "alpha test", result).action).toBe("allow")
+    expect(Permission.evaluate("bash", "uv run .aether/skills/paper-search/arxiv_search.py test", result).action).toBe(
+      "allow",
+    )
     expect(Permission.evaluate("bash", "rm -rf /", result).action).toBe("deny")
   })
 

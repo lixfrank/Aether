@@ -35,18 +35,5 @@
     "health_check_key": "git_working_dir",
     "condition": "git_available == pass AND git_working_dir == fail",
     "priority": "high"
-  },
-  "alpha_cli": {
-    "auto_installable": "partial",
-    "platforms": {
-      "macos": "brew install alpha || npm install -g @anthropic/alpha",
-      "linux": "npm install -g @anthropic/alpha"
-    },
-    "verify_command": "alpha status",
-    "post_install_note": "安装完成后需手动执行 `alpha login` 完成认证",
-    "manual_step": "alpha login",
-    "layer": "infrastructure",
-    "health_check_key": "alpha_cli",
-    "priority": "low"
   }
 }

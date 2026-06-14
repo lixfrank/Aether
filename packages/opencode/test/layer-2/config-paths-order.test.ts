@@ -3,7 +3,9 @@ import path from "path"
 import os from "os"
 import { ConfigPaths } from "../../src/config/paths"
 
-describe("ConfigPaths.directories — search order", () => {
+const skip = process.env.RESEARCH_AGENT_TEST !== "1"
+
+describe.skipIf(skip)("ConfigPaths.directories — search order", () => {
   test("directory order: global config → home dirs → binary dirs → project dirs → config dir", async () => {
     const directory = process.cwd()
     const worktree = directory

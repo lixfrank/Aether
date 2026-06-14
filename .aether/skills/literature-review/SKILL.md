@@ -56,7 +56,7 @@ State is tracked in `output_dir/notepads/<slug>/review_state.md`, NOT in STATE.m
 ### Phase 2: Systematic Literature Search
 
 1. **Multi-Database Search**: Select databases based on domain:
-   - Physics: arXiv (alpha-research skill), INSPIRE-HEP, alphaxiv overview
+   - Physics: 委托 research-explorer subagent (paper-search skill) 搜索所有学术数据库; 生物医学数据库 (PubMed, bioRxiv) 暂不在 paper-search scope 内，待未来需要时补充
    - Biomedical: PubMed, bioRxiv
    - General: Semantic Scholar API, Google Scholar
 
@@ -71,7 +71,7 @@ State is tracked in `output_dir/notepads/<slug>/review_state.md`, NOT in STATE.m
 1. **Deduplication**: Remove duplicate entries
 2. **Title Screening**: Review titles against inclusion/exclusion criteria
 3. **Abstract Screening**: Read abstracts, apply criteria rigorously
-4. **Deep Understanding (alphaxiv)**: For papers needing deeper analysis
+4. **Deep Understanding (paper-search skill via research-explorer)**: For papers needing deeper analysis
 5. **Full-Text Screening**: Obtain and review full texts
 6. **Create PRISMA Flow Diagram**: Track screening progression
 7. **Write screening_log.md**: Document all inclusion/exclusion decisions with reasons
@@ -90,7 +90,7 @@ After full-text screening identifies the final included set:
    ```
 3. **Run download script**:
    ```bash
-   uv run .aether/skills/literature-review/scripts/download_paper.py --batch included_papers.json --output .aether/research/literatures --relevance included
+   uv run .aether/skills/paper-search/download_paper.py --batch included_papers.json --output .aether/research/literatures --relevance included
    ```
 4. **Record results**: Successfully downloaded papers are recorded in `literatures/index.json`; failed papers are recorded in `literatures/unavailable.md` with full metadata (title, authors, journal, DOI, URL, reason)
 5. **Update screening_log.md**: Add download status column — mark local_path for downloaded, "unavailable" for failed

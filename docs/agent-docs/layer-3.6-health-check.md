@@ -30,7 +30,7 @@ research-state 和 research-conventions 是两个独立 MCP 进程。当前 `run
 
 **盲点 B：执行环境未预检**
 
-autoresearch skill 的 Step 2 探测宿主机环境（`python3 --version`, `uv --version`, `docker --version` 等），但这是在 phase_execution 才做的。更早的 phase（analysis、landscape、framing）也可能需要 alpha CLI 或 uv run，但没有预检。如果 alpha CLI 未认证，在 phase_analysis 调用 alpha-research 时才发现降级到 no-login mode，搜索质量已经受限。
+autoresearch skill 的 Step 2 探测宿主机环境（`python3 --version`, `uv --version`, `docker --version` 等），但这是在 phase_execution 才做的。更早的 phase（analysis、landscape、framing）也可能需要 uv run，但没有预检。
 
 **盲点 C：skill 引用链断裂不可知**
 
@@ -46,14 +46,13 @@ autoresearch skill Step 2 探测 `python3 --version`，但系统中没有任何�
 
 ### 1.2 影响范围
 
-| 失败场景                       | 在哪个 phase 发现               | 代价                               |
-| ------------------------------ | ------------------------------- | ---------------------------------- |
-| research-conventions MCP 离线  | phase_execution                 | 无法读写约定锁，验证流程中断       |
-| uv 不可用                      | phase_execution                 | 所有 SymPy 脚本和 venv 创建失败    |
-| Docker 不可用                  | phase_execution                 | sandbox-executor 无法启动容器      |
-| alpha CLI 未认证               | phase_analysis                  | 论文搜索降级为 title+abstract only |
-| gpd-verification SKILL.md 缺失 | phase_execution（verification） | 物理验证降级为 LLM-only            |
-| SymPy 脚本无法运行             | phase_execution（verification） | 计算验证降级为 LLM-only            |
+| 失败场景                       | 在哪个 phase 发现               | 代价                            |
+| ------------------------------ | ------------------------------- | ------------------------------- |
+| research-conventions MCP 离线  | phase_execution                 | 无法读写约定锁，验证流程中断    |
+| uv 不可用                      | phase_execution                 | 所有 SymPy 脚本和 venv 创建失败 |
+| Docker 不可用                  | phase_execution                 | sandbox-executor 无法启动容器   |
+| gpd-verification SKILL.md 缺失 | phase_execution（verification） | 物理验证降级为 LLM-only         |
+| SymPy 脚本无法运行             | phase_execution（verification） | 计算验证降级为 LLM-only         |
 
 所有这些失败都在运行时才发现，越晚发现代价越高。
 
@@ -92,18 +91,20 @@ autoresearch skill Step 2 探测 `python3 --version`，但系统中没有任何�
 
 检测运行环境的基本可用性。这些是所有后续层的前提。结果存储在全局位置（`~/.aether/health/`），不随项目变化。
 
-| 检测项                           | 检测方法                                                     | 预期结果                | 影响的组件                                     | 失败分类                          |
-| -------------------------------- | ------------------------------------------------------------ | ----------------------- | ---------------------------------------------- | --------------------------------- |
-| **uv 可用**                      | `uv --version`                                               | 返回版本号，exit code 0 | local-executor, 所有 SymPy 脚本, MCP servers   | not_installed                     |
-| **uv Python 管理**               | `uv python list`                                             | 列出可用 Python 版本    | local-executor, gpd-verification scripts       | not_configured                    |
-| **git 可用**                     | `git --version`                                              | 返回版本号，exit code 0 | Phase Commit Protocol, State Recovery rollback | not_installed                     |
-| **git 工作区**                   | `git rev-parse --git-dir`                                    | 返回 .git 路径          | Phase Commit Protocol (需 repo context)        | not_initialized                   |
-| **Docker CLI**                   | `docker version --format '{{.Client.Version}}'`              | 返回客户端版本号        | Docker 可用性判断                              | not_installed                     |
-| **Docker daemon**                | `docker info --format '{{.ServerVersion}}'`                  | daemon 在运行           | sandbox-executor                               | daemon_not_running                |
-| **alpha CLI**                    | `alpha status`                                               | 返回认证状态            | alpha-research skill（CLI mode）               | not_installed / not_authenticated |
-| **网络可达（arXiv）**            | 见下方 fallback 方案，检测 `https://api.arxiv.org`           | HTTP 200                | alpha-research no-login mode, webfetch         | unreachable                       |
-| **网络可达（Semantic Scholar）** | 见下方 fallback 方案，检测 `https://api.semanticscholar.org` | HTTP 200                | literature-review, research-worker             | unreachable                       |
-| **网络可达（INSPIRE-HEP）**      | 见下方 fallback 方案，检测 `https://inspirehep.net/api`      | HTTP 200                | physics 文献搜索                               | unreachable                       |
+| 检测项                      | 检测方法                                                     | 预期结果                | 影响的组件                                     | 失败分类           |
+| --------------------------- | ------------------------------------------------------------ | ----------------------- | ---------------------------------------------- | ------------------ |
+| **uv 可用**                 | `uv --version`                                               | 返回版本号，exit code 0 | local-executor, 所有 SymPy 脚本, MCP servers   | not_installed      |
+| **uv Python 管理**          | `uv python list`                                             | 列出可用 Python 版本    | local-executor, gpd-verification scripts       | not_configured     |
+| **git 可用**                | `git --version`                                              | 返回版本号，exit code 0 | Phase Commit Protocol, State Recovery rollback | not_installed      |
+| **git 工作区**              | `git rev-parse --git-dir`                                    | 返回 .git 路径          | Phase Commit Protocol (需 repo context)        | not_initialized    |
+| **Docker CLI**              | `docker version --format '{{.Client.Version}}'`              | 返回客户端版本号        | Docker 可用性判断                              | not_installed      |
+| **Docker daemon**           | `docker info --format '{{.ServerVersion}}'`                  | daemon 在运行           | sandbox-executor                               | daemon_not_running |
+| **网络可达（arXiv）**       | 见下方 fallback 方案，检测 `https://api.arxiv.org`           | HTTP 200                | paper-search skill                             | unreachable        |
+| **网络可达（alphaxiv）**    | 见下方 fallback 方案，检测 `https://alphaxiv.org`            | HTTP 200                | paper-search skill                             | unreachable        |
+| **网络可达（Crossref）**    | 见下方 fallback 方案，检测 `https://api.crossref.org`        | HTTP 200                | paper-search skill (DOI verification)          | unreachable        |
+| **网络可达（S2）**          | 见下方 fallback 方案，检测 `https://api.semanticscholar.org` | HTTP 200                | paper-search skill                             | unreachable        |
+| **网络可达（INSPIRE-HEP）** | 见下方 fallback 方案，检测 `https://inspirehep.net/api`      | HTTP 200                | paper-search skill                             | unreachable        |
+| **网络可达（PubMed）**      | 见下方 fallback 方案，检测 `https://eutils.ncbi.nlm.nih.gov` | HTTP 200                | paper-search skill                             | unreachable        |
 
 **关键设计**：
 
@@ -151,7 +152,7 @@ def _check_network(url: str) -> dict:
 ## Reachable
 
 - arXiv API: OK (curl, 200)
-- Semantic Scholar: OK (curl, 200)
+- S2 (Semantic Scholar): OK (curl, 200)
 
 ## Unreachable
 
@@ -159,7 +160,7 @@ def _check_network(url: str) -> dict:
 
 ## Recommendations
 
-- arXiv/Semantic Scholar 可用 → 论文搜索正常
+- arXiv/S2 可用 → 论文搜索正常
 - INSPIRE-HEP 不可用 → physics 领域文献搜索降级为 arXiv only
 ```
 
@@ -180,20 +181,20 @@ agent 读取该文件后，直接跳过不可达的 API，无需在搜索时反�
 
 检测每个 agent 的 `skill_refs` 指向的 SKILL.md 是否存在，以及 gpd plugin 的 references JSON 和 scripts 是否完整。结果存储在项目级位置。
 
-| 检测项                                       | 检测方法                                                                                                 | 预期结果       | 影响的组件                 |
-| -------------------------------------------- | -------------------------------------------------------------------------------------------------------- | -------------- | -------------------------- |
-| **research-worker: alpha-research**          | 查找 `.aether/skills/alpha-research/SKILL.md`                                                            | 文件存在       | research-worker            |
-| **sandbox-executor: docker**                 | 查找 `.aether/skills/docker/SKILL.md`                                                                    | 文件存在       | sandbox-executor           |
-| **research-verifier: research-verification** | 查找 `.aether/skills/research-verification/SKILL.md`                                                     | 文件存在       | research-verifier          |
-| **gpd-verifier: 5 个 skill_refs**            | 查找每个 gpd-\* skill 的 SKILL.md                                                                        | 全部 5 个存在  | gpd-verifier               |
-| **gpd-reviewer: 3 个 skill_refs**            | 查找每个 gpd-\* skill 的 SKILL.md                                                                        | 全部 3 个存在  | gpd-reviewer               |
-| **gpd-verification scripts**                 | 查找 `scripts/` 下 9 个 .py 文件                                                                         | 全部 9 个存在  | gpd-verifier               |
-| **gpd-verification references**              | 查找 `references/check_registry.json` + `contract_checks.json` + 14 个 domain_checklists（共 16 个文件） | 全部 16 个存在 | gpd-verifier               |
-| **gpd-errors references**                    | 查找 error_catalog.json + traceability_matrix.json + detection_strategies.json                           | 全部存在       | gpd-reviewer, gpd-verifier |
-| **gpd-conventions references**               | 查找 convention_defaults.json + subfield_defaults/physics.json                                           | 全部存在       | gpd-conventions MCP        |
-| **gpd-domain-check references**              | 查找 4 个 protocols + 14 个 bundles                                                                      | 全部存在       | gpd-reviewer, gpd-verifier |
-| **literature-review scripts**                | 查找 download_paper.py + search_databases.py + verify_citations.py + generate_pdf.py                     | 全部 4 个存在  | literature-review          |
-| **alpha-research scripts**                   | 查找 arxiv_search.py                                                                                     | 文件存在       | alpha-research             |
+| 检测项                                       | 检测方法                                                                                                              | 预期结果       | 影响的组件                 |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | -------------- | -------------------------- |
+| **research-worker: paper-search**            | 查找 `.aether/skills/paper-search/SKILL.md`                                                                           | 文件存在       | research-worker            |
+| **sandbox-executor: docker**                 | 查找 `.aether/skills/docker/SKILL.md`                                                                                 | 文件存在       | sandbox-executor           |
+| **research-verifier: research-verification** | 查找 `.aether/skills/research-verification/SKILL.md`                                                                  | 文件存在       | research-verifier          |
+| **gpd-verifier: 5 个 skill_refs**            | 查找每个 gpd-\* skill 的 SKILL.md                                                                                     | 全部 5 个存在  | gpd-verifier               |
+| **gpd-reviewer: 3 个 skill_refs**            | 查找每个 gpd-\* skill 的 SKILL.md                                                                                     | 全部 3 个存在  | gpd-reviewer               |
+| **gpd-verification scripts**                 | 查找 `scripts/` 下 9 个 .py 文件                                                                                      | 全部 9 个存在  | gpd-verifier               |
+| **gpd-verification references**              | 查找 `references/check_registry.json` + `contract_checks.json` + 14 个 domain_checklists（共 16 个文件）              | 全部 16 个存在 | gpd-verifier               |
+| **gpd-errors references**                    | 查找 error_catalog.json + traceability_matrix.json + detection_strategies.json                                        | 全部存在       | gpd-reviewer, gpd-verifier |
+| **gpd-conventions references**               | 查找 convention_defaults.json + subfield_defaults/physics.json                                                        | 全部存在       | gpd-conventions MCP        |
+| **gpd-domain-check references**              | 查找 4 个 protocols + 14 个 bundles                                                                                   | 全部存在       | gpd-reviewer, gpd-verifier |
+| **literature-review scripts**                | 查找 search_databases.py + verify_citations.py + generate_pdf.py                                                      | 全部 3 个存在  | literature-review          |
+| **paper-search scripts**                     | 查找 arxiv_search.py + download_paper.py + inspire_search.py + s2_search.py + pubmed_search.py + extract_citations.py | 全部 6 个存在  | paper-search               |
 
 检测方法：遍历所有 `.aether/agent/*.md` 的 frontmatter `skill_refs`，解析每个 skill 名称，查找对应的 SKILL.md 文件路径。对 gpd-\* skills，额外检查 `references/` 和 `scripts/` 目录完整性。
 
@@ -201,14 +202,14 @@ agent 读取该文件后，直接跳过不可达的 API，无需在搜索时反�
 
 检测 MCP tool 调用和脚本执行是否返回合法结果。这是最重的一层，仅在 Layer 1-3 通过后执行。
 
-| 检测项                                 | 检测方法                                                                                  | 预期结果                                               | 影响的组件                 | 执行方            |
-| -------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------ | -------------------------- | ----------------- |
-| **research-state MCP online**          | 调用 `get_state(project_dir)`                                                             | 返回含 `phase` 和 `schema_version` 的 dict             | 所有 Path 3 phases         | worker (via MCP)  |
-| **research-state advance_plan**        | 调用 `advance_plan(phase="health_test", plan_number="0", project_dir)`                    | 返回含 `previous` 和 `current` 的 dict                 | phase transition           | worker (via MCP)  |
-| **9 个 SymPy 脚本 dry-run**            | 对每个脚本分别传入最小合法 JSON 输入，验证返回含 `status` 和 `schema_version` 的 JSON     | 9 个全部返回 pass                                      | gpd-verification           | worker (via MCP)  |
-| **alpha-research arxiv_search**        | `uv run .aether/skills/alpha-research/arxiv_search.py "health test query" --max-papers 1` | 返回至少 1 条结果                                      | alpha-research no-login    | worker (via bash) |
-| **research-conventions MCP online**    | 调用 `convention_lock_status(project_dir)`                                                | 返回含 `conventions` 和 `completeness_percent` 的 dict | gpd-verifier, gpd-reviewer | worker 仲裁       |
-| **research-conventions skill_resolve** | 调用 `skill_resolve_path(skill_name="gpd-conventions", project_dir)`                      | 返回 `found: true` + skill_dir 路径                    | subfield_defaults          | worker 仲裁       |
+| 检测项                                 | 检测方法                                                                                | 预期结果                                               | 影响的组件                 | 执行方            |
+| -------------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------ | -------------------------- | ----------------- |
+| **research-state MCP online**          | 调用 `get_state(project_dir)`                                                           | 返回含 `phase` 和 `schema_version` 的 dict             | 所有 Path 3 phases         | worker (via MCP)  |
+| **research-state advance_plan**        | 调用 `advance_plan(phase="health_test", plan_number="0", project_dir)`                  | 返回含 `previous` 和 `current` 的 dict                 | phase transition           | worker (via MCP)  |
+| **9 个 SymPy 脚本 dry-run**            | 对每个脚本分别传入最小合法 JSON 输入，验证返回含 `status` 和 `schema_version` 的 JSON   | 9 个全部返回 pass                                      | gpd-verification           | worker (via MCP)  |
+| **paper-search arxiv_search**          | `uv run .aether/skills/paper-search/arxiv_search.py "health test query" --max-papers 1` | 返回至少 1 条结果                                      | paper-search               | worker (via bash) |
+| **research-conventions MCP online**    | 调用 `convention_lock_status(project_dir)`                                              | 返回含 `conventions` 和 `completeness_percent` 的 dict | gpd-verifier, gpd-reviewer | worker 仲裁       |
+| **research-conventions skill_resolve** | 调用 `skill_resolve_path(skill_name="gpd-conventions", project_dir)`                    | 返回 `found: true` + skill_dir 路径                    | subfield_defaults          | worker 仲裁       |
 
 **关键设计**：
 
@@ -253,10 +254,10 @@ def run_health_check(
     """Full project health dashboard with 4-layer progressive detection.
 
     Layers:
-    - infrastructure: uv, docker, alpha CLI, network reachability (3 endpoints)
+    - infrastructure: uv, git, network reachability (6 endpoints: arxiv, s2, inspire_hep, pubmed, alphaxiv, crossref)
     - persistence: directory writable, state.json valid, convention_defaults readable
     - skill_chain: SKILL.md existence, gpd references/scripts completeness
-    - runtime: MCP tool calls, all 9 SymPy scripts dry-run, alpha search
+    - runtime: MCP tool calls, all 9 SymPy scripts dry-run, paper search
 
     NOTE: Cross-MCP checks (research-conventions) are NOT included in
     this tool's output. The agent must call research-conventions MCP
@@ -289,9 +290,10 @@ def run_health_check(
         "git_working_dir": { "status": "pass", "git_dir": ".git" },
         "docker_cli": { "status": "pass", "client_version": "24.0.7" },
         "docker_daemon": { "status": "pass", "server_version": "24.0.7", "running": true },
-        "alpha_cli": { "status": "pass", "authenticated": true },
         "network_arxiv": { "status": "pass", "method": "curl", "http_code": 200 },
-        "network_semantic_scholar": { "status": "pass", "method": "curl", "http_code": 200 },
+        "network_alphaxiv": { "status": "pass", "method": "curl", "http_code": 200 },
+        "network_crossref": { "status": "pass", "method": "curl", "http_code": 200 },
+        "network_s2": { "status": "pass", "method": "curl", "http_code": 200 },
         "network_inspire_hep": { "status": "pass", "method": "curl", "http_code": 200 }
       },
       "issues": []
@@ -308,7 +310,7 @@ def run_health_check(
     "skill_chain": {
       "healthy": true,
       "checks": {
-        "research_worker_alpha_research": { "status": "pass", "path": ".../alpha-research/SKILL.md" },
+        "research_worker_paper_search": { "status": "pass", "path": ".../paper-search/SKILL.md" },
         "gpd_verifier_5_skills": { "status": "pass", "count": 5 },
         "gpd_verification_9_scripts": { "status": "pass", "count": 9 },
         "gpd_verification_references": { "status": "pass", "count": 16 }
@@ -331,14 +333,14 @@ def run_health_check(
           "kramers_kronig_check": { "status": "pass" },
           "symmetry_check": { "status": "pass" }
         },
-        "alpha_search": { "status": "pass", "results_count": 1 }
+        "paper_search": { "status": "pass", "results_count": 1 }
       },
       "issues": [],
       "cross_mcp_pending": ["research_conventions_mcp_online", "convention_skill_resolve"]
     }
   },
   "summary": {
-    "total_checks": 24,
+    "total_checks": 26,
     "passed": 22,
     "failed": 0,
     "degradations": [],
@@ -348,7 +350,7 @@ def run_health_check(
 }
 ```
 
-**注意**：返回格式中 `nvidia_gpu` 已移除（D12），Docker 拆分为 `docker_cli` 和 `docker_daemon`（D4），网络检测扩展为 3 个 endpoint（D13），SymPy dry-run 扩展为 9 个脚本（D4），新增 `cross_mcp_pending` 字段标识需 agent 仲裁补充的检测项。
+**注意**：返回格式中 `nvidia_gpu` 已移除（D12），`alpha_cli` 已移除（由 paper-search skill 替代 alpha CLI），`network_semantic_scholar` 合并为 `network_s2`（同一 API），Docker 拆分为 `docker_cli` 和 `docker_daemon`（D4），网络检测扩展为 6 个 endpoint（arxiv, s2, inspire_hep, pubmed, alphaxiv, crossref），SymPy dry-run 扩展为 9 个脚本（D4），新增 `cross_mcp_pending` 字段标识需 agent 仲裁补充的检测项。
 
 #### 检测顺序约束
 
@@ -460,7 +462,7 @@ MCP server 是 Python 进程。如果 uv 不可用，MCP server 无法启动，`
 - 不调用任何 MCP tool
 - 不 dispatch research-worker（worker 依赖 MCP）
 - 不执行任何 Python 脚本
-- 不使用 SymPy 验证、alpha 搜索、Docker 容器
+- 不使用 SymPy 验证、Docker 容器
 - 仅使用 LLM reasoning、bash 基础命令（git、curl）、本地文件读写
 - 在 STATE.md 标记 `infrastructure: degraded`，详情见 `~/.aether/health/global_health.json`
 
@@ -508,12 +510,14 @@ research-worker (health_check 模式):
     "uv_available": { "status": "pass", "version": "0.4.20" },
     "docker_cli": { "status": "pass", "client_version": "24.0.7" },
     "docker_daemon": { "status": "pass", "server_version": "24.0.7" },
-    "git_available": { "status": "pass", "version": "2.43.0" },
-    "alpha_cli": { "status": "pass", "authenticated": true }
+    "git_available": { "status": "pass", "version": "2.43.0" }
   },
   "network": {
     "arxiv": { "status": "pass", "method": "curl", "http_code": 200 },
-    "semantic_scholar": { "status": "pass", "method": "curl", "http_code": 200 },
+    "alphaxiv": { "status": "pass", "method": "curl", "http_code": 200 },
+    "crossref": { "status": "pass", "method": "curl", "http_code": 200 },
+    "s2": { "status": "pass", "method": "curl", "http_code": 200 },
+    "pubmed": { "status": "pass", "method": "curl", "http_code": 200 },
     "inspire_hep": { "status": "fail", "method": null }
   }
 }
@@ -716,21 +720,23 @@ coordinator 收到 health_check digest 后的处理流程：
 
 ## 6. 降级策略
 
-| 检测失败项                     | 降级方案                                                | 降级范围                                      | 可自动安装 | 用户提示                                                      |
-| ------------------------------ | ------------------------------------------------------- | --------------------------------------------- | ---------- | ------------------------------------------------------------- |
-| uv 不可用                      | 无 Python 计算能力，所有 SymPy 脚本不可用               | gpd-verification, local-executor, MCP scripts | yes        | "uv 未安装，可自动安装（需逐项授权）"                         |
-| git 不可用                     | Phase Commit 和 State Recovery rollback 不可用          | Phase Commit Protocol, State Recovery         | yes        | "git 未安装，可自动安装（需逐项授权）"                        |
-| 非 git 仓库                    | Phase Commit 和 rollback 不可用（无 repo context）      | Phase Commit Protocol, State Recovery         | yes        | "非 git 仓库，可自动执行 git init（需逐项授权）"              |
-| Docker CLI 未安装              | sandbox-executor 不可用，所有 docker 任务降级为 uv_venv | sandbox-executor                              | yes        | "Docker 未安装，可自动安装（需逐项授权）"                     |
-| Docker daemon 未运行           | sandbox-executor 不可用                                 | sandbox-executor                              | yes        | "Docker 已安装但 daemon 未运行，可尝试自动启动（需逐项授权）" |
-| alpha CLI 未认证               | 论文搜索降级为 title+abstract only（no-login mode）     | alpha-research skill                          | partial    | "alpha CLI 可自动安装，但认证需手动执行 `alpha login`"        |
-| 网络不可达（arXiv）            | arXiv 论文搜索不可用                                    | alpha-research, literature-review             | no         | "arXiv API 不可达，请检查网络"                                |
-| 网络不可达（Semantic Scholar） | Semantic Scholar 搜索不可用                             | literature-review, research-worker            | no         | "Semantic Scholar API 不可达"                                 |
-| 网络不可达（INSPIRE-HEP）      | INSPIRE-HEP 物理文献搜索不可用                          | physics 文献搜索                              | no         | "INSPIRE-HEP 不可达，物理文献搜索降级为 arXiv only"           |
-| gpd skill 链断裂               | 物理验证降级为 research-verification only               | gpd-verifier, gpd-reviewer                    | no         | "gpd skills 不完整，请检查 skills 目录"                       |
-| SymPy 脚本不可运行             | 计算验证降级为 LLM-only reasoning                       | gpd-verification scripts                      | no         | "SymPy 脚本无法运行（依赖 uv + 网络）"                        |
-| research-conventions MCP 离线  | 约定锁读写不可用，验证流程降级                          | gpd-verifier, gpd-reviewer                    | no         | "research-conventions MCP 离线，请重启 agent"                 |
-| convention_defaults.json 缺失  | subfield_defaults 不可用，需手动指定约定                | gpd-conventions                               | no         | "物理约定默认值文件缺失"                                      |
+| 检测失败项                    | 降级方案                                                | 降级范围                                      | 可自动安装 | 用户提示                                                      |
+| ----------------------------- | ------------------------------------------------------- | --------------------------------------------- | ---------- | ------------------------------------------------------------- |
+| uv 不可用                     | 无 Python 计算能力，所有 SymPy 脚本不可用               | gpd-verification, local-executor, MCP scripts | yes        | "uv 未安装，可自动安装（需逐项授权）"                         |
+| git 不可用                    | Phase Commit 和 State Recovery rollback 不可用          | Phase Commit Protocol, State Recovery         | yes        | "git 未安装，可自动安装（需逐项授权）"                        |
+| 非 git 仓库                   | Phase Commit 和 rollback 不可用（无 repo context）      | Phase Commit Protocol, State Recovery         | yes        | "非 git 仓库，可自动执行 git init（需逐项授权）"              |
+| Docker CLI 未安装             | sandbox-executor 不可用，所有 docker 任务降级为 uv_venv | sandbox-executor                              | yes        | "Docker 未安装，可自动安装（需逐项授权）"                     |
+| Docker daemon 未运行          | sandbox-executor 不可用                                 | sandbox-executor                              | yes        | "Docker 已安装但 daemon 未运行，可尝试自动启动（需逐项授权）" |
+| 网络不可达（arXiv）           | arXiv 论文搜索不可用                                    | paper-search skill                            | no         | "arXiv API 不可达，请检查网络"                                |
+| 网络不可达（alphaxiv）        | alphaxiv 全文搜索不可用                                 | paper-search skill                            | no         | "alphaxiv API 不可达"                                         |
+| 网络不可达（Crossref）        | DOI 验证不可用                                          | paper-search skill                            | no         | "Crossref API 不可达，DOI 验证降级"                           |
+| 网络不可达（S2）              | Semantic Scholar S2 搜索不可用                          | paper-search skill                            | no         | "S2 API 不可达"                                               |
+| 网络不可达（PubMed）          | PubMed 搜索不可用                                       | paper-search skill                            | no         | "PubMed API 不可达"                                           |
+| 网络不可达（INSPIRE-HEP）     | INSPIRE-HEP 物理文献搜索不可用                          | paper-search skill                            | no         | "INSPIRE-HEP 不可达，物理文献搜索降级为 arXiv only"           |
+| gpd skill 链断裂              | 物理验证降级为 research-verification only               | gpd-verifier, gpd-reviewer                    | no         | "gpd skills 不完整，请检查 skills 目录"                       |
+| SymPy 脚本不可运行            | 计算验证降级为 LLM-only reasoning                       | gpd-verification scripts                      | no         | "SymPy 脚本无法运行（依赖 uv + 网络）"                        |
+| research-conventions MCP 离线 | 约定锁读写不可用，验证流程降级                          | gpd-verifier, gpd-reviewer                    | no         | "research-conventions MCP 离线，请重启 agent"                 |
+| convention_defaults.json 缺失 | subfield_defaults 不可用，需手动指定约定                | gpd-conventions                               | no         | "物理约定默认值文件缺失"                                      |
 
 > **partial** 表示可自动安装本体但需用户手动完成后续步骤（如认证）。
 > NVIDIA GPU 不在此表中——aether 本身不依赖 GPU（D12）。项目级 GPU 需求由 ENVIRONMENT.md 声明。
@@ -744,9 +750,10 @@ infrastructure.pass AND persistence.pass AND skill_chain.fail(gpd) → 通用研
 infrastructure.fail(uv) → Tier 0 LLM bootstrap，无 Python 计算能力
 infrastructure.fail(git) → Phase Commit 和 State Recovery rollback 不可用
 infrastructure.fail(git_working_dir) → rollback 不可用（非 git 仓库）
-infrastructure.fail(alpha_cli) → 论文搜索降级
 infrastructure.fail(network_arxiv) → arXiv 搜索不可用
-infrastructure.fail(network_semantic_scholar) → Semantic Scholar 搜索不可用
+infrastructure.fail(network_alphaxiv) → alphaxiv 全文搜索不可用
+infrastructure.fail(network_crossref) → DOI 验证不可用
+infrastructure.fail(network_s2) → Semantic Scholar S2 搜索不可用
 infrastructure.fail(network_inspire_hep) → INSPIRE-HEP 搜索不可用
 infrastructure.fail(docker_cli) → Docker 未安装，容器隔离不可用
 infrastructure.fail(docker_daemon) AND docker_cli.pass → Docker 已安装但 daemon 未运行
@@ -841,19 +848,6 @@ env-setup/
     "health_check_key": "docker_daemon",
     "condition": "docker_cli == pass AND docker_daemon == fail",
     "priority": "medium"
-  },
-  "alpha_cli": {
-    "auto_installable": "partial",
-    "platforms": {
-      "macos": "brew install alpha || npm install -g @anthropic/alpha",
-      "linux": "npm install -g @anthropic/alpha"
-    },
-    "verify_command": "alpha status",
-    "post_install_note": "安装完成后需手动执行 `alpha login` 完成认证",
-    "manual_step": "alpha login",
-    "layer": "infrastructure",
-    "health_check_key": "alpha_cli",
-    "priority": "low"
   }
 }
 ```
@@ -869,7 +863,6 @@ env-setup/
 | `verify_command`       | string           | 安装后用于验证的命令，与 health check 对应项的检测方法一致                        |
 | `verify_delay_seconds` | number \| null   | 安装后等待多少秒再执行 verify_command（适用于 Docker Desktop 等需启动时间的软件） |
 | `post_install_note`    | string \| null   | 安装后需用户注意的事项（如重启 shell、打开 GUI）                                  |
-| `manual_step`          | string \| null   | `partial` 类型需要的手动后续步骤（如 `alpha login`）                              |
 | `manual_instructions`  | string \| null   | `false` 类型提供给用户的手动安装指引                                              |
 | `condition`            | string \| null   | 安装前置条件表达式，如 `git_available == pass AND git_working_dir == fail`        |
 | `layer`                | string           | 对应 health check 的层级，用于定位 health_check_key                               |
@@ -901,13 +894,9 @@ env-setup/
    │  "Docker 是可选的容器隔离环境，不安装则降级为 uv venv。
    │   安装命令：brew install --cask docker (macOS) / get.docker.com (Linux)
    │   是否授权自动安装 Docker？[yes/no]"
-   │  → ...
-   │
-   └─ alpha CLI 未认证（priority: low, partial）
-      "alpha CLI 可提升论文搜索质量（全文阅读），安装后需手动 alpha login。
-       是否授权自动安装 alpha CLI？[yes/no]"
-      → ...
-4. 执行每项安装：
+    │  → ...
+    │
+ 4. 执行每项安装：
    - 执行前检查 condition（如 git_init 需要 git_available 先通过）
    - 执行 install_command
    - 若 verify_delay_seconds 非空 → 等待指定秒数（告知用户"等待服务启动..."）
@@ -918,11 +907,10 @@ env-setup/
    - 有 post_install_note → 告知用户注意事项
    - partial 类型 → 告知用户需执行 manual_step
 5. 安装完毕 → 重新调用 run_health_check 验证整体状态
-6. 整理 manual_items + install_failed + user_declined + partial 的 manual_step：
-   "以下项仍需手动处理：
-   - alpha CLI: 请执行 `alpha login`
-   - uv: 安装失败，请手动执行 curl ... | sh 或重开终端
-   - [用户拒绝的项]：可稍后通过 '检查环境' 重新检测并安装"
+ 6. 整理 manual_items + install_failed + user_declined：
+    "以下项仍需手动处理：
+    - uv: 安装失败，请手动执行 curl ... | sh 或重开终端
+    - [用户拒绝的项]：可稍后通过 '检查环境' 重新检测并安装"
 ```
 
 **关键设计**：逐项授权而非批量授权（D11）。用户可只安装 uv（必须）而跳过 Docker（可选），不被迫二选一。
@@ -947,7 +935,7 @@ env-setup/
 3. 重构 `run_health_check` 参数签名：移除 `fix` 参数，增加 `layers` 参数
 4. 检测顺序改为 infrastructure → persistence → skill_chain → runtime
 5. Docker 检测拆分为 `docker_cli`（Client.Version）和 `docker_daemon`（ServerVersion）
-6. 网络检测使用 fallback 方案（curl → wget → python3），检测 3 个 endpoint
+6. 网络检测使用 fallback 方案（curl → wget → python3），检测 6 个 endpoint
 7. 移除 NVIDIA GPU 检测
 8. SymPy dry-run 改为所有 9 个脚本
 9. runtime 层返回 `cross_mcp_pending` 而非直接调用 research-conventions MCP
@@ -1024,16 +1012,10 @@ def _check_infrastructure(project_dir: Path) -> dict:
     elif checks.get("docker_cli", False):
         issues.append("docker CLI available but daemon not running")
 
-    result = subprocess.run(["alpha", "status"], capture_output=True, text=True, timeout=10)
-    if result.returncode == 0:
-        checks["alpha_cli"] = "account" in result.stdout.lower() or "logged" in result.stdout.lower()
-        checks["alpha_authenticated"] = checks["alpha_cli"]
-    else:
-        checks["alpha_cli_available"] = False
-        issues.append("alpha CLI not available")
-
     checks["network_arxiv"] = _check_network("https://api.arxiv.org")
-    checks["network_semantic_scholar"] = _check_network("https://api.semanticscholar.org")
+    checks["network_alphaxiv"] = _check_network("https://alphaxiv.org")
+    checks["network_crossref"] = _check_network("https://api.crossref.org")
+    checks["network_s2"] = _check_network("https://api.semanticscholar.org")
     checks["network_inspire_hep"] = _check_network("https://inspirehep.net/api")
 
     return {"healthy": len(issues) == 0, "checks": checks, "issues": issues}
@@ -1171,7 +1153,7 @@ Step 6: 输出 PhaseResultDigest（见 §5.6 schema），next_phase=null
 **提取为独立 skill 的原因**：
 
 1. health_check 检测逻辑复杂（4 层、30+ 检测项、cross-MCP 仲裁、临时文件写入），独立 skill 避免 research-worker.md 过长
-2. 与其他 phase 走 skill tool 调用链路一致（phase_analysis → alpha-research skill, phase_execution → autoresearch skill）
+2. 与其他 phase 走 skill tool 调用链路一致（phase_analysis → paper-search skill, phase_execution → autoresearch skill）
 3. Skill 可独立迭代修改，不影响 research-worker.md 的 phase routing 和 digest 格式定义
 
 **关键约束**：
@@ -1264,12 +1246,14 @@ coordinator 在 Tier 0.5 阶段调用 `bash ~/.aether/health/cache_check.sh`：
     "uv_available": { "status": "pass", "version": "0.4.20" },
     "docker_cli": { "status": "pass", "client_version": "24.0.7" },
     "docker_daemon": { "status": "pass", "server_version": "24.0.7" },
-    "git_available": { "status": "pass", "version": "2.43.0" },
-    "alpha_cli": { "status": "pass", "authenticated": true }
+    "git_available": { "status": "pass", "version": "2.43.0" }
   },
   "network": {
     "arxiv": { "status": "pass", "method": "curl", "http_code": 200 },
-    "semantic_scholar": { "status": "pass", "method": "curl", "http_code": 200 },
+    "alphaxiv": { "status": "pass", "method": "curl", "http_code": 200 },
+    "crossref": { "status": "pass", "method": "curl", "http_code": 200 },
+    "s2": { "status": "pass", "method": "curl", "http_code": 200 },
+    "pubmed": { "status": "pass", "method": "curl", "http_code": 200 },
     "inspire_hep": { "status": "fail", "method": null }
   }
 }
@@ -1283,7 +1267,10 @@ coordinator 在 Tier 0.5 阶段调用 `bash ~/.aether/health/cache_check.sh`：
 ## Reachable
 
 - arxiv: OK (curl, 200)
-- semantic_scholar: OK (curl, 200)
+- alphaxiv: OK (curl, 200)
+- crossref: OK (curl, 200)
+- s2: OK (curl, 200)
+- pubmed: OK (curl, 200)
 
 ## Unreachable
 
@@ -1291,7 +1278,7 @@ coordinator 在 Tier 0.5 阶段调用 `bash ~/.aether/health/cache_check.sh`：
 
 ## Recommendations
 
-- arXiv/Semantic Scholar 可用 → 论文搜索正常
+- arXiv/S2 可用 → 论文搜索正常
 - INSPIRE-HEP 不可用 → physics 领域文献搜索降级为 arXiv only
 ```
 
@@ -1301,69 +1288,69 @@ coordinator 在 Tier 0.5 阶段调用 `bash ~/.aether/health/cache_check.sh`：
 
 ### 7.5 文件改动清单
 
-| 文件                                                        | 改动内容                                                                                                                                                                                                                    |
-| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `.aether/mcp/research-state/server.py`                      | 扩展 run_health_check，新增 Layer 1-4 检测函数，拆分 docker 检测，移除 nvidia/fix，增加 fallback 网络，所有 9 sympy dry-run（stdin 传最小合法输入），增加 cross_mcp_pending，alpha_cli 区分 not_installed/not_authenticated |
-| `.aether/agent/research.md`                                 | Session Recovery 增加 Tier 0 bash 自检 + Tier 0.5 全局目录预创建 + worker dispatch + digest 处理 + 临时文件迁移至全局 + env-setup 逐项授权交互 + STATE.md/Blockers degradation 更新规则                                     |
-| `.aether/agent/research-worker.md`                          | Phase Routing 增加 health_check 行，skill_refs 增加 health-check，增加 health_check 模式执行协议（调用 health-check skill + 返回 digest）                                                                                   |
-| `.aether/skills/health-check/SKILL.md`                      | 新增：health_check 模式执行 skill（6 步协议：读取参数 → 调用 MCP → cross-MCP 仲裁 → 写临时文件 → 构建摘要 → 输出 digest）                                                                                                   |
-| `.aether/skills/autoresearch/SKILL.md`                      | Step 2 环境探测改为 uv 优先，移除 python3，移除 nvidia-smi，ENVIRONMENT.md host_system 字段更新                                                                                                                             |
-| `.aether/skills/env-setup/SKILL.md`                         | 新增：逐项授权自动安装工作流指引                                                                                                                                                                                            |
-| `.aether/skills/env-setup/references/install_registry.json` | 新增：软件 → 安装方法映射（含 priority 字段，移除 nvidia）                                                                                                                                                                  |
-| `packages/opencode/src/plugin/aether-bin.ts`                | 新增：将 `~/.aether/bin` 加入 shell PATH（支持 uv 安装后同一进程可用）                                                                                                                                                      |
-| `packages/opencode/src/plugin/index.ts`                     | 注册 AetherBinPlugin                                                                                                                                                                                                        |
-| `~/.aether/health/global_health.json`                       | 运行时：全局检测结果存储位置（由 coordinator 从临时文件迁移写入）                                                                                                                                                           |
-| `~/.aether/health/network_status.md`                        | 运行时：网络状态文件供 agent 阅读（由 coordinator 从临时文件迁移写入）                                                                                                                                                      |
-| `~/.aether/health/cache_check.sh`                           | 由 `seedDefaultAssets()` 从 `.aether/health/cache_check.sh` 同步至 `~/.aether/health/`（与 agent/mcp/skills 一同在 CLI 启动时同步），缓存有效期判断脚本（基于文件 mtime，避免 LLM 计算时间差）                              |
-| `packages/opencode/src/persist/migrate.ts`                  | `seedDefaultAssets()` 新增 `health` subdir 同步（条件：`.aether/health/` 存在）                                                                                                                                             |
-| `.aether/agent/local-executor.md`                           | 无改动（已有 uv venv 流程）                                                                                                                                                                                                 |
+| 文件                                                        | 改动内容                                                                                                                                                                                                                                         |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `.aether/mcp/research-state/server.py`                      | 扩展 run_health_check，新增 Layer 1-4 检测函数，拆分 docker 检测，移除 nvidia/fix/alpha_cli，合并 network_semantic_scholar 为 network_s2，增加 fallback 网络（6 endpoint），所有 9 sympy dry-run（stdin 传最小合法输入），增加 cross_mcp_pending |
+| `.aether/agent/research.md`                                 | Session Recovery 增加 Tier 0 bash 自检 + Tier 0.5 全局目录预创建 + worker dispatch + digest 处理 + 临时文件迁移至全局 + env-setup 逐项授权交互 + STATE.md/Blockers degradation 更新规则                                                          |
+| `.aether/agent/research-worker.md`                          | Phase Routing 增加 health_check 行，skill_refs 增加 health-check，增加 health_check 模式执行协议（调用 health-check skill + 返回 digest）                                                                                                        |
+| `.aether/skills/health-check/SKILL.md`                      | 新增：health_check 模式执行 skill（6 步协议：读取参数 → 调用 MCP → cross-MCP 仲裁 → 写临时文件 → 构建摘要 → 输出 digest）                                                                                                                        |
+| `.aether/skills/autoresearch/SKILL.md`                      | Step 2 环境探测改为 uv 优先，移除 python3，移除 nvidia-smi，ENVIRONMENT.md host_system 字段更新                                                                                                                                                  |
+| `.aether/skills/env-setup/SKILL.md`                         | 新增：逐项授权自动安装工作流指引                                                                                                                                                                                                                 |
+| `.aether/skills/env-setup/references/install_registry.json` | 新增：软件 → 安装方法映射（含 priority 字段，移除 nvidia）                                                                                                                                                                                       |
+| `packages/opencode/src/plugin/aether-bin.ts`                | 新增：将 `~/.aether/bin` 加入 shell PATH（支持 uv 安装后同一进程可用）                                                                                                                                                                           |
+| `packages/opencode/src/plugin/index.ts`                     | 注册 AetherBinPlugin                                                                                                                                                                                                                             |
+| `~/.aether/health/global_health.json`                       | 运行时：全局检测结果存储位置（由 coordinator 从临时文件迁移写入）                                                                                                                                                                                |
+| `~/.aether/health/network_status.md`                        | 运行时：网络状态文件供 agent 阅读（由 coordinator 从临时文件迁移写入）                                                                                                                                                                           |
+| `~/.aether/health/cache_check.sh`                           | 由 `seedDefaultAssets()` 从 `.aether/health/cache_check.sh` 同步至 `~/.aether/health/`（与 agent/mcp/skills 一同在 CLI 启动时同步），缓存有效期判断脚本（基于文件 mtime，避免 LLM 计算时间差）                                                   |
+| `packages/opencode/src/persist/migrate.ts`                  | `seedDefaultAssets()` 新增 `health` subdir 同步（条件：`.aether/health/` 存在）                                                                                                                                                                  |
+| `.aether/agent/local-executor.md`                           | 无改动（已有 uv venv 流程）                                                                                                                                                                                                                      |
 
 ---
 
 ## 8. 验收清单
 
-| #   | 验收项                                                                                                  | 验收方法                                                                                                                   |
-| --- | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| 1   | `run_health_check(layers=["infrastructure"])` 返回 uv 版本                                              | 调用 MCP tool，检查返回含 uv_version                                                                                       |
-| 2   | `run_health_check` 不检测 python3                                                                       | 调用 MCP tool，返回中无 python3 相关字段                                                                                   |
-| 3   | `run_health_check` 不检测 nvidia_gpu                                                                    | 调用 MCP tool，返回中无 nvidia_gpu 相关字段                                                                                |
-| 4   | Docker 检测拆分为 docker_cli 和 docker_daemon                                                           | Docker 未安装时 docker_cli=fail，daemon 未运行时 docker_cli=pass+docker_daemon=fail                                        |
-| 5   | 网络检测覆盖 arXiv/Semantic Scholar/INSPIRE-HEP 三个 endpoint                                           | 调用 MCP tool，返回含 network_arxiv/semantic_scholar/inspire_hep                                                           |
-| 6   | 网络检测 fallback：curl 不可用时自动降级到 wget/python                                                  | 模拟 curl 不可用环境，网络检测仍返回结果                                                                                   |
-| 7   | `~/.aether/health/network_status.md` 存在且内容有效                                                     | 读取文件，含 Reachable/Unreachable/Recommendations                                                                         |
-| 8   | 检测顺序为 infrastructure → persistence → skill_chain → runtime                                         | 调用全量检测，各层按此顺序执行                                                                                             |
-| 9   | persistence 层在 skill_chain 之前执行                                                                   | 调用 layers=["persistence","skill_chain"]，persistence 先完成                                                              |
-| 10  | `run_health_check` runtime 层包含所有 9 个 SymPy dry-run                                                | 调用 MCP tool，返回 sympy_dry_run 含 9 个脚本结果                                                                          |
-| 11  | runtime 层返回 cross_mcp_pending 字段                                                                   | 调用 MCP tool，返回含 cross_mcp_pending 列表                                                                               |
-| 12  | advance_plan rollback 失败时 fallback 写回 state.json 原文                                              | 模拟 rollback 失败，检测后 state.json 内容与检测前一致                                                                     |
-| 13  | research.md Session Recovery 包含 Tier 0 bash 自检步骤                                                  | 读取 research.md，有 uv bash 检测步骤                                                                                      |
-| 14  | research.md Session Recovery 包含 worker dispatch 步骤（非直接 MCP 调用）                               | 读取 research.md，Tier 1-4 步骤为 dispatch research-worker(mode=health_check)                                              |
-| 15  | `~/.aether/health/global_health.json` 不含 expires_at 字段，缓存有效期由文件 mtime 判断                 | 读取文件，无 expires_at 键；mtime 距当前时间 < 24h 时 cache_check.sh 返回 0                                                |
-| 16  | 全局检测结果 24h 过期后自动重新检测（通过 cache_check.sh 判断）                                         | 修改 global_health.json 的 mtime 为 25 小时前，cache_check.sh 返回 1，coordinator dispatch worker 重新检测                 |
-| 17  | autoresearch SKILL.md Step 2 不包含 python3                                                             | 读取 SKILL.md，无 `python3 --version`                                                                                      |
-| 18  | 降级策略：Docker CLI 未安装 vs daemon 未运行提示不同                                                    | docker_cli fail 提示"未安装"，docker_daemon fail 提示"未运行"                                                              |
-| 19  | env-setup skill SKILL.md 含逐项授权工作流                                                               | 查找 `.aether/skills/env-setup/SKILL.md`                                                                                   |
-| 20  | install_registry.json 含 priority 字段                                                                  | 读取 registry，每项有 priority（critical/high/medium/low）                                                                 |
-| 21  | install_registry.json 不含 nvidia_gpu                                                                   | 读取 registry，无 nvidia_gpu 条目                                                                                          |
-| 22  | 自动安装逐项授权而非批量                                                                                | 模拟 uv+docker 不可用，coordinator 逐项询问而非一次性全量授权                                                              |
-| 23  | Tier 0 LLM bootstrap：uv 不可用时 coordinator bash 检测                                                 | 移除 uv，会话启动时 coordinator 执行 uv --version bash 命令                                                                |
-| 24  | STATE.md Health Status section 仅含各层 pass/fail/degraded，不含具体检测项细节                          | 读取 STATE.md，Health Status 无具体脚本名、endpoint 名、版本号                                                             |
-| 25  | STATE.md Health Status 指向 global_health.json 和 network_status.md                                     | 读取 STATE.md，含指向全局文件的链接                                                                                        |
-| 26  | health check 全部通过时 STATE.md Next Action 不更新                                                     | 模拟全部通过场景，Next Action 保持原 workflow 值不变                                                                       |
-| 27  | health check 发现 degradation 时 STATE.md Next Action 更新为 degradation 概要 + 指向 global_health.json | 模拟 uv 不可用，Next Action 变为 "health check: infrastructure degraded (uv) → 详情见 ~/.aether/health/global_health.json" |
-| 28  | degradation 解除后 STATE.md Next Action 恢复到原 workflow 值                                            | 用户安装 uv 后 worker 重新检测通过，coordinator 从 Blockers 恢复 Next Action                                               |
-| 29  | 用户请求"检查环境"时 STATE.md Next Action 不更新                                                        | 在活跃 phase 中请求 health check，Next Action 保持不变                                                                     |
-| 30  | degradation 时原 Next Action 备份到 STATE.md Blockers section                                           | 模拟 degradation，Blockers 出现 health_degradation 条目                                                                    |
-| 31  | research-worker.md Phase Routing 包含 health_check 行                                                   | 读取 research-worker.md，Phase Routing table 有 health_check 行                                                            |
-| 32  | research-worker.md 包含 health_check 模式执行协议                                                       | 读取 research-worker.md，有 health_check 模式的 MCP 调用 + cross-MCP 仲裁 + digest 输出步骤                                |
-| 33  | worker health_check digest 包含 degradation_summary 和 failed_items                                     | 模拟检测场景，worker digest 含 degradation_summary（各层状态）+ failed_items（含 auto_installable/priority）               |
-| 34  | worker health_check 模式不调用 advance_plan                                                             | 执行 health_check 模式，digest 的 next_phase=null，state.json phase 不变                                                   |
-| 35  | worker health_check 模式写入项目内临时文件（不超出 file_scope）                                         | 执行 health_check 模式，.health_global.json 和 .health_network.md 写入 .aether/research/ 下                                |
-| 36  | coordinator 处理 health_check digest 后正确更新 STATE.md                                                | 模拟 degradation digest，coordinator 更新 STATE.md Health Status + Blockers + Next Action                                  |
-| 37  | coordinator 将临时文件迁移至 ~/.aether/health/ 并删除临时文件                                           | 执行完整 health_check 流程，global_health.json 和 network_status.md 出现在 ~/.aether/health/，临时文件已删除               |
-| 38  | Tier 0.5 预创建 ~/.aether/health/ 空占位文件，后续覆写不再触发权限申请                                  | 首次会话观察权限申请弹窗一次，第二次 health check 覆写同文件时无弹窗                                                       |
-| 39  | alpha_cli 区分 not_installed vs not_authenticated                                                       | alpha CLI 未安装时 failure_class=not_installed，已安装但未认证时 failure_class=not_authenticated                           |
-| 40  | health-check skill 存在且包含 6 步执行协议                                                              | 查找 `.aether/skills/health-check/SKILL.md`，含 Step 1-6 + PhaseResultDigest 输出                                          |
-| 41  | research-worker.md skill_refs 包含 health-check                                                         | 读取 research-worker.md，skill_refs 列表有 health-check                                                                    |
-| 42  | cache_check.sh 由 seedDefaultAssets() 同步至 ~/.aether/health/                                          | 首次 CLI 启动后 ~/.aether/health/cache_check.sh 存在且可执行                                                               |
-| 43  | seedDefaultAssets() 包含 health subdir 同步                                                             | 读取 migrate.ts，subdirs 列表含 "health"（条件：.aether/health/ 存在）                                                     |
+| #   | 验收项                                                                                                  | 验收方法                                                                                                                                                 |
+| --- | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `run_health_check(layers=["infrastructure"])` 返回 uv 版本                                              | 调用 MCP tool，检查返回含 uv_version                                                                                                                     |
+| 2   | `run_health_check` 不检测 python3                                                                       | 调用 MCP tool，返回中无 python3 相关字段                                                                                                                 |
+| 3   | `run_health_check` 不检测 nvidia_gpu                                                                    | 调用 MCP tool，返回中无 nvidia_gpu 相关字段                                                                                                              |
+| 4   | Docker 检测拆分为 docker_cli 和 docker_daemon                                                           | Docker 未安装时 docker_cli=fail，daemon 未运行时 docker_cli=pass+docker_daemon=fail                                                                      |
+| 5   | 网络检测覆盖 6 个 endpoint（arxiv, s2, inspire_hep, pubmed, alphaxiv, crossref）                        | 调用 MCP tool，返回含 network_arxiv/s2/inspire_hep/pubmed/alphaxiv/crossref                                                                              |
+| 6   | 网络检测 fallback：curl 不可用时自动降级到 wget/python                                                  | 模拟 curl 不可用环境，网络检测仍返回结果                                                                                                                 |
+| 7   | `~/.aether/health/network_status.md` 存在且内容有效                                                     | 读取文件，含 Reachable/Unreachable/Recommendations                                                                                                       |
+| 8   | 检测顺序为 infrastructure → persistence → skill_chain → runtime                                         | 调用全量检测，各层按此顺序执行                                                                                                                           |
+| 9   | persistence 层在 skill_chain 之前执行                                                                   | 调用 layers=["persistence","skill_chain"]，persistence 先完成                                                                                            |
+| 10  | `run_health_check` runtime 层包含所有 9 个 SymPy dry-run                                                | 调用 MCP tool，返回 sympy_dry_run 含 9 个脚本结果                                                                                                        |
+| 11  | runtime 层返回 cross_mcp_pending 字段                                                                   | 调用 MCP tool，返回含 cross_mcp_pending 列表                                                                                                             |
+| 12  | advance_plan rollback 失败时 fallback 写回 state.json 原文                                              | 模拟 rollback 失败，检测后 state.json 内容与检测前一致                                                                                                   |
+| 13  | research.md Session Recovery 包含 Tier 0 bash 自检步骤                                                  | 读取 research.md，有 uv bash 检测步骤                                                                                                                    |
+| 14  | research.md Session Recovery 包含 worker dispatch 步骤（非直接 MCP 调用）                               | 读取 research.md，Tier 1-4 步骤为 dispatch research-worker(mode=health_check)                                                                            |
+| 15  | `~/.aether/health/global_health.json` 不含 expires_at 字段，缓存有效期由文件 mtime 判断                 | 读取文件，无 expires_at 键；mtime 距当前时间 < 24h 时 cache_check.sh 返回 0                                                                              |
+| 16  | 全局检测结果 24h 过期后自动重新检测（通过 cache_check.sh 判断）                                         | 修改 global_health.json 的 mtime 为 25 小时前，cache_check.sh 返回 1，coordinator dispatch worker 重新检测                                               |
+| 17  | autoresearch SKILL.md Step 2 不包含 python3                                                             | 读取 SKILL.md，无 `python3 --version`                                                                                                                    |
+| 18  | 降级策略：Docker CLI 未安装 vs daemon 未运行提示不同                                                    | docker_cli fail 提示"未安装"，docker_daemon fail 提示"未运行"                                                                                            |
+| 19  | env-setup skill SKILL.md 含逐项授权工作流                                                               | 查找 `.aether/skills/env-setup/SKILL.md`                                                                                                                 |
+| 20  | install_registry.json 含 priority 字段                                                                  | 读取 registry，每项有 priority（critical/high/medium/low）                                                                                               |
+| 21  | install_registry.json 不含 nvidia_gpu                                                                   | 读取 registry，无 nvidia_gpu 条目                                                                                                                        |
+| 22  | 自动安装逐项授权而非批量                                                                                | 模拟 uv+docker 不可用，coordinator 逐项询问而非一次性全量授权                                                                                            |
+| 23  | Tier 0 LLM bootstrap：uv 不可用时 coordinator bash 检测                                                 | 移除 uv，会话启动时 coordinator 执行 uv --version bash 命令                                                                                              |
+| 24  | STATE.md Health Status section 仅含各层 pass/fail/degraded，不含具体检测项细节                          | 读取 STATE.md，Health Status 无具体脚本名、endpoint 名、版本号                                                                                           |
+| 25  | STATE.md Health Status 指向 global_health.json 和 network_status.md                                     | 读取 STATE.md，含指向全局文件的链接                                                                                                                      |
+| 26  | health check 全部通过时 STATE.md Next Action 不更新                                                     | 模拟全部通过场景，Next Action 保持原 workflow 值不变                                                                                                     |
+| 27  | health check 发现 degradation 时 STATE.md Next Action 更新为 degradation 概要 + 指向 global_health.json | 模拟 uv 不可用，Next Action 变为 "health check: infrastructure degraded (uv) → 详情见 ~/.aether/health/global_health.json"                               |
+| 28  | degradation 解除后 STATE.md Next Action 恢复到原 workflow 值                                            | 用户安装 uv 后 worker 重新检测通过，coordinator 从 Blockers 恢复 Next Action                                                                             |
+| 29  | 用户请求"检查环境"时 STATE.md Next Action 不更新                                                        | 在活跃 phase 中请求 health check，Next Action 保持不变                                                                                                   |
+| 30  | degradation 时原 Next Action 备份到 STATE.md Blockers section                                           | 模拟 degradation，Blockers 出现 health_degradation 条目                                                                                                  |
+| 31  | research-worker.md Phase Routing 包含 health_check 行                                                   | 读取 research-worker.md，Phase Routing table 有 health_check 行                                                                                          |
+| 32  | research-worker.md 包含 health_check 模式执行协议                                                       | 读取 research-worker.md，有 health_check 模式的 MCP 调用 + cross-MCP 仲裁 + digest 输出步骤                                                              |
+| 33  | worker health_check digest 包含 degradation_summary 和 failed_items                                     | 模拟检测场景，worker digest 含 degradation_summary（各层状态）+ failed_items（含 auto_installable/priority）                                             |
+| 34  | worker health_check 模式不调用 advance_plan                                                             | 执行 health_check 模式，digest 的 next_phase=null，state.json phase 不变                                                                                 |
+| 35  | worker health_check 模式写入项目内临时文件（不超出 file_scope）                                         | 执行 health_check 模式，.health_global.json 和 .health_network.md 写入 .aether/research/ 下                                                              |
+| 36  | coordinator 处理 health_check digest 后正确更新 STATE.md                                                | 模拟 degradation digest，coordinator 更新 STATE.md Health Status + Blockers + Next Action                                                                |
+| 37  | coordinator 将临时文件迁移至 ~/.aether/health/ 并删除临时文件                                           | 执行完整 health_check 流程，global_health.json 和 network_status.md 出现在 ~/.aether/health/，临时文件已删除                                             |
+| 38  | Tier 0.5 预创建 ~/.aether/health/ 空占位文件，后续覆写不再触发权限申请                                  | 首次会话观察权限申请弹窗一次，第二次 health check 覆写同文件时无弹窗                                                                                     |
+| 39  | paper-search skill scripts 存在且完整（6 个脚本）                                                       | 查找 `.aether/skills/paper-search/`，含 arxiv_search.py + download_paper.py + inspire_search.py + s2_search.py + pubmed_search.py + extract_citations.py |
+| 40  | health-check skill 存在且包含 6 步执行协议                                                              | 查找 `.aether/skills/health-check/SKILL.md`，含 Step 1-6 + PhaseResultDigest 输出                                                                        |
+| 41  | research-worker.md skill_refs 包含 health-check                                                         | 读取 research-worker.md，skill_refs 列表有 health-check                                                                                                  |
+| 42  | cache_check.sh 由 seedDefaultAssets() 同步至 ~/.aether/health/                                          | 首次 CLI 启动后 ~/.aether/health/cache_check.sh 存在且可执行                                                                                             |
+| 43  | seedDefaultAssets() 包含 health subdir 同步                                                             | 读取 migrate.ts，subdirs 列表含 "health"（条件：.aether/health/ 存在）                                                                                   |

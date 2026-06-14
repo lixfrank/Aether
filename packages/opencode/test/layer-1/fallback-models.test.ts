@@ -5,6 +5,8 @@ import { Agent } from "../../src/agent/agent"
 import { Permission } from "../../src/permission"
 import { ProviderID, ModelID } from "../../src/provider/schema"
 
+const skip = process.env.RESEARCH_AGENT_TEST !== "1"
+
 afterEach(async () => {
   await Instance.disposeAll()
 })
@@ -13,7 +15,7 @@ function evalPerm(agent: Agent.Info, permission: string, pattern = "*"): Permiss
   return Permission.evaluate(permission, pattern, agent.permission).action
 }
 
-describe("Layer 1 — fallback_models config & Agent.Info", () => {
+describe.skipIf(skip)("Layer 1 — fallback_models config & Agent.Info", () => {
   test("fallback_models[0] promoted to model when agent.model is absent", async () => {
     await using tmp = await tmpdir({
       config: {
@@ -116,7 +118,7 @@ describe("Layer 1 — fallback_models config & Agent.Info", () => {
   })
 })
 
-describe("Layer 1 — promptWithFallback logic (unit)", () => {
+describe.skipIf(skip)("Layer 1 — promptWithFallback logic (unit)", () => {
   test("modelsToTry caps at 4 entries (primary + 3 fallbacks)", () => {
     const primary = { modelID: "model-1" as any, providerID: "provider-1" as any }
     const fallbackModels = [

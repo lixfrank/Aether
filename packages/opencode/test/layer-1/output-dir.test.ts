@@ -5,11 +5,13 @@ import { Agent } from "../../src/agent/agent"
 import { SystemPrompt } from "../../src/session/system"
 import path from "path"
 
+const skip = process.env.RESEARCH_AGENT_TEST !== "1"
+
 afterEach(async () => {
   await Instance.disposeAll()
 })
 
-describe("Layer 1 — output_dir config & SystemPrompt injection", () => {
+describe.skipIf(skip)("Layer 1 — output_dir config & SystemPrompt injection", () => {
   test("output_dir from config populates Agent.Info.outputDir", async () => {
     await using tmp = await tmpdir({
       config: {

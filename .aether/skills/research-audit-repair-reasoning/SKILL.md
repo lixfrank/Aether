@@ -160,9 +160,9 @@ MUST NOT output any other text after this YAML block. The coordinator uses this 
 
 This skill MAY use:
 
-- alpha-research skill for targeted arXiv/Semantic Scholar/INSPIRE-HEP searches
+- paper-search skill for targeted literature searches
 - websearch + webfetch for general verification
-- alphaxiv overview for deeper paper understanding
+- paper-search skill for deeper paper understanding
 - `.aether/research/literatures/` local copies for direct verification
 
 Search strategies should align with finding descriptions from the audit_3 report.

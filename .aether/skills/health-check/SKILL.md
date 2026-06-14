@@ -87,10 +87,13 @@ Write two temp files under `.aether/research/` (within file_scope, D17):
     "uv_python_management": { "status": "...", "versions": [...] },
     "git_available": { "status": "...", "version": "..." },
     "git_working_dir": { "status": "...", "git_dir": "..." },
-    "alpha_cli": { "status": "...", "authenticated": bool },
+
     "network_arxiv": { "status": "...", "method": "...", "http_code": N },
-    "network_semantic_scholar": { "status": "...", "method": "...", "http_code": N },
-    "network_inspire_hep": { "status": "...", "method": "...", "http_code": N }
+    "network_s2": { "status": "...", "method": "...", "http_code": N },
+    "network_inspire_hep": { "status": "...", "method": "...", "http_code": N },
+    "network_pubmed": { "status": "...", "method": "...", "http_code": N },
+    "network_alphaxiv": { "status": "...", "method": "...", "http_code": N },
+    "network_crossref": { "status": "...", "method": "...", "http_code": N }
   },
   "network": {
     "arxiv": { ... },
@@ -137,13 +140,13 @@ From the health status result, build a degradation_summary:
 
 3. auto_installable mapping (from install_registry.json):
    - uv_available, git_available, git_working_dir → `true`
-   - alpha_cli → `"partial"`
+   - paper_search_scripts → `true` (paper-search scripts require no auth, all PEP 723 auto-install)
    - All other items → `false`
 
 4. priority mapping:
    - uv_available → `critical`
    - git_available, git_working_dir → `high`
-   - alpha_cli → `low`
+   - paper_search_scripts → `high` (paper search is core research functionality)
    - All other items → `medium`
 
 ### Step 6: Output PhaseResultDigest

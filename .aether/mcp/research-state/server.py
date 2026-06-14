@@ -673,44 +673,29 @@ def _check_infrastructure(project_dir: Path) -> dict:
         }
         issues.append("not inside a git repository")
 
-    result = _run_cmd(["alpha", "status"])
-    if result.returncode == 0:
-        authenticated = (
-            "account" in result.stdout.lower() or "logged" in result.stdout.lower()
-        )
-        if authenticated:
-            checks["alpha_cli"] = {"status": "pass", "authenticated": True}
-        else:
-            checks["alpha_cli"] = {
-                "status": "fail",
-                "failure_class": "not_authenticated",
-            }
-            issues.append("alpha CLI available but not authenticated")
-    else:
-        version_check = _run_cmd(["alpha", "--version"])
-        if version_check.returncode == 0:
-            checks["alpha_cli"] = {
-                "status": "fail",
-                "failure_class": "not_authenticated",
-            }
-            issues.append("alpha CLI available but not authenticated")
-        else:
-            checks["alpha_cli"] = {"status": "fail", "failure_class": "not_installed"}
-            issues.append("alpha CLI not available")
-
     checks["network_arxiv"] = _check_network("https://api.arxiv.org")
     if checks["network_arxiv"]["status"] == "fail":
         issues.append("arXiv API unreachable")
 
-    checks["network_semantic_scholar"] = _check_network(
-        "https://api.semanticscholar.org"
-    )
-    if checks["network_semantic_scholar"]["status"] == "fail":
-        issues.append("Semantic Scholar API unreachable")
+    checks["network_s2"] = _check_network("https://api.semanticscholar.org")
+    if checks["network_s2"]["status"] == "fail":
+        issues.append("Semantic Scholar S2 API unreachable")
 
     checks["network_inspire_hep"] = _check_network("https://inspirehep.net/api")
     if checks["network_inspire_hep"]["status"] == "fail":
         issues.append("INSPIRE-HEP API unreachable")
+
+    checks["network_pubmed"] = _check_network("https://eutils.ncbi.nlm.nih.gov")
+    if checks["network_pubmed"]["status"] == "fail":
+        issues.append("PubMed API unreachable")
+
+    checks["network_alphaxiv"] = _check_network("https://alphaxiv.org")
+    if checks["network_alphaxiv"]["status"] == "fail":
+        issues.append("alphaxiv unreachable")
+
+    checks["network_crossref"] = _check_network("https://api.crossref.org")
+    if checks["network_crossref"]["status"] == "fail":
+        issues.append("Crossref API unreachable")
 
     return {"healthy": len(issues) == 0, "checks": checks, "issues": issues}
 
@@ -822,7 +807,7 @@ def _check_skill_chain(project_dir: Path) -> dict:
     issues = []
 
     skill_refs_map = {
-        "research_worker_alpha_research": "alpha-research",
+        "research_worker_paper_search": "paper-search",
         "research_worker_debate_advocate": "debate-advocate",
         "research_worker_debate_critic": "debate-critic",
         "research_worker_debate_adjudicator": "debate-adjudicator",
@@ -1019,7 +1004,6 @@ def _check_skill_chain(project_dir: Path) -> dict:
         issues.append(f"gpd-domain-check references missing: {missing_dc}")
 
     lit_review_scripts = [
-        "download_paper.py",
         "search_databases.py",
         "verify_citations.py",
         "generate_pdf.py",
@@ -1042,17 +1026,31 @@ def _check_skill_chain(project_dir: Path) -> dict:
     if missing_lr:
         issues.append(f"literature-review scripts missing: {missing_lr}")
 
-    alpha_script = (
-        project_dir / ".aether" / "skills" / "alpha-research" / "arxiv_search.py"
-    )
-    if alpha_script.exists():
-        checks["alpha_research_scripts"] = {"status": "pass", "path": str(alpha_script)}
-    else:
-        checks["alpha_research_scripts"] = {
-            "status": "fail",
-            "failure_class": "missing",
-        }
-        issues.append("alpha-research arxiv_search.py not found")
+    paper_search_scripts = [
+        "arxiv_search.py",
+        "download_paper.py",
+        "inspire_search.py",
+        "s2_search.py",
+        "pubmed_search.py",
+        "extract_citations.py",
+    ]
+    ps_dir = project_dir / ".aether" / "skills" / "paper-search"
+    found_ps = []
+    missing_ps = []
+    for s in paper_search_scripts:
+        p = ps_dir / s
+        if p.exists():
+            found_ps.append(s)
+        else:
+            missing_ps.append(s)
+    checks["paper_search_scripts"] = {
+        "status": "pass" if len(missing_ps) == 0 else "fail",
+        "count": len(found_ps),
+        "missing": missing_ps if missing_ps else None,
+        "failure_class": "missing" if missing_ps else None,
+    }
+    if missing_ps:
+        issues.append(f"paper-search scripts missing: {missing_ps}")
 
     return {"healthy": len(issues) == 0, "checks": checks, "issues": issues}
 
@@ -1174,7 +1172,7 @@ def _check_runtime(project_dir: Path) -> dict:
         issues.append(f"SymPy dry-run failures: {failed_scripts}")
 
     alpha_script = (
-        project_dir / ".aether" / "skills" / "alpha-research" / "arxiv_search.py"
+        project_dir / ".aether" / "skills" / "paper-search" / "arxiv_search.py"
     )
     if alpha_script.exists():
         result = _run_cmd(
@@ -1185,17 +1183,17 @@ def _check_runtime(project_dir: Path) -> dict:
             try:
                 output = json.loads(result.stdout.strip())
                 count = len(output) if isinstance(output, list) else 1
-                checks["alpha_search"] = {"status": "pass", "results_count": count}
+                checks["paper_search"] = {"status": "pass", "results_count": count}
             except json.JSONDecodeError:
-                checks["alpha_search"] = {"status": "pass", "results_count": 1}
+                checks["paper_search"] = {"status": "pass", "results_count": 1}
         else:
-            checks["alpha_search"] = {
+            checks["paper_search"] = {
                 "status": "fail",
                 "reason": result.stderr[:200] if result.stderr else "no output",
             }
-            issues.append("alpha-research arxiv_search failed")
+            issues.append("paper-search arxiv_search failed")
     else:
-        checks["alpha_search"] = {"status": "fail", "reason": "script not found"}
+        checks["paper_search"] = {"status": "fail", "reason": "script not found"}
 
     cross_mcp_pending = ["research_conventions_mcp_online", "convention_skill_resolve"]
 
@@ -1214,10 +1212,9 @@ def run_health_check(
     """Full project health dashboard with 4-layer progressive detection.
 
     Layers:
-    - infrastructure: uv, alpha CLI, network reachability (3 endpoints)
+    - infrastructure: uv, git, network reachability (6 endpoints: arxiv, s2, inspire_hep, pubmed, alphaxiv, crossref)
     - persistence: directory writable, state.json valid, convention_defaults readable
-    - skill_chain: SKILL.md existence, gpd references/scripts completeness
-    - runtime: MCP tool calls, all 9 SymPy scripts dry-run, alpha search
+    - runtime: MCP tool calls, all 9 SymPy scripts dry-run, paper-search arxiv_search
 
     NOTE: Cross-MCP checks (research-conventions) are NOT included in
     this tool's output. The agent must call research-conventions MCP

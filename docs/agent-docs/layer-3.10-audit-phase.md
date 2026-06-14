@@ -514,7 +514,8 @@ REPAIR TARGETS:
 - Findings to fix: [FATAL/CONCERN entries from audit_1_round[N].md]
 
 For each finding, repair the claim in the target file. You MAY use web search
-and alpha-research skill for targeted literature search to find correct references
+and paper-search skill for targeted literature search
+to find correct references
 or evidence for the fix. For findings that cannot be resolved, mark them as
 unresolved_gap.
 
@@ -535,7 +536,7 @@ REPAIR TARGETS:
 - Findings to fix: [FATAL/CONCERN entries from audit_2_round[N].md]
 
 For each finding, repair the claim in the target file. You MAY use web search
-and alpha-research skill for targeted literature search. For audit_1 residual
+and paper-search skill for targeted literature search. For audit_1 residual
 gaps that landscape did not resolve, attempt to supplement or mark as unresolved_gap.
 For domain coverage/classification errors, correct directly.
 For factual misstatements, correct with verified evidence.
@@ -548,7 +549,7 @@ appended to DIGESTS.md).
 
 - 修复对象：ROADMAP.md + research_analysis.md
 - 修复范围：最新轮次 audit_1 报告中标记的 FATAL/CONCERN 条目（事实误述、方法误描述、来源不可靠）
-- repair worker 可使用 web search 和 alpha-research skill 进行定向文献搜索以获取修正所需证据（与 audit_1 报告中 suggested_search 方向对齐）
+- repair worker 可使用 web search 和 paper-search skill 进行定向文献搜索以获取修正所需证据（与 audit_1 报告中 suggested_search 方向对齐）
 - 对无法通过搜索修复的条目标注为 `unresolved_gap`
 - repair 后回到 phase_audit_1 重新核查
 
@@ -752,8 +753,8 @@ literature-landscape-scan skill 已有 Step 4.5 (Download Representative and Key
 audit worker 核实引用时：
 
 - 首先检查 `.aether/research/literatures/` 中是否有本地副本 → 直接读取原文核实
-- 本地副本不可用时 → web search + alphaxiv overview 核实
-- 核实来源记录在 AUDIT 报告的每条 finding 中（`verification_source: local | web_search | alphaxiv`）
+- 本地副本不可用时 → web search + paper-search skill 核实
+- 核实来源记录在 AUDIT 报告的每条 finding 中（`verification_source: local | paper_search | web_search`）
 
 ---
 
@@ -804,7 +805,7 @@ audit worker 核实引用时：
 14. audit-repair 循环最多 3 次 repair（单一 repair_count 计数器，进入新 audit phase 时重置为 0）
 15. 达到上限后带 unresolved → advance_plan(phase=phase_framing)
 16. landscape worker 提示词包含最新 audit_1 报告补缺任务（双层职责）
-17. repair worker 调用 /research-audit-repair skill（非 /debate-repair），可使用 web search 和 alpha-research skill 定向搜索文献
+17. repair worker 调用 /research-audit-repair skill（非 /debate-repair），可使用 web search 和 paper-search skill 定向搜索文献
 18. repair_count 在 state.json.audit.repair_count 中正确递增与重置
 19. framing worker 提示词包含 unresolved_gap 列表（来自 audit 循环上限）
 20. phase mapping plan_number 正确更新（无 phase_landscape_skipped）

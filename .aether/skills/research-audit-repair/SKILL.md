@@ -4,7 +4,7 @@ description: |
   Repair skill for audit phases in Path 3 research state machine. Used within
   phase_audit_1 and phase_audit_2 audit-repair loops. Repairs FATAL/CONCERN
   findings in ROADMAP.md, research_analysis.md, and landscape_map.md based on
-  audit reports. Can use web search and alpha-research skill for targeted
+  audit reports. Can use web search and paper-search skill for targeted
   literature search. Marks unrepairable findings as unresolved_gap.
 ---
 
@@ -50,7 +50,7 @@ For each FATAL/CONCERN finding in the audit report:
 1. Identify the claim text and its location in the target file
 2. Determine repair approach:
    - **Factual misstatement** → correct with verified evidence (web search + cross-reference)
-   - **Missing citation** → search for supporting reference (alpha-research skill + web search)
+   - **Missing citation** → search for supporting reference (paper-search skill + web search)
    - **Citation does not support** → replace or supplement citation
    - **Unreliable source** → find more reliable alternative
    - **Domain coverage gap** → add missing school/branch to landscape_map.md
@@ -63,9 +63,9 @@ For each FATAL/CONCERN finding in the audit report:
 For each repair task:
 
 1. **Web search and literature search**:
-   - Use alpha-research skill for targeted literature search aligned with `suggested_search` from audit report
+   - Use paper-search skill for targeted literature search aligned with `suggested_search` from audit report
    - Use websearch/webfetch for general verification
-   - For physics domain: optionally use alphaxiv overview for deeper understanding
+   - For physics domain: optionally use paper-search skill for deeper understanding
    - Record verification_source for each fix
 
 2. **Apply repair** to the target file:
@@ -124,9 +124,9 @@ MUST NOT output any other text after this YAML block. The coordinator uses this 
 
 This skill MAY use:
 
-- alpha-research skill for targeted arXiv/Semantic Scholar/INSPIRE-HEP searches
+- paper-search skill for targeted literature searches
 - websearch + webfetch for general verification
-- alphaxiv overview for deeper paper understanding
+- paper-search skill for deeper paper understanding
 - `.aether/research/literatures/` local copies for direct verification
 
 Search strategies should align with `suggested_search` directions from the audit report findings.

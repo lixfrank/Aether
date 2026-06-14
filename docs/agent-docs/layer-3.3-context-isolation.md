@@ -268,7 +268,7 @@ phase_result_digest:
 
 ### 2.7 与现有架构的兼容性
 
-- **Path 1 (Quick Lookup)**: 不受影响。alpha-research skill 在 coordinator session 内直接调用，无需隔离。
+- **Path 1 (Quick Lookup)**: 不受影响。paper-search skill 在 coordinator session 内直接调用，无需隔离。
 - **Path 2 (Literature Review)**: 不受影响。literature-review skill 在 coordinator session 内直接调用，它有自己的内部 state machine。
 - **Path 3 (Research Project)**: 架构完全改变。coordinator 不再调用 phase skill，改为 dispatch worker。phase_execution 进一步拆分为 coordinator 管控的循环。
 - **Subagent 权限体系**: 无核心源文件改动。task tool 的 `Permission.intersection` + `Discipline.compile` + `delegation_depth` 机制已完整实现（Layer 0）。
@@ -326,10 +326,9 @@ mcp:
   research-conventions: true
   research-state: true
 skill_refs:
-  - alpha-research
+  - paper-search
 env_scope:
   allowed_commands:
-    - alpha
     - uv
     - curl
     - rg
@@ -348,8 +347,8 @@ file_scope:
 - **task: allow**: 需要 dispatch research-explorer / sandbox-executor / verifier。coordinator 不指定 delegation_depth（默认允许嵌套），worker dispatch sub-subagent 时指定 delegation_depth=0（禁止进一步嵌套）
 - **skill: allow**: phase 1-3 通过 skill 工具调用对应 SKILL.md；phase_execution sub-phase 使用内置 procedure（不调用 skill）
 - **MCP 双服务器**: worker 在 phase 1-3 内自行调用 advance_plan 和 convention 检查；sub-phase worker 只调用 convention 检查（不调用 advance_plan）
-- **skill_refs 仅含 alpha-research**: 其他 skill 通过 skill 工具按需加载
-- **env_scope 与 research.md 一致**: alpha CLI、uv、docker 等命令均需要
+- **skill_refs 仅含 paper-search**: 其他 skill 通过 skill 工具按需加载
+- **env_scope 与 research.md 一致**: uv、curl 等命令需要
 
 ### 4.3 System Prompt
 
@@ -1231,7 +1230,7 @@ Coordinator 解析步骤:
 ### 10.1 Coordinator 路由
 
 1. Entry Gate 分类正确（Path 0/1/2/3 不受影响）
-2. Path 1 仍使用 alpha-research skill 直接调用（无 subagent）
+2. Path 1 仍使用 paper-search skill 直接调用（无 subagent）
 3. Path 2 仍使用 literature-review skill 直接调用（无 subagent）
 4. Path 3 coordinator 不调用任何 phase skill（只 dispatch worker）
 5. Coordinator 正确解析 task_result 中的 ```yaml phase_result_digest 代码块

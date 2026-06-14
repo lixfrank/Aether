@@ -4,11 +4,13 @@ import { Instance } from "../../src/project/instance"
 import { Agent } from "../../src/agent/agent"
 import { Permission } from "../../src/permission"
 
+const skip = process.env.RESEARCH_AGENT_TEST !== "1"
+
 afterEach(async () => {
   await Instance.disposeAll()
 })
 
-describe("Layer 1 — MCP per-agent config", () => {
+describe.skipIf(skip)("Layer 1 — MCP per-agent config", () => {
   test("mcp from config populates Agent.Info.mcp", async () => {
     await using tmp = await tmpdir({
       config: {

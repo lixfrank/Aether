@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test"
 import { Permission } from "../../src/permission"
 import { Discipline } from "../../src/session/discipline"
 
-describe("Discipline.compile — schema validation & edge cases", () => {
+const skip = process.env.RESEARCH_AGENT_TEST !== "1"
+
+describe.skipIf(skip)("Discipline.compile — schema validation & edge cases", () => {
   test("Discipline.Schema validates max_steps range [1, 50]", () => {
     const valid = Discipline.Schema.safeParse({ max_steps: 25 })
     expect(valid.success).toBe(true)

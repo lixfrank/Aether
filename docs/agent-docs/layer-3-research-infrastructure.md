@@ -595,7 +595,7 @@ When referencing prior phase results, verify convention lock matches. If convent
 | **gpd-patterns**     | 不需要                                        | CRUD 模式库（add_pattern、promote_pattern）。研究项目不需要跨 session 的错误模式演化                   |
 | **gpd-protocols**    | 不需要                                        | 协议路由（route_protocol）。skill_refs 本身就是路由机制，不需要额外 MCP                                |
 | **gpd-skills**       | 不需要                                        | 技能路由（route_skill）。OpenCode 的 skill_refs + slash commands 已提供路由                            |
-| **gpd-arxiv**        | alpha-research skill（arxiv-search 子模式）   | GPD 的 arxiv MCP 是上游 arxiv_mcp_server 的桥接。alpha-research 已包含 arxiv-search 子模式             |
+| **gpd-arxiv**        | paper-search skill（arXiv API 模式）          | GPD 的 arxiv MCP 是上游 arxiv_mcp_server 的桥接。paper-search 已包含 arXiv API 模式                    |
 
 **保留的 MCP**：research-conventions（通用约定锁框架 + skill_resolve_path）、research-state（通用项目状态管理）。2 个 MCP 进程替代 GPD 的 8 个。
 

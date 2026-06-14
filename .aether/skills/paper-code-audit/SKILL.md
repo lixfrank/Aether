@@ -16,8 +16,8 @@ If you are in research mode (the research agent), follow the full research workf
 1. Classify intent in Phase 0 (Intent Gate).
 2. Plan audit: identify paper claims and corresponding code. Write plan to outputs/.plans/<slug>.md.
 3. Dispatch researcher subagents to:
-   - Read the paper (use alpha get / alpha ask for detailed Q&A)
-   - Inspect the code repo (use alpha code for file-level inspection)
+   - Read the paper (use webfetch alphaxiv overview for structured understanding)
+   - Inspect the code repo (use webfetch to read GitHub repo files)
 4. Compare claimed methods, defaults, metrics, and data handling against actual code.
 5. Call out: missing code, mismatches, ambiguous defaults, reproduction risks.
 6. Dispatch verifier subagent for citation anchoring.
@@ -28,7 +28,7 @@ If you are in research mode (the research agent), follow the full research workf
 If you are not in research mode:
 
 1. Use webfetch to read the paper (arxiv HTML or PDF).
-2. Use alpha code (if available) or webfetch to read the repo files.
+2. Use webfetch to read the repo files directly.
 3. Compare claims vs code inline.
 4. Present findings inline or write to a file.
 

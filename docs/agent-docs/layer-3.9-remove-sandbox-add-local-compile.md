@@ -354,11 +354,11 @@ f. User declines → continue in LLM-only mode (no MCP, no Python, no SymPy). Ma
 ```markdown
 # 旧
 
-- Do NOT use SymPy verification, alpha search, Docker containers
+- Do NOT use SymPy verification, Docker containers
 
 # 新
 
-- Do NOT use SymPy verification, alpha search
+- Do NOT use SymPy verification
 ```
 
 #### 4.2.5 Subagent Dispatch Rules (L834-835)
@@ -746,11 +746,11 @@ result = _run_cmd(["docker", "info", "--format", "{{.ServerVersion}}"])
 ```markdown
 # 旧
 
-- infrastructure: uv, docker, alpha CLI, network reachability (3 endpoints)
+- infrastructure: uv, network reachability (3 endpoints)
 
 # 新
 
-- infrastructure: uv, alpha CLI, network reachability (3 endpoints)
+- infrastructure: uv, network reachability (3 endpoints)
 ```
 
 ---
@@ -771,10 +771,10 @@ result = _run_cmd(["docker", "info", "--format", "{{.ServerVersion}}"])
 
 ```typescript
 // 旧
-env_scope: { allowed_commands: ["alpha", "curl", "rg", "grep", "git", "docker"] },
+env_scope: { allowed_commands: ["uv", "curl", "rg", "grep", "git"] },
 
 // 新
-env_scope: { allowed_commands: ["alpha", "curl", "rg", "grep", "git"] },
+env_scope: { allowed_commands: ["uv", "curl", "rg", "grep", "git"] },
 ```
 
 ### 7.3 `packages/opencode/test/layer-2/skills-and-file-loading.test.ts`
@@ -796,20 +796,20 @@ test("T2.1.2: docker SKILL.md exists with full content", async () => {
 
 ```typescript
 // 旧
-const skillDirs = ["alpha-research", "docker", "source-comparison", "paper-code-audit"]
+const skillDirs = ["paper-search", "source-comparison", "paper-code-audit"]
 
 // 新
-const skillDirs = ["alpha-research", "source-comparison", "paper-code-audit"]
+const skillDirs = ["paper-search", "source-comparison", "paper-code-audit"]
 ```
 
 #### L78 — 从 research agent 内联配置的 env_scope 中删除 "docker"
 
 ```typescript
 // 旧
-env_scope: allowed_commands: -alpha - docker
+env_scope: allowed_commands: -uv
 
 // 新
-env_scope: allowed_commands: -alpha
+env_scope: allowed_commands: -uv
 ```
 
 #### L100 — 删除 docker run 权限断言
@@ -819,8 +819,8 @@ env_scope: allowed_commands: -alpha
 expect(Permission.evaluate("bash", "docker run", r!.permission).action).toBe("allow")
 
 // 新：删除此断言（docker 已从 env_scope allowed_commands 中移除），
-// 或替换为其他 allowed_command 的断言，如：
-expect(Permission.evaluate("bash", "alpha test", r!.permission).action).toBe("allow")
+// or replace with other allowed_command 的断言，如：
+expect(Permission.evaluate("bash", "uv run ...", r!.permission).action).toBe("allow")
 ```
 
 #### L154-218 — sandbox-executor 测试用例

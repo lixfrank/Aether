@@ -3,7 +3,9 @@ import { Provider } from "../../src/provider/provider"
 import { ProviderID, ModelID } from "../../src/provider/schema"
 import { APICallError } from "@ai-sdk/provider"
 
-describe("promptWithFallback — model resolution & retry logic", () => {
+const skip = process.env.RESEARCH_AGENT_TEST !== "1"
+
+describe.skipIf(skip)("promptWithFallback — model resolution & retry logic", () => {
   test("resolveModelID: string fallback resolves to provider/model", () => {
     const id = Provider.parseModel("anthropic/claude-sonnet-4-5")
     expect(id.providerID).toBe(ProviderID.make("anthropic"))

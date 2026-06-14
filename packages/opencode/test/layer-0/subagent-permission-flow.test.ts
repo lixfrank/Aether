@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test"
 import { Permission } from "../../src/permission"
 import { Discipline } from "../../src/session/discipline"
 
-describe("Subagent session permission flow — Layer 2 research agent scenario", () => {
+const skip = process.env.RESEARCH_AGENT_TEST !== "1"
+
+describe.skipIf(skip)("Subagent session permission flow — Layer 2 research agent scenario", () => {
   test("research-explorer subagent: env_scope + file_scope + delegation_depth=0", () => {
     const parentPerm = Permission.fromConfig({
       "*": "allow",

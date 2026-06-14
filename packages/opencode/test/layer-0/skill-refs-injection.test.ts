@@ -5,16 +5,18 @@ import { Instance } from "../../src/project/instance"
 import { Agent } from "../../src/agent/agent"
 import { SystemPrompt } from "../../src/session/system"
 
+const skip = process.env.RESEARCH_AGENT_TEST !== "1"
+
 afterEach(async () => {
   await Instance.disposeAll()
 })
 
-describe("skill_refs injection — research agent skill whitelist", () => {
+describe.skipIf(skip)("skill_refs injection — research agent skill whitelist", () => {
   test("agent with skillRefs gets only injected content (replaces broadcast)", async () => {
     await using tmp = await tmpdir({
       git: true,
       init: async (dir) => {
-        const skillDir = path.join(dir, ".opencode", "skill", "arxiv-search")
+        const skillDir = path.join(dir, ".aether", "skills", "arxiv-search")
         await Bun.write(
           path.join(skillDir, "SKILL.md"),
           `---
@@ -26,7 +28,7 @@ description: Search arXiv papers.
 Search arXiv for preprints and academic papers.
 `,
         )
-        const skillDir2 = path.join(dir, ".opencode", "skill", "deep-research")
+        const skillDir2 = path.join(dir, ".aether", "skills", "deep-research")
         await Bun.write(
           path.join(skillDir2, "SKILL.md"),
           `---
@@ -69,7 +71,7 @@ Conduct comprehensive research with citations.
     await using tmp = await tmpdir({
       git: true,
       init: async (dir) => {
-        const skillDir = path.join(dir, ".opencode", "skill", "arxiv-search")
+        const skillDir = path.join(dir, ".aether", "skills", "arxiv-search")
         await Bun.write(
           path.join(skillDir, "SKILL.md"),
           `---

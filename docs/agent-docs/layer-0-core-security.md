@@ -81,15 +81,15 @@ export function intersection(parent: Ruleset, child: Ruleset, override?: Ruleset
 1. `childEffective = Permission.merge(child, override)` — override 是 child 的扩展，merge 后 override 中的规则排在 child 之后，findLast 使 override 胜
 2. `intersection(parent, childEffective)` — parent deny 总是生效，child deny 总是生效，child allow 只在 parent allow 时生效
 
-| parent 规则         | child 规则                 | override (discipline) 规则                       | childEffective = merge(child, override)               | intersection 结果                                                                | 说明                                                       |
-| ------------------- | -------------------------- | ------------------------------------------------ | ----------------------------------------------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| bash, \*, **allow** | bash, \*, **allow**        | bash, "alpha*", **allow** + bash, *, **deny**    | bash, _, allow → bash, alpha_, allow → bash, \*, deny | findLast → **deny**                                                              | discipline deny-before-allow：特定 allow 覆盖 blanket deny |
-| bash, \*, **deny**  | bash, "alpha\*", **allow** | 无 override                                      | bash, alpha\*, allow                                  | **deny**                                                                         | parent deny 覆盖 child allow（安全修复）                   |
-| bash, \*, **allow** | bash, "secret\*", **deny** | 无 override                                      | bash, secret\*, deny                                  | **deny**                                                                         | child deny 不被 parent allow 覆盖                          |
-| edit, \*, **allow** | 无 edit 规则               | edit, \*, **deny** + edit, "src/**", **allow\*\* | edit, \*, deny → edit, src/\*\*, allow                | evaluate("edit","src/foo") → **allow**; evaluate("edit","secret/foo") → **deny** | file_scope 限制写操作（读工具不受限制）                    |
-| task, \*, **allow** | 无 task 规则               | task, \*, **deny**                               | task, \*, deny                                        | **deny**                                                                         | delegation_depth=0                                         |
-| _, _, **allow**     | _, _, **allow**            | todowrite, \*, **deny**                          | todowrite, \*, deny                                   | **deny**                                                                         | 禁止子代理 todowrite                                       |
-| _, _, **allow**     | _, _, **allow**            | 无 override                                      | \*, allow                                             | **allow**                                                                        | 无限制                                                     |
+| parent 规则         | child 规则                 | override (discipline) 规则                       | childEffective = merge(child, override)            | intersection 结果                                                                | 说明                                                       |
+| ------------------- | -------------------------- | ------------------------------------------------ | -------------------------------------------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| bash, \*, **allow** | bash, \*, **allow**        | bash, "uv*", **allow** + bash, *, **deny**       | bash, _, allow → bash, uv_, allow → bash, \*, deny | findLast → **deny**                                                              | discipline deny-before-allow：特定 allow 覆盖 blanket deny |
+| bash, \*, **deny**  | bash, "uv\*", **allow**    | 无 override                                      | bash, uv\*, allow                                  | **deny**                                                                         | parent deny 覆盖 child allow（安全修复）                   |
+| bash, \*, **allow** | bash, "secret\*", **deny** | 无 override                                      | bash, secret\*, deny                               | **deny**                                                                         | child deny 不被 parent allow 覆盖                          |
+| edit, \*, **allow** | 无 edit 规则               | edit, \*, **deny** + edit, "src/**", **allow\*\* | edit, \*, deny → edit, src/\*\*, allow             | evaluate("edit","src/foo") → **allow**; evaluate("edit","secret/foo") → **deny** | file_scope 限制写操作（读工具不受限制）                    |
+| task, \*, **allow** | 无 task 规则               | task, \*, **deny**                               | task, \*, deny                                     | **deny**                                                                         | delegation_depth=0                                         |
+| _, _, **allow**     | _, _, **allow**            | todowrite, \*, **deny**                          | todowrite, \*, deny                                | **deny**                                                                         | 禁止子代理 todowrite                                       |
+| _, _, **allow**     | _, _, **allow**            | 无 override                                      | \*, allow                                          | **allow**                                                                        | 无限制                                                     |
 
 **关键语义：**
 
@@ -103,7 +103,7 @@ export function intersection(parent: Ruleset, child: Ruleset, override?: Ruleset
 ```
 T0.1: intersection(parent=[{edit,"*",deny}], child=[{edit,"src/**",allow}]) → [{edit,"*",deny}]
 T0.2: intersection(parent=[{edit,"*",allow}], child=[{edit,"secret/**",deny}]) → [{edit,"secret/**",deny}]
-T0.3: intersection(parent=[{bash,"*",allow}], child=[{bash,"alpha*",allow},{bash,"*",deny}], override=[]) → bash 只有 alpha* allow + blanket deny
+T0.3: intersection(parent=[{bash,"*",allow}], child=[{bash,"uv*",allow},{bash,"*",deny}], override=[]) → bash 只有 uv* allow + blanket deny
 T0.4: 不使用 intersection 时，所有已有 Permission 路径（merge、evaluate、ask）行为不变
 T0.5: bun typecheck 在 packages/opencode 通过
 ```
@@ -215,12 +215,12 @@ if (Object.keys(compileInput).length > 0) {
 ### 验收测试
 
 ```
-T0.6: compile({env_scope:{allowed_commands:["alpha","docker"]}}) 生成 [{bash,"*",deny}, {bash,"alpha*",allow}, {bash,"docker*",allow}]
+T0.6: compile({env_scope:{allowed_commands:["uv","docker"]}}) 生成 [{bash,"*",deny}, {bash,"uv*",allow}, {bash,"docker*",allow}]
 T0.7: compile({file_scope:["src/**","test/**"]}) 生成 每个 WRITE_TOOL 一条 blanket deny + 每个 scope 一条 allow（read/glob/grep 不受限）
 T0.8: compile({delegation_depth:0}) 包含 [{task,"*",deny}]
 T0.9: compile({delegation_depth:undefined}) 不产生任何 task 规则（与 v0.6.0 一致）
 T0.10: compile({permission_override:{edit:["allow"],bash:["allow","docker*"]}}) 生成正确的 allow/pattern 规则
-T0.11: deny-before-allow 顺序：Permission.evaluate("bash","alpha run...", ruleset) = allow；Permission.evaluate("bash","rm -rf...", ruleset) = deny
+T0.11: deny-before-allow 顺序：Permission.evaluate("bash","uv run ...", ruleset) = allow；Permission.evaluate("bash","rm -rf...", ruleset) = deny
 T0.12: bun typecheck 通过
 ```
 
@@ -449,8 +449,8 @@ if (value.env_scope?.allowed_commands) {
 
 ```
 T0.22: 不设新字段时，所有 native agent (build/plan/general/explore/compaction/title/summary) 行为不变
-T0.23: 设 skill_refs:["alpha-research"] 的 agent 在 skills() 中看到 alpha-research 的完整注入
-T0.24: 设 env_scope.allowed_commands:["alpha","docker"] 的 agent 生成正确的 bash deny+allow 规则
+T0.23: 设 skill_refs:["paper-search"] 的 agent 在 skills() 中看到 paper-search 的完整注入
+T0.24: 设 env_scope.allowed_commands:["uv","docker"] 的 agent 生成正确的 bash deny+allow 规则
 T0.25: env_scope 编译只在 agent.ts 中发生一次，不在 task.ts 中重复编译
 T0.26: Config.Agent 新字段被 knownKeys 白名单正确识别，不落入 options
 T0.27: bun typecheck 通过
@@ -518,7 +518,7 @@ export async function skills(agent: Agent.Info) {
 
 ```
 T0.29: agent 无 skillRefs 时，skills() 输出与 v0.6.0 完全一致（广播列表）
-T0.30: agent skillRefs=["alpha-research"] 时，输出仅包含 alpha-research 的完整内容（无广播列表）
+T0.30: agent skillRefs=["paper-search"] 时，输出仅包含 paper-search 的完整内容（无广播列表）
 T0.31: agent skillRefs=["nonexistent"] 时，输出仅包含 "referenced but not found" 提示（无广播列表）
 T0.32: agent skillRefs 有值时，广播部分（Skill.fmt）不存在，只有注入内容
 T0.33: skill_refs 注入包含 Skill directory URL（file:// 格式），agent 可拼接 base_dir + relative_path 读取 references 文件

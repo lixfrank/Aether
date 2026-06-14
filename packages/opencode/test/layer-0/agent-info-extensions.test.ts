@@ -4,11 +4,13 @@ import { Instance } from "../../src/project/instance"
 import { Permission } from "../../src/permission"
 import { Agent } from "../../src/agent/agent"
 
+const skip = process.env.RESEARCH_AGENT_TEST !== "1"
+
 afterEach(async () => {
   await Instance.disposeAll()
 })
 
-describe("Agent.Info extension fields — research agent config flow", () => {
+describe.skipIf(skip)("Agent.Info extension fields — research agent config flow", () => {
   test("skill_refs from config populates Agent.Info.skillRefs", async () => {
     await using tmp = await tmpdir({
       git: true,

@@ -95,12 +95,12 @@ Research agent 是一个**多阶段、多代理协作的深度研究系统**，�
 
 每个用户 prompt 必须先通过 Entry Gate 分类：
 
-| 条件                                                     | 路径                        | 工作流                                   |
-| -------------------------------------------------------- | --------------------------- | ---------------------------------------- |
-| 单一事实问题（一次搜索可回答）                           | Path 1: Quick lookup        | alpha-research skill，无子代理，无状态机 |
-| 明确要求综述/文献回顾                                    | Path 2: Literature review   | literature-review skill，自有状态机      |
-| 研究意图 + 多阶段描述 / 可行性分析 / 方法比较 / 实验验证 | Path 3: Research project    | 完整状态机（含 3 次审计）                |
-| 无研究意图，非事实查询                                   | Path 0: Not a research task | 提示用户切换到 build agent               |
+| 条件                                                     | 路径                        | 工作流                                 |
+| -------------------------------------------------------- | --------------------------- | -------------------------------------- |
+| 单一事实问题（一次搜索可回答）                           | Path 1: Quick lookup        | paper-search skill，无子代理，无状态机 |
+| 明确要求综述/文献回顾                                    | Path 2: Literature review   | literature-review skill，自有状态机    |
+| 研究意图 + 多阶段描述 / 可行性分析 / 方法比较 / 实验验证 | Path 3: Research project    | 完整状态机（含 3 次审计）              |
+| 无研究意图，非事实查询                                   | Path 0: Not a research task | 提示用户切换到 build agent             |
 
 Gate 完成后写入 STATE.md（path chosen + reason + intent 分类），路径锁定后不可越界执行。
 

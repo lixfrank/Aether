@@ -7,7 +7,7 @@ description: |
   and open problem list. Landscape execution is determined by audit_1 (has_citation_gaps=true
   → must execute; has_citation_gaps=false → can skip). When executed, landscape has dual
   responsibility: primary task (domain mapping) + supplementary task (filling audit_1
-  citation gaps). Integrates with alpha-research, alphaxiv, and research-question-framing.
+  citation gaps). Integrates with paper-search and research-question-framing.
 ---
 
 # Literature Landscape Scan — phase_landscape
@@ -57,7 +57,7 @@ This skill implements **Phase 4** of the Path 3 research state machine. It expan
 2. Identify 3-6 key search terms (primary concepts + synonyms from Phase 1 findings)
 3. Define time range based on field activity level
 4. Determine domain-specific databases:
-   - Physics: arXiv, INSPIRE-HEP, alphaxiv
+   - Physics: paper-search skill (arXiv + INSPIRE-HEP + alphaxiv overview)
    - CS: arXiv cs.\*, Semantic Scholar, Google Scholar
    - Biomedical: PubMed, bioRxiv, Semantic Scholar
    - Cross-disciplinary: Semantic Scholar, OpenAlex
@@ -66,8 +66,8 @@ This skill implements **Phase 4** of the Path 3 research state machine. It expan
 
 Dispatch research-explorer subagent(s) for parallel searches:
 
-1. **arXiv**: Use alpha-research skill (no-login mode) with category-appropriate queries
-2. **alphaxiv Smart Search**: For AI-enhanced discovery beyond keywords
+1. **arXiv**: Use paper-search skill with category-appropriate queries
+2. **broader coverage**: Use paper-search skill for AI-enhanced discovery beyond keywords
 3. **Semantic Scholar**: Cross-disciplinary coverage and citation graphs
 4. **INSPIRE-HEP** (physics): Citation tracking and highly-cited paper identification
 
@@ -81,8 +81,8 @@ Scale:
 For papers identified as potentially important:
 
 1. Extract arXiv IDs from search results
-2. Use alphaxiv overview for structured understanding
-3. Fallback to arXiv abstract if alphaxiv overview unavailable
+2. Use paper-search skill for structured understanding
+3. Fallback to arXiv abstract via paper-search skill
 4. Classify papers by: theoretical approach, methodology, domain subfield
 
 ### Step 4.5: Download Representative and Key Papers
@@ -104,7 +104,7 @@ For papers classified as representative or key in the landscape:
    ```
 4. **Run download script**:
    ```bash
-   uv run .aether/skills/literature-review/scripts/download_paper.py --batch key_papers.json --output .aether/research/literatures --relevance representative
+   uv run .aether/skills/paper-search/download_paper.py --batch key_papers.json --output .aether/research/literatures --relevance representative
    ```
 5. **Record results**: Successfully downloaded papers go to `literatures/index.json`; unavailable papers go to `literatures/unavailable.md` (title, authors, journal, DOI, URL, reason)
 6. **Do NOT block on failures**: If a paper has no OA version, note it in unavailable.md and proceed — landscape scan focuses on mapping, not full archiving

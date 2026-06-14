@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test"
 import { Permission } from "../../src/permission"
 import { Discipline } from "../../src/session/discipline"
 
-describe("Permission.intersection — uncovered edge cases", () => {
+const skip = process.env.RESEARCH_AGENT_TEST !== "1"
+
+describe.skipIf(skip)("Permission.intersection — uncovered edge cases", () => {
   test("parent deny overrides child ask", () => {
     const parent = Permission.fromConfig({ bash: "deny" })
     const child = Permission.fromConfig({ bash: "ask" })

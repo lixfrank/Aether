@@ -306,7 +306,7 @@ Search strategy adjustments:
 
 - Expand keyword scope to adjacent domains
 - Check recent preprints (last 6 months)
-- Search non-arXiv sources (INSPIRE-HEP, Semantic Scholar, PubMed, etc.)
+- Search non-arXiv sources via paper-search skill
 - For each missing area, attempt ≥3 distinct search queries
 
 Update existing landscape_map.md and ROADMAP.md with supplementary findings.
@@ -896,7 +896,7 @@ REPAIR SCOPE PER FINDING TYPE:
 - Circular dependencies → break cycle by redesigning question assumptions (replace inter-question dependency with knowledge-base assumption or introduce independent verification)
 - Unresolved knowledge gaps not considered → add mitigation notes in reasoning chain §Unresolved Knowledge Gaps
 
-For each finding, you MAY use web search and alpha-research skill for targeted literature search
+For each finding, you MAY use web search and paper-search skill for targeted literature search
 to find additional evidence for reasoning chain reconstruction. For findings that cannot be resolved,
 mark them as unresolved_reasoning_gap.
 
@@ -945,7 +945,7 @@ Missing areas identified by audit_3:
 Search strategy adjustments:
 - Expand keyword scope to adjacent domains
 - Check recent preprints (last 6 months)
-- Search non-arXiv sources (INSPIRE-HEP, Semantic Scholar, PubMed, etc.)
+- Search non-arXiv sources via paper-search skill
 - For each missing area, attempt ≥3 distinct search queries
 
 Update existing landscape_map.md and ROADMAP.md with supplementary findings.

@@ -25,7 +25,7 @@ mcp:
   research-conventions: true
   research-state: true
 skill_refs:
-  - alpha-research
+  - paper-search
   - health-check
   - debate-advocate
   - debate-critic

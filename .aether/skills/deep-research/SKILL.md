@@ -46,7 +46,7 @@ This skill implements **Phase 1** of the Path 3 research state machine. It is in
 - **Local files**: Read any referenced local files (papers, code, data). Use read/glob/grep tools directly, NOT explore subagent.
 - **Literature**: Dispatch research-explorer subagent for parallel database searches (arXiv, INSPIRE-HEP, Semantic Scholar)
 - **Web**: Use websearch/webfetch for supplementary context
-- For physics literature: use alpha-research skill for initial search, then alphaxiv overview for deeper understanding
+- For physics literature: use paper-search skill for initial search and deeper understanding
 
 ### Step 3.5: Download Referenced Papers
 
@@ -76,7 +76,7 @@ This skill implements **Phase 1** of the Path 3 research state machine. It is in
    - Dedup: arxiv_id priority match, then doi. Entries with neither → skip download, record in unavailable.md (reason: "No arXiv ID or DOI provided")
 4. Run download script:
    ```bash
-   uv run .aether/skills/literature-review/scripts/download_paper.py --batch papers_to_download.json --output .aether/research/literatures
+   uv run .aether/skills/paper-search/download_paper.py --batch papers_to_download.json --output .aether/research/literatures
    ```
 5. Record download results to index.json and unavailable.md
 6. Do NOT block on individual download failures
@@ -229,7 +229,7 @@ MUST NOT output any other text after this YAML block. The coordinator parses thi
 
 - Peer-reviewed journals: highest credibility
 - arXiv preprints: check for subsequent peer-reviewed publication
-- alphaxiv overview: verify claims against original paper
+- paper-search skill: verify claims against original paper
 - INSPIRE-HEP: citation counts and community endorsement
 - Local files: treat as primary sources with direct verification
 

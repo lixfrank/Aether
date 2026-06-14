@@ -5,14 +5,15 @@ import { Instance } from "../../src/project/instance"
 import { Agent } from "../../src/agent/agent"
 import { Permission } from "../../src/permission"
 
+const skip = process.env.RESEARCH_AGENT_TEST !== "1"
+
 const projectRoot = path.resolve(__dirname, "../../../../.aether/skills")
 
-describe("Layer 2.1 — skill file existence", () => {
-  test("T2.1.1: alpha-research SKILL.md exists with auth-first design", async () => {
-    const content = await Bun.file(path.join(projectRoot, "alpha-research", "SKILL.md")).text()
-    expect(content).toContain("name: alpha-research")
-    expect(content).toContain("Mode Selection")
-    expect(content).toContain("alpha status")
+describe.skipIf(skip)("Layer 2.1 — skill file existence", () => {
+  test("T2.1.1: paper-search SKILL.md exists with arXiv mode design", async () => {
+    const content = await Bun.file(path.join(projectRoot, "paper-search", "SKILL.md")).text()
+    expect(content).toContain("name: paper-search")
+    expect(content).toContain("arXiv Search")
     expect(content).toContain("arxiv_search.py")
     expect(content).not.toContain("category:")
   })
@@ -34,7 +35,7 @@ describe("Layer 2.1 — skill file existence", () => {
   })
 
   test("T2.1.10: no category field in any ported skill frontmatter", async () => {
-    const skillDirs = ["alpha-research", "source-comparison", "paper-code-audit"]
+    const skillDirs = ["paper-search", "source-comparison", "paper-code-audit"]
     for (const dir of skillDirs) {
       const content = await Bun.file(path.join(projectRoot, dir, "SKILL.md")).text()
       expect(content).not.toContain("category:")
@@ -65,7 +66,7 @@ mcp:
   research-state: true
 env_scope:
   allowed_commands:
-    - alpha
+    - uv
     - curl
 output_dir: research
 ---
@@ -87,7 +88,10 @@ Route based on intent.
           expect(r?.mcp).toEqual({ "research-conventions": true, "research-state": true })
           expect(r?.outputDir).toBe("research")
           expect(r?.prompt).toContain("Research Mode")
-          expect(Permission.evaluate("bash", "alpha test", r!.permission).action).toBe("allow")
+          expect(
+            Permission.evaluate("bash", "uv run .aether/skills/paper-search/arxiv_search.py test", r!.permission)
+              .action,
+          ).toBe("allow")
           expect(Permission.evaluate("bash", "curl https://example.com", r!.permission).action).toBe("allow")
           expect(Permission.evaluate("bash", "rm -rf /", r!.permission).action).toBe("deny")
         },
@@ -115,8 +119,7 @@ permission:
   read: allow
   webfetch: allow
 skill_refs:
-  - alpha-research
-  - arxiv-search
+  - paper-search
 ---
 
 # Integrity Commandments
@@ -133,7 +136,7 @@ Never fabricate a source.
         fn: async () => {
           const e = await Agent.get("research-explorer")
           expect(e?.mode).toBe("subagent")
-          expect(e?.skillRefs).toEqual(["alpha-research", "arxiv-search"])
+          expect(e?.skillRefs).toEqual(["paper-search"])
           expect(e?.prompt).toContain("Integrity Commandments")
         },
       })

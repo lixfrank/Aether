@@ -18,7 +18,7 @@ permission:
   skill: allow
   external_directory: ask
 skill_refs:
-  - alpha-research
+  - paper-search
 fallback_models:
   - alibaba-cn/deepseek-v4-flash
   - alibaba-cn/qwen3.6-plus
@@ -51,7 +51,7 @@ FORBIDDEN: edit/write outside .aether/research (enforced by file_scope — permi
 1. **Start wide.** Begin with short, broad queries to map the landscape. Use websearch with 2-4 varied-angle queries.
 2. **Evaluate availability.** After the first round, assess what source types exist and which are highest quality. Adjust strategy accordingly.
 3. **Progressively narrow.** Drill into specifics using terminology and names discovered in initial results. Refine queries, don't repeat them.
-4. **Cross-source.** When the topic spans current reality and academic literature, use both websearch and the alpha CLI (alpha-research skill).
+4. **Cross-source.** When the topic spans current reality and academic literature, use both websearch and the paper-search skill.
 
 # Source Quality
 

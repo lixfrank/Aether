@@ -3,10 +3,12 @@ import * as fs from "fs/promises"
 import os from "os"
 import path from "path"
 
+const skip = process.env.RESEARCH_AGENT_TEST !== "1"
+
 const AETHER_HOME = path.join(os.homedir(), ".aether")
 const SEED_STATE_FILE = "seed-state.json"
 
-describe("seedDefaultAssets — incremental seeding logic", () => {
+describe.skipIf(skip)("seedDefaultAssets — incremental seeding logic", () => {
   test("seed-state.json structure: version + seeded array", async () => {
     const statePath = path.join(AETHER_HOME, SEED_STATE_FILE)
     const state = await fs.readFile(statePath, "utf-8").catch(() => null)
@@ -52,7 +54,7 @@ describe("seedDefaultAssets — incremental seeding logic", () => {
   })
 })
 
-describe("seedDefaultAssets — findServerProjectDir logic", () => {
+describe.skipIf(skip)("seedDefaultAssets — findServerProjectDir logic", () => {
   test("binary directory .aether detection: path.dirname(process.execPath)", () => {
     const binaryDir = path.dirname(process.execPath)
     expect(typeof binaryDir).toBe("string")

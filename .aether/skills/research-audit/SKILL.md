@@ -95,8 +95,8 @@ For each claim in the catalog:
    - Provide `suggested_search`: keywords, domain, time period
 2. **Has citation** → verify citation content:
    - First check `.aether/research/literatures/` for local copy → read directly
-   - Local copy unavailable → web search + alphaxiv overview
-   - Record `verification_source: local | web_search | alphaxiv`
+   - Local copy unavailable → paper-search skill
+   - Record `verification_source: local | paper_search | web_search`
 3. **Citation does not match claim** → mark as CONCERN
    - Record `current_ref`, `suggested_ref`
 4. **Factual misstatement detected** → mark as FATAL
@@ -149,7 +149,7 @@ audit_1_gaps_resolved: "[N/M]" # audit_2 only: N gaps resolved out of M audit_1 
 - issue: factual misstatement / method misdescription
 - evidence: why this is wrong (at least 2 independent sources cross-verify)
 - suggested_fix: recommended correction direction
-- verification_source: local | web_search | alphaxiv
+- verification_source: local | paper_search | web_search
 
 ### [MISSING] Section X, Claim Z
 
@@ -163,7 +163,7 @@ audit_1_gaps_resolved: "[N/M]" # audit_2 only: N gaps resolved out of M audit_1 
 - issue: citation does not support / unreliable source
 - current_ref: current citation
 - suggested_ref: suggested replacement or supplementary citation
-- verification_source: local | web_search | alphaxiv
+- verification_source: local | paper_search | web_search
 
 ````
 
@@ -221,7 +221,7 @@ MUST NOT output any other text after this YAML block. The coordinator routes bas
 For each FATAL/CONCERN finding, at least 2 independent sources must be used:
 
 - Web search (general academic search engines)
-- Original paper comparison (via literatures/ local copy or alphaxiv overview)
+- Original paper comparison (via literatures/ local copy or paper-search skill)
 - For physics domain FATAL (formula/derivation errors): optional SymPy spot-check via gpd-verification computational scripts
 
 This reduces single-LLM-judgment randomness. Reference gpd-errors skill's error pattern recognition strategies for methodology misdescription detection.

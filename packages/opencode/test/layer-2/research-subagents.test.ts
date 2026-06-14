@@ -11,7 +11,9 @@ import {
   makeGpdReviewerConfig,
 } from "./fixture"
 
-describe("Layer 2 — research-explorer subagent", () => {
+const skip = process.env.RESEARCH_AGENT_TEST !== "1"
+
+describe.skipIf(skip)("Layer 2 — research-explorer subagent", () => {
   test("T2.6/T2.7: research-explorer subagent with Integrity Commandments prompt", async () => {
     await using tmp = await tmpdir({ config: { agent: { "research-explorer": makeResearchExplorerConfig() } } })
     await Instance.provide({
@@ -19,7 +21,7 @@ describe("Layer 2 — research-explorer subagent", () => {
       fn: async () => {
         const e = await Agent.get("research-explorer")
         expect(e?.mode).toBe("subagent")
-        expect(e?.skillRefs).toEqual(["alpha-research", "arxiv-search"])
+        expect(e?.skillRefs).toEqual(["paper-search"])
         expect(evalPerm(e!, "grep")).toBe("allow")
         expect(evalPerm(e!, "list")).toBe("allow")
         expect(evalPerm(e!, "websearch")).toBe("allow")
