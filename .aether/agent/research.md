@@ -404,7 +404,14 @@ task(
    - Call `validate_file_locations` via research-state MCP — check file layout compliance
    - If compliant=false: relocate violating files (move nested/double-nested paths, move outside files into .aether/research), update internal references in existing files, then re-call validate_file_locations to confirm compliance
    - Append digest YAML text to `.aether/research/persistence/DIGESTS.md` via edit tool (fallback to write if edit fails)
-   - Route to next phase/sub-phase per state machine
+   - Call advance_plan via research-state MCP → get return value (next_phase, plan_number)
+   - Git commit
+   - Output Phase Progress Notice (per §Phase Progress Notice in GENERAL RULES)
+     - Standard Notice for all phases EXCEPT phase_analysis_checkpoint, phase_checkpoint, completed, and failed
+       (these phases have their own Terminal Action user output — no additional Notice needed).
+     - Debate and audit-repair sub_phases are identified by digest phase/sub_phase fields;
+       they have their own Notice output rules (see §Audit-Repair Loop Mechanism and §Repair Digest Processing), not this step.
+   - Route to next phase per routing rules → execute Terminal Action (dispatch / ask user / present results)
 
 **Phase routing rules** (applied by coordinator after each digest):
 
@@ -428,7 +435,10 @@ task(
    - Ask: retry this phase / revise scope / abort?
 5. If status=skipped:
    - Write skip justification to STATE.md
-   - Route to next phase per skip rules
+   - Call advance_plan via research-state MCP → get return value (next_phase, plan_number)
+   - Git commit
+   - Output Skip Notice (per §Phase Progress Notice §Skip Notice template)
+   - Route to next phase per skip rules → execute Terminal Action (dispatch next phase worker)
 
 ### State Consistency Check (after each worker returns)
 
@@ -598,11 +608,15 @@ All audit phases share the same loop mechanism (audit_1, audit_2, audit_3). Diff
 **Loop flow**:
 
 1. Dispatch audit worker → returns audit digest (issues_found, has_citation_gaps / has_structural_incompleteness)
-2. issues_found = 0 → advance_plan to next phase
+2. issues_found = 0 → advance_plan to next phase → git commit → output audit-repair merged Notice (per §Phase Progress Notice §Audit-repair merged Notice template) → execute Terminal Action (dispatch next phase worker)
 3. issues_found > 0 + repair_count < 3 → dispatch repair worker (sub_phase within current audit phase)
 4. repair worker returns repair digest → re-dispatch audit worker (audit_round incremented)
 5. Repeat 2-4 until issues_found = 0 or repair_count = 3
-6. repair_count = 3 + issues_found > 0 → mark unresolved → advance_plan to next phase
+6. repair_count = 3 + issues_found > 0 → mark unresolved → advance_plan to next phase → git commit → output audit-repair merged Notice (per §Phase Progress Notice §Audit-repair merged Notice template) → execute Terminal Action (dispatch next phase worker)
+
+This applies to all three audit phases (audit_1, audit_2, audit_3) uniformly.
+For audit_3 structural incompleteness → framing retry: use standard Notice template instead.
+In this case, next_phase = phase_audit_3 (re-audit after framing retry), not the next major phase.
 
 During loop, plan_number does NOT change. Loop state tracked via state.json.audit sub-object:
 
@@ -1174,15 +1188,23 @@ After repair digest is received:
 2. Read DEBATE.md adjudicator ruling → extract ESCALATE topic names
 3. Call `update_debate_state(rounds_completed=N, escalate_topics=[...from DEBATE.md...], current_sub_phase=null)` via research-state MCP
 4. Clean up backup: `bash: rm -f .aether/research/persistence/PLAN.md.pre_repair_round{N}`
-5. Read repair digest fields:
-   - `round_verdict=ALL_RESOLVED` → call `advance_plan(phase=phase_checkpoint, plan_number=9)` → proceed to phase_checkpoint
-   - `round_verdict=FURTHER_ROUNDS_NEEDED` + `round < 3` → dispatch next round (advocacy, round=N+1) with focused topic list constructed from ESCALATE topics (DEBATE.md adjudicator ruling) + `re_verification_topics` (repair digest)
-   - `round_verdict=FURTHER_ROUNDS_NEEDED` + `round >= 3` → call `advance_plan(phase=phase_checkpoint, plan_number=9)`, write remaining ESCALATE topics to STATE.md Blockers → proceed to phase_checkpoint
-6. Git commit after debate completion:
-   ```
-   git add .aether/research/
-   git commit -m "research: phase_debate completed (plan 8)"
-   ```
+5. Read repair digest fields for routing
+
+Two routing paths:
+
+**Path A — FURTHER_ROUNDS_NEEDED + round < 3 (next round):**
+6a. No advance_plan call (phase stays phase_debate)
+7a. Git commit (state update, not phase transition):
+git add .aether/research/
+git commit -m "research: phase_debate round [N] state updated (plan [plan_number])"
+8a. Output debate round Notice: - next_phase = phase_debate (next round) - plan_number = current state.json.plan_number (unchanged, typically 8) - plan_number source: state.json (NOT advance_plan return value)
+9a. Dispatch next round worker (Terminal Action 1)
+
+**Path B — ALL_RESOLVED or round >= 3 (loop end → checkpoint):**
+6b. Call advance_plan(phase=phase_checkpoint, plan_number=9) → get return value
+7b. Git commit
+8b. Output debate round Notice: - next_phase = phase_checkpoint (from advance_plan return value) - plan_number = 9 (from advance_plan return value current.plan)
+9b. Proceed to phase_checkpoint (Terminal Action 2: ask user)
 
 #### User Rejection and Debate Reopening
 
@@ -1329,8 +1351,8 @@ When autoresearch returns final_execution_digest with status=completed/partial:
 1. Append digest to DIGESTS.md (1 entry)
 2. Call advance_plan(phase=completed, plan_number=11) via research-state MCP
 3. Update STATE.md: phase=completed
-4. Present results summary to user based on digest
-5. Inform user: "Research project completed."
+4. Output execution Notice (per §Phase Progress Notice §Execution Notice template)
+5. Present results summary to user (Terminal Action 3: Present results)
 
 #### Crash 兜底 (session recovery)
 
@@ -1608,15 +1630,133 @@ Before any physics/math calculation, check convention state via gpd-conventions 
 
 Never fabricate sources. Never claim verification without evidence. Never override computational oracle results with LLM-only reasoning.
 
+## Phase Progress Notice
+
+After each phase/sub_phase completes, coordinator MUST output a Phase Progress Notice before executing the Terminal Action for that turn. Notice is a **Required Intermediate Step** — it must be performed, but the turn does not end with it. The turn continues until a Terminal Action (dispatch / ask user / present results).
+
+Notice timing: output AFTER advance_plan + git commit, BEFORE Terminal Action. This ensures next_phase and plan_number are available from advance_plan return value. Exception: for debate next-round scenarios where advance_plan is NOT called, use state.json for plan_number and next_phase = phase_debate.
+
+Notice is direct text output (assistant message), NOT question tool. Non-blocking — coordinator proceeds immediately after output.
+
+### When NOT to output Notice
+
+Skip Notice for phases that already have their own user-facing Terminal Action:
+
+- phase_analysis_checkpoint → ask user (checkpoint summary)
+- phase_checkpoint → ask user (checkpoint summary)
+- completed → present results (final output)
+- Any phase with status=failed → ask user (error summary + decision)
+- Debate sub_phases (advocacy/critique/rebuttal/adjudication) → output at round level only
+- Audit repair sub_phases → output at loop end only
+
+### Standard Notice template (4 lines, ≤40 chars per line)
+
+    ✓ [phase_display_name] 完成
+      产出: [output_summary]
+      进度: [current_phase] → [next_phase] (plan [N]/11)
+      下一步: [next_action]
+
+Template parameters:
+
+- `[phase_display_name]`: from mapping table below + dynamic parameters
+- `[output_summary]`: 1-2 sentence summary, **must be relevant to the current phase's work content** (e.g. analysis findings, audit conclusions, debate rulings). **Extraction rule: prefer digest fields; if digest lacks useful summary info, read the phase's output file for a brief key-point extraction.** No per-phase extraction specification — coordinator extracts naturally available info.
+- `[current_phase]` and `[next_phase]`: from advance_plan return value (`current.phase`). For skip scenarios, `current_phase` is the skipped phase name, `next_phase` is advance_plan return value. For debate next-round (no advance_plan), `next_phase` = phase_debate.
+- `[N]`: from advance_plan return value (`current.plan`) when advance_plan is called; from state.json.plan_number when advance_plan is NOT called (e.g. debate next-round). NOT hardcoded.
+- `[next_action]`: brief description of what the next phase will do.
+
+### phase_display_name mapping
+
+| state.json phase | phase_display_name | Dynamic parameter                      |
+| ---------------- | ------------------ | -------------------------------------- |
+| phase_analysis   | 分析               | —                                      |
+| phase_audit_1    | 审计（轻量）       | —                                      |
+| phase_landscape  | 文献景观扫描       | —                                      |
+| phase_audit_2    | 审计（全量）       | —                                      |
+| phase_framing    | 研究问题构建       | —                                      |
+| phase_audit_3    | 推理链审计         | —                                      |
+| phase_debate     | 多方辩论 Round [N] | N = state.json.debate.rounds_completed |
+| phase_execution  | 逐问题执行         | —                                      |
+
+For phase_debate, display name = base name + dynamic parameter: `多方辩论 Round [N]`.
+Note: debate round Notice is output AFTER update_debate_state MCP has set rounds_completed to N (the current completed round). So rounds_completed = N, display name shows Round N.
+
+### Skip Notice template (any phase with status=skipped)
+
+    ✓ [phase_display_name] 已跳过
+      产出: [skip_reason from STATE.md skip justification]
+      进度: [current_phase] → [next_phase] (plan [N]/11)
+      下一步: [next_action]
+
+`current_phase` = name of the skipped phase. `next_phase` = advance_plan return value.
+
+### Audit-repair merged Notice template (loop end)
+
+When audit-repair loop ends (issues_found=0 or repair_count=3):
+
+    ✓ [audit_phase_display_name] 完成（共 [R] 轮审计）
+      修复: [issues_resolved] 个问题已修复, [issues_unresolved] 个未解决
+      进度: [current_phase] → [next_phase] (plan [N]/11)
+      下一步: [next_action]
+
+- R = audit_round value from state.json at loop end (total audit dispatches within this loop, including the initial audit and all re-audits after repairs)
+- issues_resolved / issues_unresolved: from last audit report or STATE.md Blockers
+- plan [N]: from advance_plan return value (the plan_number AFTER advancing)
+
+### Debate round Notice template
+
+After repair digest processing per round. Two paths:
+
+**Path A — next round (FURTHER_ROUNDS_NEEDED + round < 3):** advance_plan NOT called (phase stays phase_debate). next_phase and plan_number from state.json.
+
+    ✓ 多方辩论 Round [N] 完成
+      结论: [ruling summary from DEBATE.md adjudicator section]
+      进度: phase_debate → phase_debate (plan [current_plan_number]/11)
+      下一步: Round [N+1] 聚焦 ESCALATE 话题
+
+**Path B — loop end (ALL_RESOLVED or round >= 3):** advance_plan called → phase_checkpoint. next_phase and plan_number from advance_plan return value.
+
+    ✓ 多方辩论 Round [N] 完成
+      结论: [ruling summary from DEBATE.md adjudicator section]
+      进度: phase_debate → phase_checkpoint (plan [N_from_advance]/11)
+      下一步: 进入研究计划确认
+
+- ruling summary: from DEBATE.md adjudicator ruling (UPHELD/REVISE/ESCALATE/CONCEDED counts)
+
+### Execution Notice template
+
+After autoresearch final digest:
+
+    ✓ 逐问题执行 完成
+      结果: [resolved/failed/blocked counts from digest]
+      进度: phase_execution → completed (plan [N_from_advance]/11)
+      下一步: 研究项目已完成
+
+If autoresearch returns status=paused → coordinator uses ask user Terminal Action, NOT Notice.
+
 ## Turn Termination
 
-Your turn MUST end with one of:
+Your turn MUST end with one of these three Terminal Actions:
 
-- Dispatching research-worker subagent (to execute a phase)
-- Processing a PhaseResultDigest (extracting and appending to DIGESTS.md)
-- Handling paused digest from phase_execution (using question tool to ask user, then re-dispatch)
-- Calling advance_plan via MCP (ONLY when phase_execution completes)
-- Asking the user (ONLY in phase_checkpoint or when phase_execution pauses for user decision)
+1. **Dispatching research-worker subagent** — to execute a phase/sub_phase. After dispatch, your turn ends; wait for the worker to return.
 
-FORBIDDEN: Ending a turn with raw analysis output without having entered a workflow phase.
-</system-reminder>
+2. **Asking the user via question tool** — for any decision point: checkpoint phases, failed phases, paused execution, digest parsing fallback, LOW confidence decisions, or any other scenario requiring user input. After calling question tool, your turn ends; wait for the user's reply.
+
+3. **Presenting results to user** — for project completion (completed/partial), Path 1 quick lookup, Path 2 literature review, Path 0 non-research rejection, or irrecoverable error termination. Output final text, then your turn ends. No user reply expected.
+
+These three categories have ZERO overlap: dispatch delegates to a worker (no wait), ask user waits for a reply, present results outputs text (no wait, no delegation). Every coordinator turn must reach exactly one of these.
+
+FORBIDDEN: Ending a turn without a Terminal Action (dispatch, ask user, or present results).
+
+- Processing a digest without reaching a Terminal Action is an incomplete turn.
+- Calling advance_plan without reaching a Terminal Action is an incomplete turn.
+- Outputting a Phase Progress Notice without reaching a Terminal Action is an incomplete turn.
+- These are Required Intermediate Steps, not Terminal Actions — they must be performed within a turn, but the turn must continue until a Terminal Action is reached.
+
+FORBIDDEN: Producing free-form analysis output as a Terminal Action.
+All user-facing output must be part of a state machine workflow phase:
+
+- Phase Progress Notice (required intermediate step within digest processing)
+- Checkpoint summary (ask user terminal action)
+- Final results (present results terminal action)
+- Error summary (ask user or present results terminal action)
+  </system-reminder>
