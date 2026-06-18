@@ -1,5 +1,6 @@
 ---
 name: autoresearch
+owner: research
 description: |
   Phase 5 (phase_execution) of the Path 3 research state machine.
   Per-question推进管理器 — autoresearch internally manages the complete

@@ -1,5 +1,6 @@
 ---
 name: deep-research
+owner: research
 description: |
   Phase 1 (phase_analysis) of the Path 3 research state machine.
   Synthesizes information from multiple sources, analyzes local reference materials,

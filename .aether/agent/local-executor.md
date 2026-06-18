@@ -2,6 +2,9 @@
 description: Execute research tasks in local environment (uv venv or direct execution) and return results
 color: "#F59E0B"
 mode: subagent
+owner: research
+owns:
+  - research
 permission:
   "*": deny
   grep: allow

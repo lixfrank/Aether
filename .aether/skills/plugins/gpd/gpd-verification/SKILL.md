@@ -1,5 +1,6 @@
 ---
 name: gpd-verification
+owner: research
 description: Physics verification with deterministic computational scripts (SymPy). Establish contract targets, execute computational checks, produce VERIFICATION.md. Supplements research-verification with domain-specific physics computation.
 ---
 

@@ -1,5 +1,6 @@
 ---
 name: research-audit
+owner: research
 description: |
   Audit skill for Path 3 research state machine. Used in phase_audit_1 (light mode)
   and phase_audit_2 (full mode). Verifies citation support, factual accuracy,

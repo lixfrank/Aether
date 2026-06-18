@@ -1,5 +1,6 @@
 ---
 name: source-comparison
+owner: research
 description: Compare multiple sources on a topic and produce a grounded comparison matrix. Use when comparing papers, tools, approaches, or claims across sources.
 ---
 

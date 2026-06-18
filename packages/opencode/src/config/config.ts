@@ -910,6 +910,18 @@ export namespace Config {
         .string()
         .optional()
         .describe("Output directory for agent artifacts, relative to project .aether/ root"),
+      owner: z
+        .string()
+        .optional()
+        .describe(
+          "Domain group this subagent belongs to (e.g. 'research'). When set, the subagent is only visible to agents whose `owns` includes this group. Subagents without `owner` remain globally visible.",
+        ),
+      owns: z
+        .array(z.string())
+        .optional()
+        .describe(
+          "Domain groups this agent may dispatch subagents / load skills from. Only components whose `owner` is listed here are visible to this agent in the task/skill tool and system prompt. Absent/empty = no owned components visible (plain components still visible).",
+        ),
     })
     .catchall(z.any())
     .transform((agent, ctx) => {
@@ -939,6 +951,8 @@ export namespace Config {
         "env_scope",
         "mcp",
         "output_dir",
+        "owner",
+        "owns",
       ])
 
       // Extract unknown properties into options

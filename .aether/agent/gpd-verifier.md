@@ -2,6 +2,9 @@
 description: Physics verification with deterministic SymPy computation — per-question verification dispatch for dimensional analysis, Ward identities, limiting cases, convergence
 color: "#DC2626"
 mode: subagent
+owner: research
+owns:
+  - research
 permission:
   "*": deny
   grep: allow

@@ -2,7 +2,7 @@
 
 > 前置依赖: Layer 0（Permission.intersection、Discipline.compile、Agent.Info 扩展）、Layer 1（output_dir、fallback_models、MCP per-agent、denied tools 优化——已完成）
 > 本文档是 agent 基础设施扩展，与 Layer 1 同源（同改 `Config.Agent` / `Agent.Info` schema + merge 循环 + 工具过滤），并扩展到 `Skill` schema 与 `Skill.available` 过滤。
-> 完成后：research 组件（6 subagent + 24 skill）仅对声明 `owns: [research]` 的主代理/dispatcher 可见，build/plan 在 task 工具列表、system prompt `<available_skills>`、skill 工具列表三处**均看不到**也**无法按名调用**它们；`general`/`explore`/`translator`/`docs` 等无归属组件行为完全不变。
+> 完成后：research 组件（6 subagent + 24 skill）仅对声明 `owns: [research]` 的主代理/dispatcher 可见，build/plan 在 task 工具列表、system prompt `<available_skills>`、skill 工具列表三处**均看不到**也**无法按名调用**它们；`explore`/`translator`/`docs` 等无 `owns` 的 agent 不受影响；`general` 作为可派发 subagent 仍全局可见，但其自身 skill 池剔除 research 域 skill（符合隔离目标，`.opencode/skills/*` 通用 skill 仍可见）。
 
 ---
 
@@ -99,7 +99,7 @@ research 组件经下表所有通道进入 build/plan 上下文。**单通道关
 | research-verifier | `[research-verification]`                                                                  | 叶子，验证协议是唯一职能                           |
 | gpd-verifier      | `[research-verification, gpd-verification, gpd-errors, gpd-domain-check, gpd-conventions]` | 叶子，5 skill 必须**同时**遵循                     |
 | gpd-reviewer      | `[gpd-errors, gpd-conventions, gpd-domain-check]`                                          | 叶子，3 物理 skill 组合                            |
-| research-worker   | `[paper-search, health-check, debate-×4]`                                                  | 直接驱动的 6 个子流程 skill                        |
+| research-worker   | 无                                                                                         | 靠 lazy 分支 + SkillTool 加载 state machine skill  |
 | local-executor    | `[]`                                                                                       | 纯执行器，无 skill                                 |
 | research.md       | 无                                                                                         | coordinator，靠 SkillTool 加载 state machine skill |
 
@@ -155,7 +155,7 @@ Path 2 的 `literature-review` skill 会直接 dispatch `research-explorer`（`l
 
 ### push 模型（归属声明在 caller 侧）
 
-选择"caller 声明 `owns`"而非"组件声明 `exclusive_to`"：
+归属声明放在 caller 侧（`owns`），组件侧只声明归属（`owner`）：
 
 - 新增 research 组件：subagent/skill 加 `owner: research` → 自动对声明 `owns:[research]` 的 caller 可见，无需逐一登记 caller
 - build/plan 不声明 `owns` → research 组件自动隐藏，零改动
@@ -262,12 +262,14 @@ const accessibleAgents = agents.filter((a) => {
 })
 ```
 
-execute（`:108` 取到 agent 后）加硬闸：
+execute 复用 `task.ts:111` 已声明的 `callerAgent`（**勿重复 `const` 声明**，否则 SyntaxError），在 `:111` 之后追加 owner 硬闸：
 
 ```ts
-const agent = await Agent.get(params.subagent_type)
-if (!agent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
-const callerAgent = ctx.agent ? await Agent.get(ctx.agent) : undefined
+// task.ts:108-111 保持原样（不改动）：
+//   const agent = await Agent.get(params.subagent_type)
+//   if (!agent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
+//   const callerAgent = ctx.agent ? await Agent.get(ctx.agent) : undefined
+// 在 :111 之后插入：
 if (agent.owner && !callerAgent?.owns?.includes(agent.owner))
   throw new Error(
     `Agent "${agent.name}" belongs to domain "${agent.owner}", not dispatchable by "${ctx.agent ?? "(none)"}"`,
@@ -318,6 +320,8 @@ if (skill.owner && !caller?.owns?.includes(skill.owner))
 
 **24 个 research skill**（`.aether/skills/**/SKILL.md`）：frontmatter 加 `owner: research`。
 
+> 特例：`research-coordinator/SKILL.md` 原本**无 frontmatter**（仅有正文 `# Research Coordinator Skill`），导致 `Skill.add()` 因缺 `name`/`description` 而跳过、从未进入 skill 注册表。实现为其补全了完整 frontmatter（`name` + `description` + `owner: research`），使其可被发现与归属过滤。其余 23 个 skill 原有 frontmatter，仅追加 `owner: research`。
+
 20 top-level：autoresearch、deep-research、research-coordinator、research-audit、research-audit-reasoning、research-audit-repair、research-audit-repair-reasoning、literature-review、literature-landscape-scan、paper-search、paper-code-audit、research-question-framing、research-verification、source-comparison、env-setup、health-check、debate-adjudicator、debate-advocate、debate-critic、debate-repair
 
 4 个 `plugins/gpd/*`：gpd-conventions、gpd-domain-check、gpd-errors、gpd-verification
@@ -336,7 +340,7 @@ owner: research # 新增：归属于 research 域
 
 ### 4.3 总计
 
-**5 代码文件 + 31 md 文件 = 36 文件**（全小改，机械无逻辑风险）。核心新增代码量：config.ts 约 12 行、agent.ts 约 4 行、skill/index.ts 约 8 行、task.ts 约 6 行、skill.ts 约 6 行；frontmatter 37 行。
+**5 代码文件 + 31 md 文件 = 36 文件**（全小改，机械无逻辑风险）。核心新增代码量：config.ts 约 12 行、agent.ts 约 4 行、skill/index.ts 约 8 行、task.ts 约 6 行、skill.ts 约 6 行；frontmatter 52 行（含 research-coordinator 补全的 9 行完整 frontmatter）。
 
 **不改的东西**：
 
@@ -360,16 +364,16 @@ owner: research # 新增：归属于 research 域
 
 理由：`.aether/skills` 是 research 状态机专用 skill（与 research agent 强耦合、含子代理名、研究流程 prompt）；`.opencode/skills` 是通用工具型 skill（独立于 research 体系、对编码场景有用）。边界清晰、与打包结构一致，避免逐个判定 .opencode skill 归属的模糊性。
 
-### 5.2 为何保留 `skillRefs`（不可移除）
+### 5.2 `skillRefs` 与 `owns` 的职责边界
 
-`skillRefs` 与 `owner`/`owns` 语义正交，**不可互相替代**：
+`skillRefs` 与 `owner`/`owns` 语义正交，各司其职：
 
-- **语义正交**：`skillRefs` 仅 `system.ts:60-63` 一处消费，决定走 eager 全文注入分支（`"MUST follow"`）；`owns` 管 lazy 分支与 SkillTool 的列表过滤。移除 `skillRefs` 不会让 agent 看不到 skill（owns 管这个），但会把"强制预装"降级为"按需加载"。
-- **不可替代价值**：① 确定性装备（research-explorer 一进入就有 paper-search 全文，而非"自己判断要不要加载"）② 组合强制（gpd-verifier 必须**同时**遵循 5 个物理 skill，lazy 下 LLM 可能漏载 `gpd-conventions` 致物理验证致命）③ 防重复加载 ④ "MUST follow"强制语义。
-- **缺一不可的铁证**：research-worker 同时依赖两者——`skillRefs` eager 预装 6 个叶子手册 + `owns:[research]` 解锁 SkillTool 访问 18 个 state machine skill（autoresearch/deep-research/research-coordinator 等）。移除任一，research 状态机断裂。
-- **移除不简化**：移除要改 system.ts + 7 agent + 用 prompt 补偿确定性损失，净复杂度不降反升，且引入可靠性回归（把硬机制降级为 prompt 软约束，正是 §1.3 批判的模式）。
+- `skillRefs`（`system.ts:60-63` 唯一消费点）决定走 eager 全文注入分支（`"MUST follow"`）——会话开始即把指定 skill 全文强制注入 system prompt；它不参与可见性过滤。
+- `owns` 管 lazy 分支的 `<available_skills>` 列表与 SkillTool 列表的可见性过滤。
 
-两层组装模型更完整：owns（可见性池）+ skillRefs（确定性装备）互补。
+当前 5 个叶子 agent 依赖 `skillRefs` 实现确定性预装：research-explorer（paper-search）、research-verifier（research-verification）、gpd-verifier（5 个物理 skill 必须**同时**遵循，lazy 下 LLM 可能漏载 `gpd-conventions` 致物理验证致命）、gpd-reviewer（3 个物理 skill）、local-executor（`[]`）。本次改动**不触碰 `skillRefs`**——eager 注入走 `Skill.get` 显式引用，不过 owner 闸，行为不变。
+
+`research-worker` 与 `research.md`（coordinator）**无 `skill_refs`**，本身走 lazy 分支，靠 `owns:[research]` 解锁 SkillTool 访问 state machine skill（autoresearch/deep-research/research-coordinator 等）。两层互补不替代。
 
 ### 5.3 斜杠命令面不过闸
 
@@ -389,22 +393,7 @@ owner: research # 新增：归属于 research 域
 
 owns 语义统一为"可访问该域组件（subagent + skill）"。叶子 agent（research-explorer/verifier/gpd-verifier/gpd-reviewer）虽当前靠 skillRefs eager 注入覆盖 skill 需求，加 owns 为一致性与未来通过 SkillTool 加载域内新 skill 预留能力。每个 research agent 既 `owner:research` 归属该域、又 `owns:[research]` 可访问该域，对称清晰。
 
-### 5.6 为何 owner/owns 而非其它方案
-
-| 方案                                       | 评估                                                                                                                                                       | 取舍 |
-| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
-| **A. owner/owns 组件域可见性（采纳）**     | 硬隔离、解耦（agent.ts/skill/index.ts 不引用 research 名）、可维护（新 research 组件加 `owner:research` 即自动隐藏于 build/plan）、对称覆盖 subagent+skill | ✅   |
-| B. build/plan 加 task/skill 黑名单         | 零 schema 改动，但 agent.ts/skill 与 research 命名耦合，新增 research 组件需手动登记                                                                       | ✗    |
-| C. task/skill 白名单硬化 research 内部拓扑 | 表达域内父子层级，但维护者已确认不做（research 内部继续靠 prompt）                                                                                         | 不做 |
-| `hidden: true` + 列表跳过                  | 软保护（仍可按名调用）、`hidden` 语义过载                                                                                                                  | ✗    |
-| 条件化/按主代理分安装目录                  | 发现逻辑变复杂且有状态、风险高                                                                                                                             | ✗    |
-| 把 task/skill 默认反转为 deny              | 误伤 build 对 general/explore 的依赖及用户自定义主代理                                                                                                     | ✗    |
-
-### 5.7 为何 `owner` 单字段而非多级归属链
-
-所有 research 组件标 `owner: research`，所有 research agent 声明 `owns: [research]`，结果是全部 research agent 可见全部 research 组件。`owner` 表达"领域归属"（粗粒度），**无法表达域内父子拓扑**（research.md 只调 research-worker）。多级归属链会过载 `owner` 语义。维护者已确认：跨域可见性用 `owner`，域内拓扑继续靠 prompt 软约束，二者职责分离、互补不替代。
-
-### 5.8 owner 闸与现有权限过滤的关系
+### 5.6 owner 闸与现有权限过滤的关系
 
 两者串联在各过滤点，先后独立：
 
@@ -417,28 +406,29 @@ owns 语义统一为"可访问该域组件（subagent + skill）"。叶子 agent
 
 ## 6. 影响面核对
 
-| 场景                                                                                      | 预期                              | 依据                                                                                               |
-| ----------------------------------------------------------------------------------------- | --------------------------------- | -------------------------------------------------------------------------------------------------- |
-| build/plan 的 task 工具列表                                                               | 不含 6 research subagent          | build/plan 无 owns，subagent 有 owner:research → 闸门隐藏                                          |
-| build/plan 的 system prompt `<available_skills>`                                          | 不含 24 research skill            | build/plan 无 owns，skill 有 owner:research → `available` 过滤                                     |
-| build/plan 的 skill 工具列表                                                              | 不含 24 research skill            | 同上（共用 `available`）                                                                           |
-| build/plan 按名硬调 task `subagent_type:"research-worker"`                                | execute 抛错                      | task.ts execute owner 硬闸                                                                         |
-| build/plan 按名硬调 skill `name:"deep-research"`                                          | execute 抛错                      | skill.ts execute owner 硬闸                                                                        |
-| research.md dispatch research-worker（Path 3）                                            | 可见可调                          | research.md owns:[research] + research-worker owner:research                                       |
-| research.md dispatch research-explorer（Path 2）                                          | 可见可调                          | literature-review 在 research.md 会话内 dispatch；同上归属匹配                                     |
-| research-worker dispatch 5 个叶子                                                         | 可见可调                          | research-worker owns:[research] + 叶子 owner:research                                              |
-| research-worker 加载 autoresearch 等 state machine skill                                  | 可见可调                          | research-worker owns:[research] + skill owner:research                                             |
-| research-worker 的 skillRefs eager 注入（paper-search 等 6 个）                           | 正常注入                          | skillRefs 走 `Skill.get` 不过闸                                                                    |
-| `general`/`explore`（built-in subagent）                                                  | 全局可见，行为不变                | 无 owner → 闸门条件恒 false                                                                        |
-| `translator`/`docs`/`triage`/`duplicate-pr`（.opencode subagent）                         | 全局可见，行为不变                | 无 owner                                                                                           |
-| `.opencode/skills/*`（arxiv-search 等）                                                   | 全局可见，行为不变                | 不纳入 research 域，无 owner                                                                       |
-| 斜杠命令 `/deep-research`                                                                 | 全局可达                          | command 不过闸（决策 §5.3）                                                                        |
-| seeding 到 `~/.aether/`                                                                   | 正常                              | migrate.ts 已含 agent/skills，无需改                                                               |
-| dispatch 时权限交集（`task.ts:125-129`）                                                  | 不变                              | owner 只影响可见性 + execute 硬闸，不改交集/ask 逻辑                                               |
-| `delegation_depth: 0` → `task: deny *`（leaf）                                            | 不变                              | 与 owner 正交                                                                                      |
-| v0.6.0 fallback（`task.ts:135-140`）                                                      | 不变                              | 不涉及 owner                                                                                       |
-| `ctx.agent` 为 `undefined`（registry 未传 agent / `prompt.ts:359` subtask 路径无参 init） | 仅保留无 owner 的组件（默认安全） | `caller?.owns ?? []` = `[]` → 带 owner 的组件全隐藏；subtask 路径 subagent_type 已预定，无功能影响 |
-| debug/server/review 列表（`Skill.all`）                                                   | 全量可见                          | 不过闸（基础设施视图）                                                                             |
+| 场景                                                                                      | 预期                                        | 依据                                                                                                                                                   |
+| ----------------------------------------------------------------------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| build/plan 的 task 工具列表                                                               | 不含 6 research subagent                    | build/plan 无 owns，subagent 有 owner:research → 闸门隐藏                                                                                              |
+| build/plan 的 system prompt `<available_skills>`                                          | 不含 24 research skill                      | build/plan 无 owns，skill 有 owner:research → `available` 过滤                                                                                         |
+| build/plan 的 skill 工具列表                                                              | 不含 24 research skill                      | 同上（共用 `available`）                                                                                                                               |
+| build/plan 按名硬调 task `subagent_type:"research-worker"`                                | execute 抛错                                | task.ts execute owner 硬闸                                                                                                                             |
+| build/plan 按名硬调 skill `name:"deep-research"`                                          | execute 抛错                                | skill.ts execute owner 硬闸                                                                                                                            |
+| research.md dispatch research-worker（Path 3）                                            | 可见可调                                    | research.md owns:[research] + research-worker owner:research                                                                                           |
+| research.md dispatch research-explorer（Path 2）                                          | 可见可调                                    | literature-review 在 research.md 会话内 dispatch；同上归属匹配                                                                                         |
+| research-worker dispatch 5 个叶子                                                         | 可见可调                                    | research-worker owns:[research] + 叶子 owner:research                                                                                                  |
+| research-worker 通过 SkillTool 加载 autoresearch 等 state machine skill                   | 可见可调                                    | research-worker 无 skill_refs，走 lazy 分支；owns:[research] 匹配 skill owner:research                                                                 |
+| 叶子 agent 的 skillRefs eager 注入（research-explorer/gpd-verifier 等）                   | 正常注入                                    | skillRefs 走 `Skill.get` 不过闸                                                                                                                        |
+| `explore`（built-in subagent）                                                            | 全局可见，行为不变                          | 无 owner；且 explore 权限未放行 `skill`，本就不持有 skill 池                                                                                           |
+| `general`（built-in subagent）                                                            | 全局可见；其 skill 池剔除 research 域 skill | 无 owner → 作为可派发 subagent 仍可见；但 general 无 owns，其 `<available_skills>`/skill 工具不再含 24 research skill（`.opencode` 通用 skill 仍可见） |
+| `translator`/`docs`/`triage`/`duplicate-pr`（.opencode subagent）                         | 全局可见，行为不变                          | 无 owner                                                                                                                                               |
+| `.opencode/skills/*`（arxiv-search 等）                                                   | 全局可见，行为不变                          | 不纳入 research 域，无 owner                                                                                                                           |
+| 斜杠命令 `/deep-research`                                                                 | 全局可达                                    | command 不过闸（决策 §5.3）                                                                                                                            |
+| seeding 到 `~/.aether/`                                                                   | 正常                                        | migrate.ts 已含 agent/skills，无需改                                                                                                                   |
+| dispatch 时权限交集（`task.ts:125-129`）                                                  | 不变                                        | owner 只影响可见性 + execute 硬闸，不改交集/ask 逻辑                                                                                                   |
+| `delegation_depth: 0` → `task: deny *`（leaf）                                            | 不变                                        | 与 owner 正交                                                                                                                                          |
+| v0.6.0 fallback（`task.ts:135-140`）                                                      | 不变                                        | 不涉及 owner                                                                                                                                           |
+| `ctx.agent` 为 `undefined`（registry 未传 agent / `prompt.ts:359` subtask 路径无参 init） | 仅保留无 owner 的组件（默认安全）           | `caller?.owns ?? []` = `[]` → 带 owner 的组件全隐藏；subtask 路径 subagent_type 已预定，无功能影响                                                     |
+| debug/server/review 列表（`Skill.all`）                                                   | 全量可见                                    | 不过闸（基础设施视图）                                                                                                                                 |
 
 ---
 
@@ -458,8 +448,8 @@ owns 语义统一为"可访问该域组件（subagent + skill）"。叶子 agent
 7. research agent 的 task 工具列表仍含全部 6 个 research subagent
 8. research agent 的 system prompt / skill 工具列表仍含全部 24 个 research skill
 9. research-worker 的 task 工具列表仍含 5 个叶子执行器
-10. research-worker 的 skillRefs 6 个 skill 仍正常 eager 注入（走 `Skill.get`，不过闸）
-11. research-worker 通过 SkillTool 加载 autoresearch/deep-research 等 state machine skill 正常（owns:[research] 匹配）
+10. research-worker（无 `skill_refs`）通过 SkillTool 加载 autoresearch/deep-research 等 state machine skill 正常（owns:[research] 匹配）
+11. 叶子 agent 的 skillRefs（research-explorer 的 paper-search、gpd-verifier 的 5 物理 skill 等）仍正常 eager 注入（走 `Skill.get`，不过闸）
 12. Path 3：research → research-worker → 叶子 全链路正常 dispatch
 13. Path 2：research → literature-review skill → research-explorer 正常 dispatch（归属匹配）
 14. Path 1（quick lookup）/ Path 0（非研究）不受影响
@@ -497,11 +487,3 @@ owns 语义统一为"可访问该域组件（subagent + skill）"。叶子 agent
 ### 8.2 单元测试（可选）
 
 在 `skill/index.ts` 的 `available` 与 `task.ts`/`skill.ts` 的 execute 过滤上添加：构造 `Agent.Info`/`Skill.Info` mock（含/不含 owner）+ caller mock（含/不含 owns），断言可见列表与 execute 抛错行为。当前过滤逻辑无独立单测，可在后续随该文件测试补全。
-
----
-
-## 9. 后续演进（非本改动范围）
-
-- **MCP 残余泄漏**（§5.4）：反转 `prompt.ts:897` 默认为"未定义=隐藏"，或给 MCP server 加 `owner`，与本次 owner 模型统一。单独评估回归面。
-- **方案 C（域内拓扑硬化）**：若未来要把 research 内部父子层级也转为硬约束，可在 `owner` 之外叠加 `task`/`skill` 白名单——`research.md: task:{research-worker: allow, research-explorer: allow}`。与 `owner` 正交，可独立引入。
-- **多归属**：若一个组件需对多个域可见，可将 `owner: string` 扩展为 `owners: string[]`，过滤改为 `a.owners.some(g => caller.owns.includes(g))`。当前单 `owner` 已满足需求。

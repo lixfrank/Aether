@@ -1,5 +1,6 @@
 ---
 name: research-audit-repair
+owner: research
 description: |
   Repair skill for audit phases in Path 3 research state machine. Used within
   phase_audit_1 and phase_audit_2 audit-repair loops. Repairs FATAL/CONCERN

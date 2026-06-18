@@ -1,5 +1,6 @@
 ---
 name: gpd-domain-check
+owner: research
 description: Domain-specific physics verification checklists with computation method protocols. Use during verification to apply specialized checks for quantum field theory, condensed matter, statistical mechanics, and 11 other domains.
 ---
 

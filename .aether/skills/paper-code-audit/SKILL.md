@@ -1,5 +1,6 @@
 ---
 name: paper-code-audit
+owner: research
 description: Compare a paper's claims against its public codebase and identify mismatches, omissions, and reproducibility risks. Use for auditing papers, checking code-claim consistency, and verifying reproducibility.
 ---
 

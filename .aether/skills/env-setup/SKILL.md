@@ -1,5 +1,6 @@
 ---
 name: env-setup
+owner: research
 description: |
   Per-item authorization auto-install workflow for missing software
   detected by health check. Reads install_registry.json for install

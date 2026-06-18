@@ -1,5 +1,6 @@
 ---
 name: literature-review
+owner: research
 description: |
   Path 2 of the research agent Entry Gate — independent workflow with its own state machine.
   Conduct comprehensive, systematic literature reviews using multiple academic databases

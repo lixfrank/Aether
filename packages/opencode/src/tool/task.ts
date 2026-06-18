@@ -75,9 +75,11 @@ export const TaskTool = Tool.define("task", async (ctx) => {
 
   // Filter agents by permissions if agent provided
   const caller = ctx?.agent
-  const accessibleAgents = caller
-    ? agents.filter((a) => Permission.evaluate("task", a.name, caller.permission).action !== "deny")
-    : agents
+  const accessibleAgents = agents.filter((a) => {
+    if (a.owner && !caller?.owns?.includes(a.owner)) return false
+    if (caller && Permission.evaluate("task", a.name, caller.permission).action === "deny") return false
+    return true
+  })
   const list = accessibleAgents.toSorted((a, b) => a.name.localeCompare(b.name))
 
   const description = DESCRIPTION.replace(
@@ -109,6 +111,11 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       if (!agent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
 
       const callerAgent = ctx.agent ? await Agent.get(ctx.agent) : undefined
+
+      if (agent.owner && !callerAgent?.owns?.includes(agent.owner))
+        throw new Error(
+          `Agent "${agent.name}" belongs to domain "${agent.owner}", not dispatchable by "${ctx.agent ?? "(none)"}"`,
+        )
 
       const hasTaskPermission = agent.permission.some((rule) => rule.permission === "task")
       const hasTodoWritePermission = agent.permission.some((rule) => rule.permission === "todowrite")

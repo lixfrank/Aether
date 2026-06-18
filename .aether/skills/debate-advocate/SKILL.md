@@ -1,5 +1,6 @@
 ---
 name: debate-advocate
+owner: research
 description: |
   Multi-agent debate role — Advocate. Defends the research framing (PLAN.md)
   against critique. Produces an advocacy brief or rebuttal. Invoked by

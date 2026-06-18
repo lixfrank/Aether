@@ -2,6 +2,9 @@
 description: Physics peer review — methodological critique, convention consistency, error pattern screening
 color: "#9333EA"
 mode: subagent
+owner: research
+owns:
+  - research
 permission:
   "*": deny
   grep: allow

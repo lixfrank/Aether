@@ -1,5 +1,6 @@
 ---
 name: research-audit-repair-reasoning
+owner: research
 description: |
   Repair skill for phase_audit_3 in Path 3 research state machine. Used within
   phase_audit_3 audit-repair loops. Repairs FATAL/CONCERN/MISSING findings in

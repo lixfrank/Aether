@@ -1,5 +1,6 @@
 ---
 name: debate-repair
+owner: research
 description: |
   Multi-agent debate role — Repair. Fixes PLAN.md and research_questions.md
   based on adjudicator rulings. Performs targeted, structural, or exploratory

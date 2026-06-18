@@ -1,5 +1,6 @@
 ---
 name: gpd-conventions
+owner: research
 description: Physics convention lock management. Check, set, validate, compare, and diff conventions across research phases. Use before any calculation to ensure consistency.
 ---
 

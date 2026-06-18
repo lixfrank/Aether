@@ -1,5 +1,6 @@
 ---
 name: paper-search
+owner: research
 description: |
   Multi-database paper search, download (source-first), citation extraction,
   and citation discovery (strictly limited). Four modes: (1) Multi-Database

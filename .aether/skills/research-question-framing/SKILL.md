@@ -1,5 +1,6 @@
 ---
 name: research-question-framing
+owner: research
 description: |
   Phase 6 (phase_framing) of the Path 3 research state machine.
   Converts gaps from literature-landscape-scan into structured, falsifiable research questions

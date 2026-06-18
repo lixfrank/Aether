@@ -1,3 +1,12 @@
+---
+name: research-coordinator
+description: |
+  Path 3 research state machine coordinator skill. Drives the full research lifecycle:
+  phase routing, research-worker dispatch, checkpoint handling, and multi-agent debate
+  orchestration. Injected via skill tool invocation by the research agent (Path 3 only).
+owner: research
+---
+
 # Research Coordinator Skill
 
 This skill content is injected via skill tool invocation (Path 3 only). It persists in conversation history across turns until context compaction removes it. Re-invoke the /research-coordinator skill tool on next turn if compaction occurred (see research.md §Skill Invocation Mechanism).

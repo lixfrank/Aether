@@ -1,5 +1,6 @@
 ---
 name: literature-landscape-scan
+owner: research
 description: |
   Phase 4 (phase_landscape) of the Path 3 research state machine.
   Scans literature landscape for a research topic. Produces a structured landscape_map.md

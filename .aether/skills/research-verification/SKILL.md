@@ -1,5 +1,6 @@
 ---
 name: research-verification
+owner: research
 description: Structured research verification procedure (domain-agnostic). Establish contract targets, execute verification methods, produce VERIFICATION.md report. Domain-specific checks provided by domain plugin skills. Supports domain_mode parameter (general/physics) and per-question claim filtering.
 ---
 

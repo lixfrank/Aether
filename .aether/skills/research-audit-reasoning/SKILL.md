@@ -1,5 +1,6 @@
 ---
 name: research-audit-reasoning
+owner: research
 description: |
   Audit skill for phase_audit_3 of the Path 3 research state machine.
   Verifies reasoning chain quality, dependency structure, and cross-file

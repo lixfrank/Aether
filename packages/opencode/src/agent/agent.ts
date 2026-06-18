@@ -72,6 +72,8 @@ export namespace Agent {
         .optional(),
       mcp: z.record(z.string(), z.boolean()).optional(),
       outputDir: z.string().optional(),
+      owner: z.string().optional(),
+      owns: z.string().array().optional(),
     })
     .meta({
       ref: "Agent",
@@ -296,6 +298,8 @@ export namespace Agent {
 
             item.mcp = value.mcp ?? item.mcp
             item.outputDir = value.output_dir ?? item.outputDir
+            item.owner = value.owner ?? item.owner
+            item.owns = value.owns ?? item.owns
             const compileInput: z.infer<typeof Discipline.Schema> = {}
             if (value.env_scope?.allowed_commands || value.env_scope?.denied_commands) {
               compileInput.env_scope = value.env_scope

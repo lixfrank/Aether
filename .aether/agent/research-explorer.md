@@ -2,6 +2,9 @@
 description: Gather primary evidence across papers, web sources, repos, and local artifacts with integrity constraints
 color: "#2563EB"
 mode: subagent
+owner: research
+owns:
+  - research
 permission:
   "*": deny
   grep: allow

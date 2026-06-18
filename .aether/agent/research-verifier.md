@@ -2,6 +2,9 @@
 description: General research verification — structured contract verification and evidence confirmation for per-question verification dispatch
 color: "#DC2626"
 mode: subagent
+owner: research
+owns:
+  - research
 permission:
   "*": deny
   grep: allow

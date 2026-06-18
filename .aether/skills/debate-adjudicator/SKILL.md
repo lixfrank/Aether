@@ -1,5 +1,6 @@
 ---
 name: debate-adjudicator
+owner: research
 description: |
   Multi-agent debate role — Adjudicator. Synthesizes advocate and critic
   positions, makes final rulings on each debate topic, and identifies escalated

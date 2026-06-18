@@ -1,5 +1,6 @@
 ---
 name: gpd-errors
+owner: research
 description: LLM physics error catalog with detection strategies. Use to identify common LLM physics reasoning errors during verification. Includes historical error pattern memory from prior verification cycles.
 ---
 

@@ -1,5 +1,6 @@
 ---
 name: debate-critic
+owner: research
 description: |
   Multi-agent debate role — Critic. Systematically critiques the research
   framing (PLAN.md) across all debate topics. Produces a structured critique.

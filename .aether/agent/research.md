@@ -2,6 +2,8 @@
 description: Research mode — deep search, analysis, and verification
 color: "#7C3AED"
 mode: primary
+owns:
+  - research
 permission:
   "*": deny
   grep: allow

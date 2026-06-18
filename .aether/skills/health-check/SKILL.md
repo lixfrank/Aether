@@ -1,5 +1,6 @@
 ---
 name: health-check
+owner: research
 description: |
   Research agent health check execution — 4-layer progressive detection
   (infrastructure → persistence → skill_chain → runtime) + cross-MCP arbitration.

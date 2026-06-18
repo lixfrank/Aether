@@ -39,6 +39,7 @@ export namespace Skill {
      * IGNORED rather than failing the whole skill's parse (which would drop the skill).
      */
     id: z.string().optional().catch(undefined),
+    owner: z.string().optional(),
     location: z.string(),
     content: z.string(),
   })
@@ -167,7 +168,11 @@ export namespace Skill {
       }
 
       const projectDirs: string[] = []
-      for await (const root of Filesystem.up({ targets: [...EXTERNAL_DIRS].reverse(), start: directory, stop: worktree })) {
+      for await (const root of Filesystem.up({
+        targets: [...EXTERNAL_DIRS].reverse(),
+        start: directory,
+        stop: worktree,
+      })) {
         projectDirs.push(root)
       }
       for (const root of projectDirs.toReversed()) {
@@ -249,7 +254,7 @@ export namespace Skill {
 
     if (!md) return
 
-    const parsed = Info.pick({ name: true, description: true, id: true }).safeParse(md.data)
+    const parsed = Info.pick({ name: true, description: true, id: true, owner: true }).safeParse(md.data)
     if (!parsed.success) return
 
     if (state.skills[parsed.data.name]) {
@@ -265,6 +270,7 @@ export namespace Skill {
       name: parsed.data.name,
       description: parsed.data.description,
       id: parsed.data.id,
+      owner: parsed.data.owner,
       location: match,
       content: md.content,
     }
@@ -316,7 +322,11 @@ export namespace Skill {
       // Filesystem.up iterates targets in order per level; using the reversed EXTERNAL_DIRS order means
       // after toReversed() the low-priority dirs (.agents) are scanned first and high-priority (.aether) last.
       const projectDirs: string[] = []
-      for await (const root of Filesystem.up({ targets: [...EXTERNAL_DIRS].reverse(), start: directory, stop: worktree })) {
+      for await (const root of Filesystem.up({
+        targets: [...EXTERNAL_DIRS].reverse(),
+        start: directory,
+        stop: worktree,
+      })) {
         projectDirs.push(root)
       }
       for (const root of projectDirs.toReversed()) {
@@ -428,8 +438,12 @@ export namespace Skill {
       const available = Effect.fn("Skill.available")(function* (agent?: Agent.Info) {
         const s = yield* getState()
         const list = Object.values(s.skills).toSorted((a, b) => a.name.localeCompare(b.name))
-        if (!agent) return list
-        return list.filter((skill) => Permission.evaluate("skill", skill.name, agent.permission).action !== "deny")
+        if (!agent) return list.filter((skill) => !skill.owner)
+        return list.filter((skill) => {
+          if (Permission.evaluate("skill", skill.name, agent.permission).action === "deny") return false
+          if (skill.owner && !agent.owns?.includes(skill.owner)) return false
+          return true
+        })
       })
 
       // Drop the cached state so the next read rebuilds from disk + current

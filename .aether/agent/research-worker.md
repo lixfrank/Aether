@@ -2,6 +2,9 @@
 description: Execute a single research phase or execution sub-phase in isolated context and return structured digest
 color: "#3B82F6"
 mode: subagent
+owner: research
+owns:
+  - research
 permission:
   "*": deny
   grep: allow
