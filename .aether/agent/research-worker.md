@@ -24,13 +24,6 @@ permission:
 mcp:
   research-conventions: true
   research-state: true
-skill_refs:
-  - paper-search
-  - health-check
-  - debate-advocate
-  - debate-critic
-  - debate-adjudicator
-  - debate-repair
 
 output_dir: ".aether/research"
 file_scope:
