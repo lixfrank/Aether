@@ -16,9 +16,7 @@ permission:
   # 违反"只读"约束。只读必须由权限系统精确强制，不依赖 LLM 自我约束
 mcp:
   research-state: true
-fallback_models:
-  - alibaba-cn/glm-5.1
-  - alibaba-cn/kimi-k2.6
+fallback_models: []
 output_dir: ".aether/research"
 file_scope:
   - ".aether/research/**" # 读任何文件，不写（只返回结构化判定）

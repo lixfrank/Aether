@@ -15,10 +15,7 @@ skill_refs:
   - gpd-errors
   - gpd-conventions
   - gpd-domain-check
-fallback_models:
-  - alibaba-cn/deepseek-v4-pro
-  - alibaba-cn/qwen3.6-max-preview
-  - alibaba-cn/glm-5.1
+fallback_models: []
 file_scope:
   - ".aether/research/**"
 mcp:

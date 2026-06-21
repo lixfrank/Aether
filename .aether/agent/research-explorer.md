@@ -22,9 +22,7 @@ permission:
   external_directory: ask
 skill_refs:
   - paper-search
-fallback_models:
-  - alibaba-cn/deepseek-v4-flash
-  - alibaba-cn/qwen3.6-plus
+fallback_models: []
 mcp:
   research-state: true
 output_dir: ".aether/research"

@@ -20,10 +20,7 @@ permission:
 skill_refs: []
 mcp:
   research-conventions: true
-fallback_models:
-  - alibaba-cn/glm-5.1
-  - alibaba-cn/kimi-k2.6
-  - alibaba-cn/qwen3.6-max-preview
+fallback_models: []
 
 output_dir: ".aether/research"
 file_scope:
