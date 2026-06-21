@@ -11,6 +11,7 @@ Strict tool contracts: unknown parameters return errors instead of being silentl
 """
 
 import json
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -54,9 +55,11 @@ def _default_state() -> dict:
         "plan_number": "0",
         "conventions": {},
         "project_contract": {},
-        "progress": {"completed_plans": [], "total_plans": 0},
+        "progress": {"completed_plans": [], "total_plans": 0, "rollback_plans": []},
         "phase_commits": {},
         "execution_cycle": 0,
+        "rollback_context": None,
+        "cross_phase_rollback_count": 0,
         "audit": {
             "repair_count": 0,
             "current_audit_phase": None,
@@ -97,6 +100,11 @@ def _read_state_safe(project_dir: Path) -> dict:
         state["conventions"] = {}
     if not isinstance(state.get("progress"), dict):
         state["progress"] = defaults["progress"]
+    else:
+        prog_defaults = defaults["progress"]
+        for key in prog_defaults:
+            if key not in state["progress"]:
+                state["progress"][key] = prog_defaults[key]
     if not isinstance(state.get("audit"), dict):
         state["audit"] = defaults["audit"]
     return state
@@ -110,8 +118,18 @@ def _write_state(project_dir: Path, state: dict) -> None:
     )
     state["phase"] = str(state["phase"]) if state["phase"] is not None else "gate"
     lock = FileLock(str(sp) + ".lock")
+    # Atomic write: serialize to a temp file then os.replace onto state.json.
+    # A crash mid-write leaves the temp file orphaned but state.json intact.
     with lock:
-        sp.write_text(json.dumps(state, indent=2))
+        tmp = sp.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(state, indent=2))
+        os.replace(tmp, sp)
+
+
+def _iso_now() -> str:
+    from datetime import datetime, timezone
+
+    return datetime.now(timezone.utc).isoformat()
 
 
 def _parse_roadmap_phases(roadmap_path: Path) -> list[dict] | None:
@@ -351,6 +369,233 @@ def advance_plan(
             "previous": {"phase": old_phase, "plan": old_plan},
             "current": {"phase": phase, "plan": plan_number},
             "progress": state["progress"],
+        }
+    )
+
+
+VALID_ROLLBACK_REASONS = {
+    "checkpoint_rejection",
+    "execution_vague",
+    "gap_reexamination",
+}
+VALID_ROLLBACK_TARGETS = {"phase_debate", "phase_framing"}
+CROSS_PHASE_ROLLBACK_LIMIT = 3
+
+
+@mcp.tool(annotations=MUTATING_NON_DESTRUCTIVE)
+def phase_rollback(
+    target_phase: str,
+    target_plan_number: str,
+    project_dir: str,
+    preserve_execution: bool = True,
+    rollback_reason: str = "",
+    rollback_details: dict = None,
+    commit_sha: str = "",
+) -> dict[str, Any]:
+    """Atomically roll back project state to an earlier phase and plan number.
+
+    Unified rollback handler for all rollback scenarios:
+    - checkpoint_rejection: user rejected plan at phase_checkpoint
+    - execution_vague: autoresearch detected PLAN.md method too vague during phase_execution
+    - gap_reexamination: judgment-worker classified claim_impossible level=L3
+
+    Cross-phase rollback counter (only system-initiated rollbacks) capped at 3.
+    On limit, returns action=terminated without modifying phase/plan_number.
+    Atomic: all field mutations operate on an in-memory dict; only one disk write at end.
+    """
+    pd = _resolve_project_dir(project_dir)
+    target_plan_number = str(target_plan_number)
+    if rollback_details is None:
+        rollback_details = {}
+
+    if target_phase not in VALID_ROLLBACK_TARGETS:
+        return _stable_error(
+            f"Invalid target_phase: '{target_phase}'. Must be one of: {sorted(VALID_ROLLBACK_TARGETS)}"
+        )
+    if rollback_reason and rollback_reason not in VALID_ROLLBACK_REASONS:
+        return _stable_error(
+            f"Invalid rollback_reason: '{rollback_reason}'. Must be one of: {sorted(VALID_ROLLBACK_REASONS)} or empty"
+        )
+
+    state = _read_state_safe(pd)
+    current_phase = state.get("phase", "")
+    current_plan = state.get("plan_number", "0")
+
+    try:
+        current_plan_int = int(current_plan)
+        target_plan_int = int(target_plan_number)
+    except (TypeError, ValueError):
+        return _stable_error(
+            f"plan_number must be integers, got current='{current_plan}' target='{target_plan_number}'"
+        )
+
+    if target_plan_int >= current_plan_int:
+        return _stable_error(
+            f"target_plan_number ({target_plan_number}) must be less than current plan_number ({current_plan}). "
+            "phase_rollback only allows backward rollbacks."
+        )
+
+    details = rollback_details if isinstance(rollback_details, dict) else {}
+    evidence = details.get("evidence") or details.get("vagueness_details") or ""
+    lessons_obj = {}
+    if "what_went_wrong" in details or "what_to_avoid" in details:
+        lessons_obj["what_went_wrong"] = details.get("what_went_wrong", "")
+        lessons_obj["what_to_avoid"] = details.get("what_to_avoid", "")
+        alt = (
+            details.get("alternative_direction")
+            or details.get("claim_revision_direction")
+            or details.get("question_redesign_direction")
+            or details.get("gap_reexamination_reason")
+        )
+        if alt:
+            lessons_obj["alternative_direction"] = alt
+    elif evidence:
+        lessons_obj["what_went_wrong"] = (
+            evidence if isinstance(evidence, str) else json.dumps(evidence)
+        )
+
+    try:
+        head_sha = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=str(pd),
+            capture_output=True,
+            text=True,
+            timeout=10,
+        ).stdout.strip()
+    except Exception:
+        head_sha = ""
+
+    # resolved_conclusions 摘要（preserve_execution=true 时记录被保留的 resolved questions，
+    # 供 WORKFLOW_TERMINATION_REPORT.md 的 Rollback History 引用）
+    exe = state.get("execution")
+    resolved = (
+        exe.get("resolved_conclusions", {})
+        if isinstance(exe, dict) and isinstance(exe.get("resolved_conclusions"), dict)
+        else {}
+    )
+    if preserve_execution and resolved:
+        parts = []
+        for qn, rc in resolved.items():
+            summary = ""
+            if isinstance(rc, dict):
+                summary = str(rc.get("conclusion_summary", "")).strip()
+            if summary:
+                parts.append(f"{qn}: {summary[:160]}")
+            else:
+                parts.append(qn)
+        preserved_results = "; ".join(parts)
+    else:
+        preserved_results = ""
+
+    entry = {
+        "from_phase": current_phase,
+        "from_plan": current_plan,
+        "to_phase": target_phase,
+        "to_plan": target_plan_number,
+        "reason": rollback_reason,
+        "timestamp": _iso_now(),
+        "guarded": False,
+        "source_commit": head_sha,
+        "evidence": evidence,
+        "lessons": lessons_obj,
+        "preserved_results": preserved_results,
+    }
+
+    state.setdefault("progress", {}).setdefault("rollback_plans", [])
+    state["progress"]["rollback_plans"].append(entry)
+
+    is_system_rollback = rollback_reason in {"execution_vague", "gap_reexamination"}
+    if is_system_rollback:
+        state["cross_phase_rollback_count"] = (
+            state.get("cross_phase_rollback_count", 0) + 1
+        )
+
+    count = state.get("cross_phase_rollback_count", 0)
+    if is_system_rollback and count >= CROSS_PHASE_ROLLBACK_LIMIT:
+        entry["guarded"] = True
+        state["rollback_context"] = {
+            "reason": rollback_reason,
+            "details": details,
+            "timestamp": _iso_now(),
+        }
+        _write_state(pd, state)
+        return _stable_response(
+            {
+                "action": "terminated",
+                "reason": "cross_phase_rollback_limit_reached",
+                "count": count,
+                "limit": CROSS_PHASE_ROLLBACK_LIMIT,
+            }
+        )
+
+    state["phase"] = target_phase
+    state["plan_number"] = target_plan_number
+
+    if preserve_execution and isinstance(state.get("execution"), dict):
+        exe = state["execution"]
+        exe["current_cycle"] = 1
+        exe["execution_shallow_retries"] = {
+            k: 0 for k in exe.get("execution_shallow_retries", {})
+        }
+        exe["environment_retries"] = {k: 0 for k in exe.get("environment_retries", {})}
+        exe["verification_shallow_retries"] = {
+            k: 0 for k in exe.get("verification_shallow_retries", {})
+        }
+        exe["current_retry_type"] = "normal"
+        exe["current_wave"] = None
+        exe["current_question"] = None
+        exe["current_step"] = None
+        qs = exe.get("question_status", {})
+        for qn, status_val in list(qs.items()):
+            br = exe.get("blocking_reason", {}).get(qn)
+            if status_val == "blocked" and br == "vagueness":
+                qs[qn] = "pending"
+            elif status_val == "skipped_vague":
+                qs[qn] = "pending"
+        if "verification_retries" in exe and isinstance(
+            exe["verification_retries"], dict
+        ):
+            exe["verification_retries"] = {k: 0 for k in exe["verification_retries"]}
+    elif not preserve_execution:
+        if "execution" in state:
+            state["execution"] = {}
+
+    if target_phase == "phase_debate":
+        state.setdefault(
+            "debate",
+            {
+                "rounds_completed": 0,
+                "escalate_topics": [],
+                "current_sub_phase": None,
+            },
+        )
+        rc = state["debate"].get("rounds_completed", 0)
+        state["debate"]["current_sub_phase"] = None
+        state["debate"]["escalate_topics"] = []
+        state["debate"]["rounds_completed"] = rc
+
+    if commit_sha:
+        state.setdefault("phase_commits", {})
+        state["phase_commits"][target_phase] = commit_sha
+
+    state["rollback_context"] = {
+        "reason": rollback_reason,
+        "details": details,
+        "timestamp": _iso_now(),
+    }
+
+    _write_state(pd, state)
+    return _stable_response(
+        {
+            "action": "rolled_back",
+            "previous": {"phase": current_phase, "plan": current_plan},
+            "current": {"phase": target_phase, "plan": target_plan_number},
+            "preserve_execution": preserve_execution,
+            "rollback_reason": rollback_reason,
+            "cross_phase_rollback_count": state.get("cross_phase_rollback_count", 0),
+            "rollback_plans_count": len(
+                state.get("progress", {}).get("rollback_plans", [])
+            ),
         }
     )
 
@@ -834,6 +1079,22 @@ def _check_skill_chain(project_dir: Path) -> dict:
             checks[key] = {"status": "fail", "failure_class": "missing"}
             issues.append(f"{skill_name} SKILL.md not found")
 
+    # §5.7 judgment-worker agent existence check (used by autoresearch for depth/shallow/claim classifications)
+    judgment_worker_path = project_dir / ".aether" / "agent" / "judgment-worker.md"
+    if judgment_worker_path.exists():
+        checks["autoresearch_judgment_worker"] = {
+            "status": "pass",
+            "path": str(judgment_worker_path),
+        }
+    else:
+        checks["autoresearch_judgment_worker"] = {
+            "status": "fail",
+            "failure_class": "missing",
+        }
+        issues.append(
+            "judgment-worker agent (.aether/agent/judgment-worker.md) not found"
+        )
+
     gpd_verification_scripts = [
         "dimensional_check",
         "spot_check",
@@ -1116,9 +1377,27 @@ def _check_runtime(project_dir: Path) -> dict:
 
         if backup_path.exists():
             backup_path.unlink()
-    checks["advance_plan_test"] = {"status": "pass", "rollback": rollback_status}
+    checks["advance_plan_test"] = {
+        "status": "pass",
+        "rollback": rollback_status,
+        "note": "health_check exemption: round-trip write-path test",
+    }
     if rollback_status not in ("success", "skipped"):
         issues.append(f"advance_plan rollback issue: {rollback_status}")
+
+    # phase_rollback registration check (no round-trip — avoids rollback_plans pollution)
+    rollback_tool = mcp._tool_manager._tools.get("phase_rollback")
+    if rollback_tool and rollback_tool.parameters:
+        checks["phase_rollback_registration"] = {
+            "status": "pass",
+            "method": "registration_check_only",
+        }
+    else:
+        checks["phase_rollback_registration"] = {
+            "status": "fail",
+            "failure_class": "tool_not_registered",
+        }
+        issues.append("phase_rollback tool not registered")
 
     scripts_dir = (
         project_dir
@@ -1385,6 +1664,7 @@ PERSISTENCE_WHITELIST = {
     "VERIFICATION.md",
     "ENVIRONMENT.md",
     "DEBATE.md",
+    "WORKFLOW_TERMINATION_REPORT.md",  # cross-phase rollback termination report (§3.1)
 }
 
 PERSISTENCE_WHITELIST_DIRS = {"audits"}

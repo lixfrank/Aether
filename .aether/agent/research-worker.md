@@ -155,7 +155,7 @@ claims:
     acceptance_test: "[1 sentence]"
 forbidden_proxies: ["[proxy 1]"]
 execution_method: "[Python | C++ | Mathematica]"
-verification_approach: [physics | general]
+domain_mode: [physics | general]
 ```
 
 **phase_execution — per-question execution loop**:

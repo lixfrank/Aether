@@ -9,6 +9,8 @@ description: |
   Outputs map directly to PLAN.md contracts.
   If audit phases found unresolved gaps, these are injected as constraints in framing.
   Produces framing_reasoning.md as the authoritative source for dependency data.
+  Two running modes: full_derive (default — write complete files from scratch) and
+  re_derive_gap (L3 rollback mode — splice-update existing files, re-derive only affected Gap).
 ---
 
 # Research Question Framing — phase_framing
@@ -19,6 +21,8 @@ This skill implements **Phase 6** of the Path 3 research state machine. It conve
 
 **Input**: ROADMAP.md + landscape_map.md (gap_list) + research_analysis.md + AUDIT_1/2 resolution status
 
+**Mode parameter**: `mode = full_derive (default) | re_derive_gap`. re_derive_gap 模式仅用于 L3 回退——若 dispatch prompt 指定 `mode=re_derive_gap`，先读 `references/re_derive_gap.md` 了解各 Step delta，再按 delta 执行. 默认模式（full_derive）按本文档 Procedure 执行.
+
 **Output** (MUST write all of these):
 
 1. `.aether/research/persistence/PLAN.md` — Contract with claims, deliverables, acceptance_tests, forbidden_proxies, **environment_requirements**. Claims include derived_from/tractability/question fields. Execution Plan is multi-Wave structure.
@@ -26,9 +30,11 @@ This skill implements **Phase 6** of the Path 3 research state machine. It conve
 3. `.aether/research/notepads/<slug>/framing_reasoning.md` — Reasoning chain from knowledge base to questions (authoritative source for dependency data)
 4. `.aether/research/persistence/STATE.md` — Updated with phase=phase_framing completed
 
+**Output 变化**: re_derive_gap 模式 splice 更新 3 文件（framing_reasoning.md / research_questions.md / PLAN.md），STATE.md 更新由 coordinator 负责——完整细节见 `references/re_derive_gap.md`.
+
 **Downstream note**: The `environment_requirements` field in PLAN.md is NOT just informational — it is consumed by the `/autoresearch` skill during execution_cycle to probe the host system and write `.aether/research/persistence/ENVIRONMENT.md`. ENVIRONMENT.md contains: (1) host_system probe results (what software is actually available), (2) plan_requirements (what was declared), (3) isolation_strategy (per-task decisions: uv_venv/local/local_compile), (4) gaps (missing critical software). The coordinator uses gaps to inform the user about unavailable software. **You MUST write environment_requirements with enough specificity for the execution phase to classify each requirement into an isolation strategy (uv_venv/local/local_compile).**
 
-**State transition**: phase_framing → phase_audit_3 (reasoning chain audit)
+**State transition**: `phase_framing → phase_audit_3`（framing 调 advance_plan）. re_derive_gap 模式跳过 advance_plan——见 `references/re_derive_gap.md`.
 
 **MUST NOT**: Execute experiments (that is phase_execution). Skip to phase_execution without phase_audit_3 and phase_debate.
 
@@ -310,7 +316,7 @@ Q3 (independent)
 
 ### Step 8: Map to PLAN.md Contract
 
-Write to `.aether/research/persistence/PLAN.md`. Claims section includes derived_from/tractability/question fields (extracted from framing_reasoning.md §Derived Question). Execution Plan is multi-Wave structure based on framing_reasoning.md §Execution Order. Dependencies are **self-contained** — each dependency includes: dependency description, critical=true/false with reasoning, fallback path (if non-critical). No reference-only pointers without the full description.
+Write to `.aether/research/persistence/PLAN.md` (整文件写). Claims section includes derived_from/tractability/question fields (extracted from framing_reasoning.md §Derived Question). Execution Plan is multi-Wave structure based on framing_reasoning.md §Execution Order. Dependencies are **self-contained** — each dependency includes: dependency description, critical=true/false with reasoning, fallback path (if non-critical). No reference-only pointers without the full description.
 
 ```markdown
 # Research Plan — [Project Name]
@@ -463,7 +469,7 @@ phase_result_digest:
       purpose: "[symbolic verification]"
       isolation_hint: "[local]"
       critical: true
-  verification_approach: [physics | general]
+  domain_mode: [physics | general]
   output_paths:
     plan: persistence/PLAN.md
     research_questions: notepads/[slug]/research_questions.md

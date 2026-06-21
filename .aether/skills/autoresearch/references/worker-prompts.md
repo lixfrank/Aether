@@ -1,6 +1,6 @@
 # Worker Prompt Templates & Output Structures
 
-This reference contains prompt templates for subagent dispatch and output file structure templates. Autoresearch reads these when constructing dispatch prompts in Step 4d (local-executor) and Step 4g (verification subagents).
+This reference contains prompt templates for subagent dispatch and output file structure templates. Autoresearch reads these when constructing dispatch prompts in Step 5d (local-executor) and Step 5g (verification subagents).
 
 ## Local-Executor Prompt Template
 
@@ -33,13 +33,27 @@ MANDATORY: You MUST write TWO output files:
 
 1. Qn_REASONING.md — Step-by-step derivation from PLAN.md method to concrete solution.
    Structure: Method Design Reference → Step-by-Step Derivation (each step with
-   Intention, Method, Divergence, Assumption introduced) → Dependency Usage.
+   Intention, Method, Divergence, Assumption introduced) → Dependency Usage → Partial Execution.
    Every divergence from PLAN.md method MUST be declared.
    Every new assumption NOT in framing_reasoning.md MUST be flagged as undeclared.
+
+   **MANDATORY CONTENT DEPTH REQUIREMENTS** (Qn_REASONING.md depth requirements):
+   - MUST contain a substantive derivation step for EACH method step in PLAN.md Execution Plan for Qn
+   - Each step's Method field MUST describe a concrete, independently reproducible operation (NOT just an action label like "performed dimensional analysis"). Inspection/check steps without producing new information are NOT sufficient
+   - **Substantive derivation may overturn PLAN.md method step's preset**: if execution reveals a PLAN.md method step's approach is incorrect/suboptimal, document the overturning in Divergence field
+   - If a step cannot be fully executed due to gaps → write partial execution results (§Partial Execution subsection below). NEVER collapse multiple incomplete steps into a single "environment gap" statement
+   - **Substantive derivation criteria (three准则)**: (a) Operational Specificity, (b) Output Traceability, (c) PLAN Correspondence — autoresearch (via judgment-worker) checks these
+   - **MINIMUM length: 100 lines** (excluding section headers). Files under 100 lines will be classified as execution_shallow
 
 2. Qn_EXECUTION.md — Execution results (numerical, code, output).
    Do NOT include a Dependencies section. All dependency details belong in
    Qn_REASONING.md §Dependency Usage only.
+
+   **MANDATORY CONTENT DEPTH REQUIREMENTS** (Qn_EXECUTION.md depth requirements):
+   - MUST contain at least one concrete artifact per PLAN.md method step (numerical results, code output, computed values, analysis artifacts)
+   - If full execution is blocked → partial artifacts from executable sub-steps are still mandatory
+   - NEVER write only a "Status: FAILED" line without detailing: what was attempted, what partially succeeded, specific gap that blocked completion
+   - Include execution logs, command outputs, and computed data
 
 Output files: notepads/[slug]/execution/Qn_REASONING.md, Qn_EXECUTION.md
 After completing, output execution_cycle_digest as your final message.
@@ -106,6 +120,20 @@ Decision rules:
 - Reasoning FAIL (method divergence, undeclared assumption) → execution process unreliable, must retry
 - Reasoning FAIL (fallback inapplicable, structural) → immediate pause and ask user (no retry)
 - Conclusion FAIL (reasoning PASS) → method itself may be flawed, retry with revised strategy
+
+**MANDATORY VERIFICATION DEPTH** (Qn_VERIFICATION.md depth requirements):
+
+Qn_VERIFICATION.md MUST contain detailed evidence for each sub-field verdict, not just PASS/FAIL labels:
+
+- **method_fidelity**: each reasoning step MUST be compared to PLAN.md method with explicit quote-and-compare. For each step: "PLAN.md says [quote] → Qn_REASONING.md does [description] → match/divergence [reasoning]"
+- **step_completeness**: every PLAN.md method step MUST be listed individually with found/not-found status and content summary. Format: "Step [N] [PLAN method description]: FOUND (content: [1-line summary]) / NOT FOUND"
+- **assumption_audit**: each assumption MUST be cross-referenced with framing_reasoning.md section number. Format: "Assumption '[description]' → framing_reasoning.md §[section] line [N]: FOUND / NOT FOUND (undeclared)"
+- **dependency_usage**: each dependency MUST be checked against resolved_conclusions scope with explicit scope comparison. Format: "Dependency [Qd]: used as [how Qd was used] → Qd conclusion scope: [scope description] → within scope / overgeneralization [reason]"
+- **conclusion verification**: verification evidence MUST match the claim type per the claim-type hierarchy below (Computational/Structural/Conceptual). LLM-only reasoning WITHOUT computation/citation/reasoning chain is NEVER sufficient for "independently confirmed"
+
+**MINIMUM length: 80 lines** (excluding digest YAML block). Files under 80 lines are considered shallow verification.
+
+autoresearch 会检查上述深度要求是否满足（via 行数预筛 + judgment-worker(verification-depth-judgment)），不满足的 verification 将被 re-dispatch（verification_shallow_retry, 1 max per cycle, does NOT consume cycle）.
 
 Digest MUST include these fields:
 - conclusion_summary: '[key numerical results, scope of validity, caveats]'
@@ -206,6 +234,21 @@ After both gpd-verifier and research-verifier return:
 - Fallback assumption (if applicable):
   - Assumption: [description — from PLAN.md §Execution Plan Dependencies for [Qn]]
   - Risk: [what could go wrong]
+
+## Partial Execution (if any step could not be fully executed)
+
+If any step could not be fully executed due to environment/dependency gaps, this section MUST be present:
+
+For each incomplete step:
+
+- Step [N]: [what was attempted]
+- Partial result: [what succeeded before the gap blocked further progress]
+- Blocking gap: [specific gap description — NOT just "environment missing"]
+- Gap impact on this step: [what this step would have produced if the gap were absent]
+- Gap impact on downstream steps: [which subsequent steps are affected and how]
+- Workaround attempted: [any alternative approach tried — even if it also failed]
+
+NEVER write "No retry was attempted because the failures are structural/environmental" as a blanket dismissal — document each gap's impact on each affected step individually.
 ```
 
 ## Qn_EXECUTION.md Structure
@@ -269,12 +312,24 @@ gaps: []
 | ------------------------------------------------------ | --------------------------------------------- |
 | Licensed/self-contained software, host available       | `local`                                       |
 | Pure Python + wheel-installable packages, uv available | `uv_venv`                                     |
-| Pure Python, uv NOT available                          | `gap (critical)`                              |
+| Pure Python, uv NOT available                          | `gap`                                         |
 | Compilation/build tasks, toolchain available           | `local_compile`                               |
 | GPU workloads, local GPU available                     | `local` (with GPU)                            |
 | Untrusted external repo code                           | `local_compile` with `untrusted_source: true` |
 | Mixed (Python + compilation)                           | Split into separate tasks per strategy        |
-| Compilation, toolchain NOT available                   | `gap (medium)`                                |
+| Compilation, toolchain NOT available                   | `gap`                                         |
+
+> **注**: gap 行不再带 (critical)/(medium) 严重度标签——所有 gap 一律流入 §Gap Classification（下表），完整定义见 `edge-cases.md` §Execution-level Three-Stage Decision §Gap Classification 表.
+
+### Gap Classification
+
+完整定义见 `edge-cases.md` §Execution-level Three-Stage Decision §Gap Classification 表（三个 category 的完整定义 + classification rules + hard_blocked 保守判定原则 + 终止路径判定）. autoresearch 在 Step 3 用下表做 gap classification:
+
+- `auto_installable` → proceed to Step 4 (environment self-build)
+- `user_decision_needed` → mark affected questions blocked, continue others
+- `hard_blocked` → do NOT dispatch executor for affected questions
+
+**谁负责分类**: autoresearch 在 Step 3 (Environment Probe) 自行做 gap classification（规则匹配 + bash probe 结果），不 dispatch judgment-worker.
 
 ### Environment Probe Commands
 
@@ -297,6 +352,70 @@ nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null || echo "nvidia-sm
 system_profiler SPDisplaysDataType 2>/dev/null | grep "Chipset Model" || echo "GPU: not detected"
 ```
 
-**Gap check**: If critical gap exists → do NOT dispatch executor for affected tasks → mark in digest → coordinator reports to user.
+**Gap classification**: Classify each discovered gap per §Gap Classification above, then proceed per SKILL.md Step 3 point 5.
 
 **Incremental ENVIRONMENT.md updates**: Between questions, if current question needs additional software, autoresearch performs bash probe and incrementally writes to ENVIRONMENT.md.
+
+## Judgment Worker Prompt Templates
+
+autoresearch dispatches judgment-worker (subagent at `.aether/agent/judgment-worker.md`, delegation_depth=0, read-only) for structured rubric evaluation. **Task rubrics and YAML return schemas are authoritative in `.aether/agent/judgment-worker.md`** — judgment-worker reads its own agent definition at dispatch time, so the dispatch prompt only needs to specify the task type and file targets. Each template below is a dispatch skeleton autoresearch fills in; it does NOT repeat the rubric/YAML (which live in judgment-worker.md §Four Judgment Tasks).
+
+**a. shallow-judgment** (Step 5e Stage 1, execution_shallow 判定):
+
+```
+task(
+  description: "shallow judgment [Qn]",
+  subagent_type: "judgment-worker",
+  delegation_depth: 0,
+  prompt: "Apply task a (execution_shallow rubric) per your agent definition.
+  Read notepads/[slug]/execution/Qn_REASONING.md and Qn_EXECUTION.md.
+  Read PLAN.md §Execution Plan for Qn's method.
+  Return YAML per task a schema."
+)
+```
+
+**b. verification-depth-judgment** (Step 5h0):
+
+```
+task(
+  description: "verification depth judgment [Qn]",
+  subagent_type: "judgment-worker",
+  delegation_depth: 0,
+  prompt: "Apply task b (verification_depth rubric) per your agent definition.
+  Read notepads/[slug]/execution/Qn_VERIFICATION.md.
+  Read PLAN.md §Claims for Qn's claims ONLY.
+  Return YAML per task b schema."
+)
+```
+
+**c. failure-synthesis** (Step 5m):
+
+```
+task(
+  description: "failure synthesis [Qn] cycle [N]",
+  subagent_type: "judgment-worker",
+  delegation_depth: 0,
+  prompt: "Apply task c (failure_synthesis) per your agent definition.
+  Read notepads/[slug]/execution/Qn_REASONING_cycle[N].md and Qn_VERIFICATION_cycle[N].md.
+  Read PLAN.md §Execution Plan for Qn's method.
+  Return YAML per task c schema."
+)
+```
+
+**d. claim_impossible_classification** (**autoresearch dispatch** — Stage 2 检测 claim_impossible 后立即 dispatch):
+
+```
+task(
+  description: "claim_impossible classification [Qn]",
+  subagent_type: "judgment-worker",
+  delegation_depth: 0,
+  prompt: "Apply task d (claim_impossible_classification) per your agent definition.
+  Read Qn_REASONING.md + Qn_EXECUTION.md (current execution output).
+  Read framing_reasoning.md for [Qn]'s Gap→Question→Claim derivation chain.
+  Read PLAN.md §Claims + §Acceptance Tests for [Qn].
+  Read research_questions.md for [Qn] definition.
+  Return YAML per task d schema (level: L1|L2|L3 + 修正方向)."
+)
+```
+
+**judgment-worker dispatch 降级模式**: dispatch 失败 (task 超时/空返回) → 重试 max 2 次. 3 次失败 → autoresearch 退回内联判断（降级模式，digest 标 `judgment_worker_unavailable: true`）— autoresearch 直接读文件 + 应用三准则 rubric. 行数预筛 (bash `grep -cv`) 始终可用.

@@ -72,25 +72,15 @@ After any crash recovery:
 
 ---
 
-## §Repair Crash Recovery (audit phases)
+## §Repair Crash Recovery
 
-If repair worker times out or crashes after potentially modifying files:
+If repair worker (audit or debate) times out or crashes after potentially modifying files:
 
-1. Check whether `.pre_audit_repair_round[N]` backups exist
-2. If backups exist → restore ALL repair target files from backups
-3. Check audit report file for partial repair content → if found, note in retry prompt
+1. Check whether `.pre_audit_repair_round[N]` (audit) or `.pre_repair_round{N}` (debate) backups exist — these are created by `scripts/backup_repair.sh` before dispatch
+2. If backups exist → restore ALL backup files (rename back to original: `cp <file>.pre_*_round{N} <file>`)
+3. Check audit/repair report for partial content → if found, note in retry prompt
 4. Retry repair dispatch (max 2 retries)
 5. If all retries fail → Digest Parsing Fallback with `status: repair_incomplete_risk`
-
-### Debate Repair Crash Recovery
-
-If debate repair worker times out or crashes after potentially modifying PLAN.md:
-
-1. Check whether `PLAN.md.pre_repair_round{N}` exists
-2. If backup exists → restore: `cp .aether/research/persistence/PLAN.md.pre_repair_round{N} .aether/research/persistence/PLAN.md`
-3. Check DEBATE.md for partial repair report content — if found, note in retry prompt: "Ignore incomplete repair report at end of DEBATE.md"
-4. Retry repair dispatch (max 2 retries)
-5. If all retries fail → Digest Parsing Fallback with `status: repair_incomplete_risk`, present to user
 
 ---
 

@@ -27,61 +27,6 @@ Phase detection rule: STATE.md Current Phase field contains one of the above des
 
 ---
 
-## §Audit-Repair Phase-Specific Differences
-
-|                         | audit_1 (landscape skip path)      | audit_2 (landscape normal path)                          | audit_3 (reasoning chain)                                              |
-| ----------------------- | ---------------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------------- |
-| Audit targets           | ROADMAP.md + research_analysis.md  | ROADMAP.md + research_analysis.md + landscape_map.md     | framing_reasoning.md + PLAN.md + research_questions.md                 |
-| Audit scope             | light (citation check)             | full (citation + domain coverage + method applicability) | reasoning chain + dependency structure + cross-file consistency        |
-| Audit skill             | /research-audit                    | /research-audit                                          | /research-audit-reasoning                                              |
-| Repair files            | ROADMAP.md + research_analysis.md  | ROADMAP.md + research_analysis.md + landscape_map.md     | framing_reasoning.md + PLAN.md + rq.md + ROADMAP.md + landscape_map.md |
-| Repair skill            | /research-audit-repair             | /research-audit-repair                                   | /research-audit-repair-reasoning                                       |
-| Next phase after loop   | phase_framing (or phase_landscape) | phase_framing                                            | phase_debate (or phase_framing if structural incompleteness)           |
-| plan_number during loop | 3                                  | 5                                                        | 7                                                                      |
-
----
-
-## §Repair Pre-backup File Lists
-
-### audit_1 repair backup files
-
-```
-bash: cp .aether/research/persistence/ROADMAP.md .aether/research/persistence/ROADMAP.md.pre_audit_repair_round[N]
-bash: cp .aether/research/notepads/[slug]/research_analysis.md .aether/research/notepads/[slug]/research_analysis.md.pre_audit_repair_round[N]
-```
-
-### audit_2 repair backup files
-
-```
-bash: cp .aether/research/persistence/ROADMAP.md .aether/research/persistence/ROADMAP.md.pre_audit_repair_round[N]
-bash: cp .aether/research/notepads/[slug]/research_analysis.md .aether/research/notepads/[slug]/research_analysis.md.pre_audit_repair_round[N]
-bash: cp .aether/research/notepads/[slug]/landscape_map.md .aether/research/notepads/[slug]/landscape_map.md.pre_audit_repair_round[N]
-```
-
-### audit_3 repair backup files
-
-```
-bash: cp .aether/research/notepads/[slug]/framing_reasoning.md .aether/research/notepads/[slug]/framing_reasoning.md.pre_audit_repair_round[N]
-bash: cp .aether/research/persistence/PLAN.md .aether/research/persistence/PLAN.md.pre_audit_repair_round[N]
-bash: cp .aether/research/notepads/[slug]/research_questions.md .aether/research/notepads/[slug]/research_questions.md.pre_audit_repair_round[N]
-bash: cp .aether/research/persistence/ROADMAP.md .aether/research/persistence/ROADMAP.md.pre_audit_repair_round[N]
-bash: cp .aether/research/notepads/[slug]/landscape_map.md .aether/research/notepads/[slug]/landscape_map.md.pre_audit_repair_round[N]
-```
-
----
-
-## §Debate Repair Pre-backup
-
-Before dispatching debate repair worker:
-
-```
-bash: cp .aether/research/persistence/PLAN.md .aether/research/persistence/PLAN.md.pre_repair_round{N}
-```
-
-This backup is used for crash recovery (see references/session-recovery.md §Repair Crash Recovery).
-
----
-
 ## §Dispatch Prompts
 
 ### analysis dispatch prompt
@@ -104,13 +49,13 @@ task(
   description: "audit_1 repair round [M]",
   subagent_type: "research-worker",
   prompt: "Execute repair sub-phase of phase_audit_1 (repair round [M]).
-Invoke /research-audit-repair skill.
-Read the latest audit_1 report from persistence/audits/audit_1_round[N].md for FATAL and CONCERN findings.
-Read ROADMAP.md and research_analysis.md (the files to be repaired).
+  Invoke /research-audit-repair skill.
+  Read the latest audit report (round [N]) for FATAL and CONCERN findings.
+  Read ROADMAP.md and research_analysis.md (the files to be repaired).
 
-REPAIR TARGETS:
-- Files: [persistence/ROADMAP.md, notepads/[slug]/research_analysis.md]
-- Findings to fix: [FATAL/CONCERN entries from audit_1_round[N].md]
+  REPAIR TARGETS:
+  - Files: [persistence/ROADMAP.md, notepads/[slug]/research_analysis.md]
+  - Findings to fix: [FATAL/CONCERN entries from audit report round [N]]
 
 For each finding, repair the claim in the target file. You MAY use web search
 and paper-search skill for targeted literature search to find correct references
@@ -129,13 +74,13 @@ task(
   description: "audit_2 repair round [M]",
   subagent_type: "research-worker",
   prompt: "Execute repair sub-phase of phase_audit_2 (repair round [M]).
-Invoke /research-audit-repair skill.
-Read the latest audit_2 report from persistence/audits/audit_2_round[N].md for FATAL and CONCERN findings.
-Read ROADMAP.md, research_analysis.md, and landscape_map.md (the files to be repaired).
+  Invoke /research-audit-repair skill.
+  Read the latest audit report (round [N]) for FATAL and CONCERN findings.
+  Read ROADMAP.md, research_analysis.md, and landscape_map.md (the files to be repaired).
 
-REPAIR TARGETS:
-- Files: [persistence/ROADMAP.md, notepads/[slug]/research_analysis.md, notepads/[slug]/landscape_map.md]
-- Findings to fix: [FATAL/CONCERN entries from audit_2_round[N].md]
+  REPAIR TARGETS:
+  - Files: [persistence/ROADMAP.md, notepads/[slug]/research_analysis.md, notepads/[slug]/landscape_map.md]
+  - Findings to fix: [FATAL/CONCERN entries from audit report round [N]]
 
 For each finding, repair the claim in the target file. You MAY use web search
 and paper-search skill for targeted literature search. For audit_1 residual
@@ -155,13 +100,13 @@ task(
   description: "audit_3 repair round [M]",
   subagent_type: "research-worker",
   prompt: "Execute repair sub-phase of phase_audit_3 (repair round [M]).
-Invoke /research-audit-repair-reasoning skill.
-Read the latest audit_3 report from persistence/audits/audit_3_round[N].md for FATAL and CONCERN findings.
-Read framing_reasoning.md, PLAN.md, research_questions.md, ROADMAP.md, and landscape_map.md (if exists) — the files to be repaired.
+  Invoke /research-audit-repair-reasoning skill.
+  Read the latest audit report (round [N]) for FATAL and CONCERN findings.
+  Read framing_reasoning.md, PLAN.md, research_questions.md, ROADMAP.md, and landscape_map.md (if exists) — the files to be repaired.
 
-REPAIR TARGETS:
-- Files: [notepads/[slug]/framing_reasoning.md, persistence/PLAN.md, notepads/[slug]/research_questions.md, persistence/ROADMAP.md, notepads/[slug]/landscape_map.md]
-- Findings to fix: [FATAL/CONCERN entries from audit_3_round[N].md]
+  REPAIR TARGETS:
+  - Files: [notepads/[slug]/framing_reasoning.md, persistence/PLAN.md, notepads/[slug]/research_questions.md, persistence/ROADMAP.md, notepads/[slug]/landscape_map.md]
+  - Findings to fix: [FATAL/CONCERN entries from audit report round [N]]
 
 REPAIR SCOPE PER FINDING TYPE:
 - Reasoning chain jump steps → reconstruct missing intermediate steps by citing relevant passages from ROADMAP.md and landscape_map.md
@@ -214,13 +159,13 @@ After completing, output PhaseResultDigest as your final message."
 )
 ```
 
-### framing repair Type B (PoC question addition) dispatch prompt
+### framing repair (frontier_problem PoC question addition) dispatch prompt
 
 ```
 task(
-  description: "framing repair Type B (PoC question addition)",
+  description: "framing repair (frontier_problem PoC question addition)",
   subagent_type: "research-worker",
-  prompt: "Execute framing repair for Type B (Frontier Problem) question addition (repair round [M]).
+  prompt: "Execute framing repair for frontier_problem question addition (repair round [M]).
 Read framing_reasoning.md, PLAN.md, research_questions.md for current context.
 
 TASK: Add Proof-of-Concept (PoC) question(s) for frontier problem question [Qn].
@@ -473,13 +418,14 @@ After completing, output final_execution_digest or paused digest as your final m
 
 ## §Domain Mode Determination
 
-domain_mode 由 coordinator 从 framing digest 判断，注入 dispatch prompt:
+domain_mode 由 framing digest 直接输出（framing PhaseResultDigest 的 `domain_mode` 字段，值域 {physics, general}），coordinator 读取后注入 execution dispatch prompt.
 
-| verification_approach 来源                     | domain_mode                                    | 确定方式                                                                                                           |
-| ---------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| framing digest 中有 verification_approach 字段 | 从字段值映射                                   | coordinator 读取 framing PhaseResultDigest 的 verification_approach（值域 {physics, general}），映射为 domain_mode |
-| framing digest 缺少 verification_approach 字段 | 从 PLAN.md Claims 推导                         | 所有 claim 引用 SMED framework → physics；引用 PICO → general；混合 → physics                                      |
-| 无 framing digest（极端场景）                  | 从 framing_reasoning.md §Derived Question 推导 | framework=SMED → physics；framework=PICO → general；混合 → physics                                                 |
+**Fallback**（framing digest 缺少 domain_mode 字段时的防御性推导，正常情况不触发）:
+
+| 来源                                                    | 推导方式                                                                      |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| PLAN.md Claims                                          | 所有 claim 引用 SMED framework → physics；引用 PICO → general；混合 → physics |
+| framing_reasoning.md §Derived Question（无 PLAN.md 时） | framework=SMED → physics；framework=PICO → general；混合 → physics            |
 
 domain_mode 是一次性决策——所有 question 使用相同 domain_mode。
 
@@ -493,12 +439,14 @@ Unified rollback operation steps (replaces 3 instances of duplicate rollback pat
 
 1. Read state.json.phase_commits[target_phase] → get commit SHA
    Fallback: `git log --oneline --grep="research: phase\_[target]" -5`
-2. Git rollback:
+2. Git rollback (with state.json exclusion — preserves rollback_plans/rollback_context):
    ```
-   git checkout <target_sha> -- .aether/research/
+   git checkout <target_sha> -- .aether/research/ \
+     ':(exclude).aether/research/persistence/state.json'
    git add .aether/research/
-   git commit -m "research: rollback to phase\_[target] (plan [N])"
+   git commit -m "research: rollback to phase\_[target] (plan [N]) — rollback_plans preserved"
    ```
+   **state.json 排除**: 保留 phase_rollback 的语义化写入（plan_number/rollback_plans/rollback_context）. 其余文件正常还原.
 3. Clean check: `git status .aether/research/` must be clean
    If not clean → `git add .aether/research/ + git commit --amend --no-edit` → re-check
 4. Verify MCP state consistency: get_state → phase must match STATE.md
@@ -509,20 +457,7 @@ Important notes:
 - Untracked files are not deleted — they will be overwritten or naturally cleaned by next git add
 - Do NOT use `git clean -fd` (blocked by denied_commands)
 - If specific untracked files need removal, use targeted `rm` per file
-
----
-
-## §State Consistency Check (complete steps)
-
-After processing each worker digest, check consistency:
-
-1. Read `state.json` via research-state MCP — get current phase
-2. Read `DIGESTS.md` — get last digest's phase
-3. If state.json.phase does not match DIGESTS.md last phase:
-   - Read state.json.phase_commits for DIGESTS.md last phase → get commit SHA
-   - Git rollback to that commit (per §Git Rollback Protocol above)
-   - This restores both state.json and STATE.md atomically
-   - Re-dispatch worker for the restored phase
+- **系统发起的回退**（execution_vague / gap_reexamination）**不走 git checkout**——直接调用 `phase_rollback` MCP，由系统覆盖文件. rollback_context 天然存活于 state.json（不被 git checkout wipe）
 
 ---
 
@@ -540,27 +475,3 @@ After processing each worker digest, check consistency:
 | phase_execution  | 逐问题执行         | —                                      |
 
 For phase_debate: display name = base name + dynamic parameter. Note: debate round Notice is output AFTER update_debate_state MCP has set rounds_completed to N (the current completed round). So rounds_completed = N, display name shows Round N.
-
----
-
-## §Persistence Directory Conventions (complete)
-
-`.aether/research/persistence/` contains project state files. Audit reports stored in `persistence/audits/`:
-
-| File path                  | Description                         |
-| -------------------------- | ----------------------------------- |
-| `audits/audit_1_round1.md` | audit_1 first check report          |
-| `audits/audit_1_round2.md` | audit_1 second check (after repair) |
-| `audits/audit_2_round1.md` | audit_2 first check report          |
-| `audits/audit_2_round2.md` | audit_2 second check (after repair) |
-| `audits/audit_3_round1.md` | audit_3 first check report          |
-| `audits/audit_3_round2.md` | audit_3 second check (after repair) |
-
-Each round's output does NOT overwrite previous rounds — full audit history preserved. Coordinator reads the latest round's file for routing.
-
-Literature downloads in `.aether/research/literatures/`:
-
-| File             | Description                                                                                   |
-| ---------------- | --------------------------------------------------------------------------------------------- |
-| `index.json`     | Metadata index of downloaded literature (arXiv ID/DOI, title, authors, year, download status) |
-| `unavailable.md` | List of literature that could not be downloaded (title, authors, DOI, URL, reason)            |

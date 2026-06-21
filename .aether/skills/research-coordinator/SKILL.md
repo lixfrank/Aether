@@ -185,7 +185,7 @@ After processing each worker digest, check consistency:
 
 ## §4a Audit-Repair Loop Mechanism
 
-All audit phases share the same loop mechanism (audit_1, audit_2, audit_3). Differences are in audit targets, repair file lists, and routing — see references/phase-detail-tables.md §Audit-Repair for phase-specific parameters.
+All audit phases share the same loop mechanism (audit_1, audit_2, audit_3). Differences are in audit targets, repair file lists, and routing — see references/phase-detail-tables.md §Dispatch Prompts (per-phase repair prompts carry audit targets + `Files:` lists) and scripts/backup_repair.sh (canonical pre-backup file lists per phase).
 
 **Core principle**: repair must be followed by re-audit because:
 
@@ -197,7 +197,7 @@ All audit phases share the same loop mechanism (audit_1, audit_2, audit_3). Diff
 
 1. Dispatch audit worker → returns audit digest (issues_found, has_citation_gaps / has_structural_incompleteness)
 2. issues_found = 0 → advance_plan to next phase → git commit → output audit-repair merged Notice (per §7b) → Terminal Action
-3. issues_found > 0 + repair_count < 3 → dispatch repair worker (read references/phase-detail-tables.md §Audit-Repair for phase-specific parameters)
+3. issues_found > 0 + repair_count < 3 → dispatch repair worker (audit targets + repair file lists in references/phase-detail-tables.md §Dispatch Prompts; pre-backup via scripts/backup_repair.sh)
 4. repair worker returns → re-dispatch audit worker (audit_round incremented)
 5. Repeat 2-4 until issues_found = 0 or repair_count = 3
 6. repair_count = 3 + issues_found > 0 → mark unresolved → advance_plan → git commit → Notice → Terminal Action
@@ -220,7 +220,7 @@ plan_number does NOT change during loop. Loop state tracked via state.json.audit
 
 audit_1, audit_2, and audit_3 are mutually exclusive — single repair_count counter, reset to 0 on new audit phase. Additional reset for audit_3: framing retry and landscape supplement → audit_2 → framing → audit_3 both reset repair_count to 0.
 
-**Repair Pre-backup**: Before dispatching repair worker, backup ALL repair target files. Specific file lists per audit phase: see references/phase-detail-tables.md §Repair Pre-backup File Lists.
+**Repair Pre-backup**: Before dispatching repair worker, run `bash .aether/skills/research-coordinator/scripts/backup_repair.sh <phase> <round>` to backup all repair target files (file lists are hardcoded in the script — single source of truth).
 
 **Max repair count handling**: After 3 repairs with remaining issues:
 
@@ -243,7 +243,7 @@ Based on audit_3 digest fields `issues_found`, `has_structural_incompleteness`, 
    a. **Has LOW** → ask user (3 options) — 选项文案见 §7a, 完整路由决策见 references/phase-routing.md §Audit-3 Routing, prompt注入见 §7b
    b. **No LOW** → unresolved_reasoning_gaps → STATE.md Blockers → phase_debate
 
-**Type B PoC**: When landscape supplement still LOW → confirmed Type B → coordinator dispatches framing repair worker for PoC question addition → phase_audit_3 (verify PoC reasoning chain) → if PoC passes → debate; if PoC still LOW → mark infeasible → debate.
+**frontier_problem PoC**: When landscape supplement still LOW → confirmed frontier_problem → coordinator dispatches framing repair worker for PoC question addition → phase_audit_3 (verify PoC reasoning chain) → if PoC passes → debate; if PoC still LOW → mark infeasible → debate.
 
 完整条件分支路由 + dispatch prompts: 见 references/phase-routing.md §Audit-3 Routing + references/phase-detail-tables.md §Dispatch Prompts
 
@@ -265,7 +265,7 @@ After each debate worker returns:
 2. If file NOT updated → reject digest, retry same sub_phase (max 2 retries, 3 total attempts)
 3. If file updated → accept digest, proceed to next sub_phase
 
-**Repair Pre-backup**: `bash: cp .aether/research/persistence/PLAN.md .aether/research/persistence/PLAN.md.pre_repair_round{N}` — used for crash recovery.
+**Repair Pre-backup**: Run `bash .aether/skills/research-coordinator/scripts/backup_repair.sh debate <round>` before dispatching debate repair worker — used for crash recovery.
 
 完整路由表 + termination conditions + error handling + repair digest processing: 见 references/phase-routing.md §Debate Sub-phase Routing + §Debate Round Termination + §Debate Error Handling + §Repair Digest Processing + §User Rejection Options
 
@@ -279,7 +279,7 @@ phase_execution: coordinator dispatches research-worker once, autoresearch inter
 
 ### domain_mode 确定规则概述
 
-domain_mode 由 coordinator 从 framing digest 判断,注入 dispatch prompt. 完整规则表见 references/phase-detail-tables.md §Domain Mode Determination.
+domain_mode 由 framing digest 直接输出（`domain_mode` 字段，值域 {physics, general}），coordinator 读取后注入 dispatch prompt. 完整 fallback 规则见 references/phase-detail-tables.md §Domain Mode Determination.
 
 ### Initial dispatch
 
@@ -450,11 +450,11 @@ Unresolved reasoning gaps:
 [list from STATE.md Blockers]
 ```
 
-When debate input contains PoC questions (Type B: Frontier Problem):
+When debate input contains PoC questions (frontier_problem):
 
 ```
 NOTE: The following questions were added as Proof-of-Concept (PoC) questions
-to verify method feasibility for frontier problems (Type B: tractability LOW
+to verify method feasibility for frontier problems (frontier_problem: tractability LOW
 after landscape supplement). These questions are NOT redundant — they address
 distinct feasibility assumptions that the original questions depend on.
 Do NOT apply redundancy or granularity critique to these questions without
@@ -505,15 +505,6 @@ These are NOT new debate topics — they are **prefatory notes** injected into t
 ---
 
 ## General Rules
-
-### Persistence Directory Conventions
-
-`.aether/research/persistence/` contains project state files. 完整命名规则见 references/phase-detail-tables.md §Persistence Directory Conventions.
-
-Literature downloads in `.aether/research/literatures/`:
-
-- `index.json`: metadata index of downloaded literature
-- `unavailable.md`: list of literature that could not be downloaded
 
 ### Subagent Dispatch Rules
 

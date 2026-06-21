@@ -28,7 +28,7 @@ Autoresearch reads SKILL.md at skill invocation. It reads reference files at spe
 
 ## Lifecycle Contract
 
-**Input**: PLAN.md contract + STATE.md + framing digest (verification_approach → domain_mode, injected by coordinator via dispatch prompt) + state.json.execution (for session recovery)
+**Input**: PLAN.md contract + STATE.md + framing digest (domain_mode, injected by coordinator via dispatch prompt) + state.json.execution (for session recovery)
 
 **Output** (MUST write all of these):
 
@@ -85,9 +85,32 @@ Key steps:
 2. Demand-driven probe for each PLAN.md `environment_requirements` entry
 3. Classify isolation strategy per table in `references/worker-prompts.md` §Isolation Strategy Classification
 4. Write ENVIRONMENT.md to `.aether/research/persistence/ENVIRONMENT.md`
-5. **Gap check**: If critical gap exists → do NOT dispatch executor for affected tasks → mark in digest → coordinator reports to user
+5. **Gap classification + resolution attempt**: Classify each discovered gap per `references/worker-prompts.md` §Gap Classification（见 `references/edge-cases.md` §Execution-level Three-Stage Decision §Gap Classification 表）. For each gap:
+   - `auto_installable` → proceed to Step 4 (environment self-build). Do NOT skip executor dispatch for questions affected by this gap — attempt resolution first
+   - `user_decision_needed` → mark questions affected by this gap as `blocked` in state.json.execution.question_status (blocking_dependency = gap description, blocking_reason="environment"). Questions NOT affected by this gap continue execution normally. At execution end, include user_decision_needed gaps in final_execution_digest → coordinator informs user about environment requirements after execution completes
+   - `hard_blocked` → do NOT dispatch executor for affected questions. Other questions continue normally
+   - After classification → proceed to Step 4
 
-### Step 4: Per-Question Loop
+### Step 4: Environment Self-Build (auto_installable gaps only)
+
+For each gap classified as `auto_installable` in Step 3:
+
+1. For each auto_installable gap, determine installation method:
+   - Use web search (webfetch/websearch) to find the correct installation method for the missing software in the current environment
+   - Do NOT rely on hardcoded installation commands — software versions and installation methods change over time. Always discover the correct method for the current environment via web search
+   - Web search retry: if first search returns no useful results → retry with alternative search queries (up to 2 additional attempts with different keyword combinations, 3 total attempts). If all search attempts fail → reclassify this gap as `user_decision_needed` (skip installation attempt, mark affected questions as blocked)
+   - If websearch/webfetch tool is unavailable or returns errors → reclassify this gap as `user_decision_needed` (skip installation attempt)
+2. Execute installation via bash using the web-search-discovered method:
+   - Python packages: install into .aether/research/.venv
+   - Wolfram/Mathematica paclets: install via wolframscript
+   - System tools: report as user_decision_needed (autoresearch MUST NOT run brew/apt/sudo without explicit user consent)
+3. After each install attempt → re-probe to verify installation success
+4. Update ENVIRONMENT.md:
+   - If installed successfully → remove gap from gaps list, update host_system.tools or venv_state.installed_packages
+   - If install failed → reclassify this gap as `user_decision_needed`. Mark questions affected by this gap as `blocked` in state.json.execution.question_status
+5. Write updated ENVIRONMENT.md with final gap classification
+
+### Step 5: Per-Question Loop
 
 For each Wave, for each question [Qn] (sorted by tractability confidence):
 
@@ -97,15 +120,16 @@ For each Wave, for each question [Qn] (sorted by tractability confidence):
 - "pending" → proceed
 - "resolved" → skip (already completed)
 - "failed" → skip (max retries exhausted)
+- "skipped_vague" → skip (user chose to skip vague questions — distinct from blocked; no execution attempt)
 
-#### b. Prepare execution context
+#### b. Prepare execution context (执行于每个 question 的每次 dispatch — 正常推进与 retry 均经过此步)
 
 1. Read PLAN.md §Execution Plan → Qn's method, tools, falsification test, Dependencies
 2. For each dependency Qd in Dependencies:
    - If Qd resolved → read `state.json.resolved_conclusions[Qd].conclusion_summary` + `output_paths`
    - If Qd failed + fallback exists → note in local-executor prompt that Qd failed and Qn uses fallback assumption. Inject Qd failure context from Qd_REASONING.md + Qd_EXECUTION.md. Fallback description from PLAN.md §Execution Plan Dependencies for Qn (self-contained)
    - If Qd failed + critical → Qn already blocked (caught in step a)
-3. Read ENVIRONMENT.md. If Qn needs additional software → autoresearch supplements bash probe and incrementally writes to ENVIRONMENT.md (NOT by local-executor)
+3. **Re-read ENVIRONMENT.md**（每次 dispatch 前都 re-read——前一个 question 的 environment_retry 可能已更新 ENVIRONMENT.md，本 question 必须看到最新环境状态）. 若 Qn 需额外软件 → autoresearch supplements bash probe 并增量写入 ENVIRONMENT.md（NOT by local-executor）
 
 #### c. Update state.json.execution.current_step = "execution"
 
@@ -130,12 +154,18 @@ task(
 )
 ```
 
-#### e. Read execution results → execution-level failure decision
+#### e. Read execution results → Three-Stage Decision
 
-After local-executor returns, apply decision table in `references/edge-cases.md` §Execution-level Failure Decision:
+After local-executor returns, apply THREE-STAGE decision per `references/edge-cases.md` §Execution-level Three-Stage Decision（Stage 1 Output Completeness Check / Stage 2 Root-Cause Analysis / Stage 3 Cycle Decision 完整表、Retry Loop-back Procedure、Reset rules、Per-Question Flow 均在该节）. SKILL.md 只声明决策逻辑.
 
-- execution_produced → proceed to verification dispatch (step f-g)
-- execution_failed → current_cycle < 3 → backup + retry; ≥ 3 → mark Qn failed
+**行数预筛 + judgment-worker dispatch**：Stage 1 execution_shallow 判定走 `edge-cases.md` §行数预筛两阶段设计（行数预筛 fast path → judgment-worker(shallow-judgment) 权威评估）.
+
+- **Stage 1 — Output Completeness Check**:
+  - execution_produced → proceed to verification dispatch (step f-g)
+  - execution_shallow → shallow_retry (max 1 per cycle, does NOT consume cycle): 行数预筛 → judgment-worker(shallow-judgment) → 据 improvement_guidance 构造 shallow_retry dispatch prompt → re-dispatch local-executor
+  - execution_failed → proceed to Stage 2
+- **Stage 2 — Root-Cause Analysis** (for execution_failed): classify root cause (Environment gap / PLAN.md method too vague / claim_impossible / Local-executor crash/timeout / Environment physically impossible) per `references/edge-cases.md` §Execution-level Three-Stage Decision §Stage 2 完整表
+- **Stage 3 — Cycle Decision**: shallow_retry/environment_retry/verification_shallow_retry 不消耗 cycle (各 max 1 per cycle, cycle retry 时 reset). Cycle-consuming limit: 3 per question. Total dispatch limit: 7 per question.
 
 #### f. Update state.json.execution.current_step = "verification"
 
@@ -157,7 +187,23 @@ task(description: "general verification [Qn] cycle [C]", subagent_type: "researc
 
 #### h. Read verification_digest → decision
 
-Extract verification_digest YAML block from task_result text. For domain_mode=physics, read both gpd-verifier and research-verifier task_results and merge per `references/worker-prompts.md` §Physics Mode Verification Merge before applying decision. Apply decision table in `references/edge-cases.md` §Verification Decision 判定规则.
+Extract verification_digest YAML block from task_result text. For domain_mode=physics, read both gpd-verifier and research-verifier task_results and merge per `references/worker-prompts.md` §Physics Mode Verification Merge before applying decision.
+
+**h0. Verification depth check (before decision)**
+
+按 `references/worker-prompts.md` §MANDATORY VERIFICATION DEPTH（verification 深度要求）+ 本步下方 verification_shallow_retry 流程执行. **行数预筛**（bash `grep -cv`，< 80 行直接判 shallow 跳过 judgment-worker）→ ≥ 80 行 dispatch judgment-worker(verification-depth-judgment, 见 `references/worker-prompts.md` §Judgment Worker Prompt Templates) → 读结构化判定 → 若 shallow 用 improvement_guidance 构造 verification_shallow_retry prompt.
+
+verification_shallow_retry 流程（Step 5h0，在 "Apply decision table" 之前执行，与 execution_shallow_retry 对称）:
+
+1. 行数预筛（cheap pre-filter，autoresearch 用 bash 获取 substantive 行数，不加载内容到 context）:
+   - 若 substantive 行数 < 80 → verification_shallow（**fast path，跳过 judgment-worker**）：构造 generic verification_shallow_retry dispatch prompt "Your Qn_VERIFICATION.md has [N] substantive lines (minimum 80). Each verification sub-field requires concrete evidence quoting PLAN.md — not just PASS/FAIL labels." Re-dispatch verification worker（1 verification_shallow_retry，does NOT consume cycle/retries）
+   - 若 substantive 行数 ≥ 80 → dispatch judgment-worker(verification-depth-judgment) 做深度 rubric 评估. judgment-worker 返回 deficient_fields + improvement_guidance → autoresearch 据此构造 targeted verification_shallow_retry dispatch prompt
+2. verification_shallow_retry dispatch 前设置 current_step="verification", current_retry_type="verification_shallow"
+3. 备份 Qn_VERIFICATION.md → Qn_VERIFICATION_shallow1.md
+4. dispatch prompt 注入 "PREVIOUS VERIFICATION WAS SHALLOW" + 具体子字段缺陷列表
+5. 仍 shallow after 1 retry → 视为 verification 失败: 若 reasoning 子字段 FAIL → retry_execution（consume cycle）；若 reasoning 全 PASS 但 conclusion 证据不足 → retry_execution（method 可能 flawed）
+
+Apply decision table in `references/edge-cases.md` §Verification Decision 判定规则:
 
 - **resolved** → write conclusion_summary to state.json.resolved_conclusions[Qn] → continue next question
 - **paused_ask_user** → output paused digest immediately, BREAK loop
@@ -202,7 +248,15 @@ When retrying execution for Qn (decision = retry_execution), backup current file
 
 After backup: increment current_cycle, reset verification_retries[Qn] to 0, loop back to step d.
 
-### Step 5: Final Output + Write Summaries
+#### m. Failure synthesis (cycle-consuming retry only)
+
+按 `references/edge-cases.md` §Execution-level Three-Stage Decision §Retry Loop-back Procedure step 6 执行: dispatch judgment-worker(failure-synthesis, 见 `references/worker-prompts.md` §Judgment Worker Prompt Templates) → 读 cycle_revision_context → 注入下一 cycle dispatch prompt.
+
+插入位置: Step 5l "Backup before retry" 之后，cycle retry 最后一步，backup 完成、cycle 递增之后、dispatch 新 cycle 之前执行. judgment-worker(failure-synthesis) 从 Qn_REASONING_cycle[N].md + Qn_VERIFICATION_cycle[N].md 提炼失败上下文为结构化摘要, 返回 key_failures (含 revision_direction) 供 autoresearch 注入下一 cycle dispatch prompt.
+
+cycle ≥2 的 dispatch prompt MUST 包含 simplified scope hint（源自 failure-synthesis 的 revision_direction）；failure-synthesis 无明确方向时 autoresearch 自主简化 scope——不得以相同 scope 重试上一 cycle 失败. 自主简化时 MUST 在 dispatch prompt 内显式记录决策依据三要素（简化了什么 / 为什么 / 预期影响），供 verification 和 audit 判断结论覆盖范围.
+
+### Step 6: Final Output + Write Summaries
 
 After all Waves processed OR early abort triggered:
 

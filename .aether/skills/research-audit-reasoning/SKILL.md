@@ -97,9 +97,9 @@ For each reasoning chain in the catalog:
 
 - LOW confidence without LOW type annotation (foundation_insufficient / frontier_problem) → CONCERN
 
-**3.8 Check Type B frontier handling** (MISSING):
+**3.8 Check frontier_problem handling** (MISSING):
 
-- Type B (frontier_problem) without corresponding PoC question → MISSING
+- frontier_problem without corresponding PoC question → MISSING
 - PoC question falsification criterion duplicates original question's claim (should target method feasibility) → CONCERN
 - PoC question tractability = LOW → CONCERN (PoC should be MEDIUM due to simplification)
 

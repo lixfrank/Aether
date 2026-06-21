@@ -40,11 +40,12 @@ You are the **Repair** worker in the multi-agent debate phase. Your role is to f
 
 For each REVISE/CONCEDED topic, assess severity and determine repair scope. For each ESCALATE topic, perform exploratory repair.
 
-| Severity        | Criteria                                                                                                                                                         | Repair Scope                                                                                                                                             |
-| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Local**       | Problem scope is clear, modification does not affect other questions/sections; e.g., strengthen falsification criterion, add method detail, fix terminology      | Targeted text edit, keep rest of PLAN.md unchanged                                                                                                       |
-| **Structural**  | Problem involves question structure itself, repair affects other parts; e.g., split/merge questions, add new questions, redesign verification path, add fallback | May rewrite related section(s), but MUST maintain consistency with UPHELD parts                                                                          |
-| **Exploratory** | ESCALATE topic — insufficient information to rule. Adjudicator has provided a sub-question that needs investigation                                              | Add exploration steps, conditional branches, or information-gathering sub-tasks to PLAN.md; do NOT make definitive changes to claims or acceptance tests |
+| Severity             | Criteria                                                                                                                                                                                                                                                                                                                                                                                                                                                    | Repair Scope                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Local**            | Problem scope is clear, modification does not affect other questions/sections; e.g., strengthen falsification criterion, add method detail, fix terminology                                                                                                                                                                                                                                                                                                 | Targeted text edit, keep rest of PLAN.md unchanged                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| **Structural**       | Problem involves question structure itself, repair affects other parts; e.g., split/merge questions, add new questions, redesign verification path, add fallback                                                                                                                                                                                                                                                                                            | May rewrite related section(s), but MUST maintain consistency with UPHELD parts                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| **Exploratory**      | ESCALATE topic — insufficient information to rule. Adjudicator has provided a sub-question that needs investigation                                                                                                                                                                                                                                                                                                                                         | Add exploration steps, conditional branches, or information-gathering sub-tasks to PLAN.md; do NOT make definitive changes to claims or acceptance tests                                                                                                                                                                                                                                                                                                                                          |
+| **Execution-refine** | Problem originates from phase_execution rollback. vagueness_type 决定修复策略: method_vague → debate-repair 直接展开 vague method 为具体执行步骤; claim_impossible → digest 已携带 level（**autoresearch dispatch judgment-worker 完成** — claim_impossible_classification 任务），coordinator 据 level 路由 L1→debate-repair Local repair / L2→debate-repair Structural repair / L3→direct rollback to framing. **L3 does NOT pass through debate-repair** | method_vague: Expand vague method into concrete step-by-step execution instructions. claim_impossible L1: revise claim per digest's claim_impossible_classification.claim_revision_direction (keep Question). claim_impossible L2: redesign Question per digest's claim_impossible_classification.question_redesign_direction (keep Gap mapping). Add corresponding concrete Acceptance Tests. Ensure Environment Requirements cover the refined method. Do NOT modify resolved questions' claims |
 
 Multiple topics may be interrelated (e.g., "overly broad" requires splitting + "maturity-reliability" requires elevating to sub-question). Treat these as a single structural repair unit.
 
@@ -115,6 +116,20 @@ Do NOT make definitive changes to claims or acceptance tests — the information
    - Ensure conditional branches have corresponding conditional Acceptance Tests
 4. **Refine the sub-question** — restructure the ESCALATE topic's uncertainty into a concrete investigation task with clear evidence requirements, so the next round has a sharper frame for debate.
 
+**Execution-refine repair** (for plan_vague_need_debate from execution rollback):
+
+1. **Execution plan refinement** — refine PLAN.md per the rollback's vagueness_type:
+   - **method_vague**: Expand vague method descriptions into concrete, executable step-by-step instructions. For each vague method step:
+     - Specify exact tool/command to use
+     - Specify concrete input parameters and expected output format
+     - Specify intermediate verification checkpoints
+     - Ensure each step has a corresponding concrete Acceptance Test
+     - Ensure Environment Requirements section lists all software needed
+     - Add fallback methods for steps that may encounter environment gaps
+     - Do NOT modify claims or falsification criteria of already resolved questions
+   - **claim_impossible L1**: 按 digest 中 `claim_impossible_classification.claim_revision_direction` 修订 claim 为可达版本（保留 Question），重写对应 falsification test
+   - **claim_impossible L2**: 按 digest 中 `claim_impossible_classification.question_redesign_direction` 重设计 Question（新 falsification + method），保留对同一 Gap 的映射，framing_reasoning.md 加 staleness marker（不删除原推导链，仅标记其与新 Question 的对应关系过期，保留供审计）
+
 **Format consistency requirements**:
 
 - Repaired PLAN.md MUST follow the contract format defined by `/research-question-framing` skill (Claims → Deliverables → Acceptance Tests → Forbidden Proxies → Execution Plan → Environment Requirements)
@@ -138,6 +153,13 @@ After repair, verify:
    e. Verify PLAN.md Execution Plan Dependencies are **self-contained** — each dependency includes: dependency description, critical=true/false with reasoning, fallback path (if non-critical). No reference-only pointers to framing_reasoning.md without the full description.
    f. Verify all newly added/modified questions have complete Dependencies fields (not just reference pointers)
    g. If any inconsistency found → fix it within the repair (do not leave for next round)
+
+7. **Execution-refine Consistency Verification** (mandatory after Execution-refine repair):
+   a. Refined method steps have corresponding concrete Acceptance Tests
+   b. Refined method steps are executable with declared Environment Requirements
+   c. Refined method does not contradict claims or falsification criteria of UPHELD or resolved questions
+   d. Each refined step has a specific tool/command that exists in ENVIRONMENT.md or is installable
+   e. Resolved questions' execution results are still consistent with the refined PLAN.md
 
 Note: This dependency consistency check verifies PLAN.md and research_questions.md consistency, and **PLAN.md Dependencies self-contained completeness**. **NOT framing_reasoning.md** (framing_reasoning.md may be outdated but PLAN.md is the authoritative source after debate-repair).
 
@@ -215,6 +237,7 @@ phase_result_digest:
     local: [N]
     structural: [N]
     exploratory: [N]
+    execution_refine: [N]  # count of execution-refine repairs
   re_verification_topics:
     - topic: "[topic name]"
       reason: "[why this UPHELD topic may be affected by the repairs]"
@@ -223,6 +246,14 @@ phase_result_digest:
       affected_questions: [Q2 → Q2a, Q2b]
       plan_execution_plan_changes: [Wave 2 split into Wave 2 (Q2a) and Wave 3 (Q2b)]
       framing_reasoning_staleness_markers_added: [Gap 2 section]
+  execution_refine_details:  # present only when execution-refine repairs applied
+    vagueness_type: method_vague | claim_impossible
+    claim_impossible_handling: null  # 仅 vagueness_type=claim_impossible 时非 null
+    claim_impossible_handling:
+      level: L1 | L2  # L3 不出现——L3 不经 debate-repair
+      affected_gap_id: "[Gap id, L2 必填]"
+      classification_source: "judgment-worker"
+      action_taken: "[L1: claim revised per claim_revision_direction to ... / L2: question re-derived per question_redesign_direction, falsification redesigned]"
   next_phase: phase_checkpoint | phase_debate
   output_paths:
     debate_log: "persistence/DEBATE.md"
@@ -265,6 +296,15 @@ phase_result_digest:
 - **Do NOT skip Dependency Consistency Verification** after question structure changes — the `dependency_changes` field is mandatory even if `type: none`
 - **PLAN.md Execution Plan Dependencies MUST be self-contained** — each dependency must include: dependency description, critical=true/false with reasoning, fallback path (if non-critical). Do NOT use reference-only pointers to framing_reasoning.md without the full description. autoresearch in phase_execution reads dependency data from PLAN.md as primary source.
 - **Backup research_questions.md** before any question structure change (split/merge/add)
+
+**Execution-refine Integrity Rules**:
+
+- **Do NOT modify claims or falsification criteria of resolved questions**
+- **Vagueness details from execution are binding constraints** — debate-repair MUST address each reported difficulty point
+- **Resolved question execution results are preserved** — debate-repair MUST NOT request deletion of Qn_REASONING.md/Qn_EXECUTION.md/Qn_VERIFICATION.md for resolved questions
+- **Refined method MUST be self-contained** — each method step MUST include enough detail for a local-executor to execute without needing to interpret vague instructions
+- **claim_impossible 禁止删除 claim**——必须保留 Question 与 Gap 映射. L1/L2/L3 分类由 judgment-worker 负责（claim_impossible_classification 任务，**autoresearch dispatch**），分类结果经 digest 传递；debate-repair 仅处理 L1/L2
+- **L3 不由 debate-repair 处理**——digest 中 level=L3 时 coordinator 直接路由 framing，debate-repair 不参与
 
 ## Subagent Dispatch Rules
 

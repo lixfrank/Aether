@@ -85,19 +85,22 @@ Read `.aether/research/persistence/ENVIRONMENT.md`. Confirm strategy details: se
 
 1. Check if `.aether/research/.venv` exists and ENVIRONMENT.md venv_state.installed_packages covers required dependencies
 2. If venv exists and packages match → reuse (skip install)
-3. If venv exists but needs additional packages → `uv pip install <missing_packages>` into existing venv
-4. If venv does not exist → create: `uv venv .aether/research/.venv` then `uv pip install <all_dependencies>`
-5. Verify setup: `.aether/research/.venv/bin/python --version` and import check
+3. If venv missing OR required packages absent → **do NOT create venv, do NOT install packages**. Report the specific missing item(s) to autoresearch via task_result (digest + Step 8.5 partial documentation). Fail this dispatch with full error context — autoresearch will self-build environment (autoresearch SKILL.md Step 4) and re-dispatch via environment_retry
+4. Verify setup: `.aether/research/.venv/bin/python --version` and import check (only when venv is confirmed ready per ENVIRONMENT.md)
 
 **For local strategy:**
 
 1. Verify tool is available (e.g., `wolframscript --version`)
-2. No setup needed — tool is already installed on host
+2. If tool NOT available → **do NOT attempt installation**. Report the missing tool to autoresearch via task_result (digest + Step 8.5 partial documentation). Fail this dispatch with full error context — autoresearch will self-build environment (Step 4) and re-dispatch via environment_retry
+3. If tool available → proceed (no setup needed — tool is already installed on host)
 
 **For local_compile strategy:**
 
 1. Read ENVIRONMENT.md `host_system.tools` — confirm each required tool is available
-2. If any tool NOT available → report failure in EXECUTION.md and skip to Step CL-6
+2. If any tool NOT available → **do NOT attempt installation**. Report missing tool(s) to autoresearch via task_result. Fail this dispatch with full error context (feeds Step 8.5)
+3. If all tools available → proceed to Step CL-2
+
+**环境职责全面剥离**: local-executor **不参与任何环境构建**——不安装系统工具、不安装 Wolfram paclet、不创建 venv、不安装 venv 包. 遇到环境缺失一律报告完整错误给 autoresearch（通过 task_result），由 autoresearch 的 environment_retry 机制统一处理.
 
 ### Step 3.5: Verify GPU Availability (only when strategy=local with GPU)
 
@@ -126,14 +129,11 @@ Capture stdout/stderr. Record execution time.
 ### Step 5: Handle Errors
 
 - Transient errors (network timeout, file lock): retry once
-- Persistent errors: report failure with error message
+- Persistent errors: report failure WITH full error context — affected steps, commands attempted, exact error output, and what was partially completed. NEVER report a bare "Status: FAILED" — autoresearch needs root-cause context (供 autoresearch 根因分析消费). Partial achievements MUST be documented (feeds Step 8.5)
 
-### Step 6: Update ENVIRONMENT.md
+### Step 6: Report Environment State (do NOT write ENVIRONMENT.md)
 
-After successful venv setup or package install, update `venv_state` section in `.aether/research/persistence/ENVIRONMENT.md`:
-
-- `installed_packages`: list all currently installed packages
-- `last_cycle`: current cycle number
+local-executor does NOT modify persistence/ shared files (ENVIRONMENT.md) — 所有 ENVIRONMENT.md 写入由 autoresearch 统一负责. 若执行引入新的环境状态变化（如脚本动态加载了依赖、产生了中间产物），通过 task_result digest 的 `environment_changes` 字段报告给 autoresearch，由 autoresearch 增量写入 ENVIRONMENT.md.
 
 ### Step 7: Collect Results
 
@@ -148,6 +148,22 @@ For each acceptance_test from the dispatch prompt:
 - File existence: verify file exists and is non-empty
 
 Record verdict: PASS / FAIL / INCONCLUSIVE.
+
+### Step 8.5: Partial Execution Documentation (if applicable)
+
+If any acceptance test or execution step could not be completed:
+
+1. For each incomplete test/step:
+   - Document what was attempted (commands run, operations performed)
+   - Document any partial output or intermediate results obtained
+   - Document the specific gap that blocked completion (e.g., "wolframscript paclet FiniteFlow not available after autoresearch install attempt" — NOT just "tool missing")
+   - Document what the test/step would have produced if the gap were absent
+2. NEVER write only "Status: FAILED" without detailing partial achievements
+3. NEVER write a single-sentence dismissal like "structural/environmental failures cannot be repaired"
+4. Include ALL partial artifacts in EXECUTION.md, even if incomplete
+5. Classify each gap's impact per-step (not globally)
+
+This step ensures autoresearch (the parent agent) receives complete failure context for root-cause analysis. local-executor does NOT attempt to install missing system tools, Wolfram paclets, or venv packages — **all environment construction is autoresearch's responsibility**.
 
 ### Step 9: Write Execution Report
 
@@ -193,7 +209,7 @@ Remove any files outside .aether/research that were accidentally created.
 1. **Declarative compilation**: MUST NOT execute compilation commands not declared in PLAN.md `environment_requirements`. Only commands explicitly listed in the task's `build_command` / `run_command` (derived from PLAN.md) are permitted. This is the authoritative definition of this constraint.
 2. **Output directory restriction**: All build outputs (object files, binaries, libraries) MUST be written within `.aether/research/`. MUST NOT write to system directories (`/usr/`, `/opt/`, `/usr/local/`, etc.).
 3. **No system library override**: MUST NOT statically link or override system libraries in sensitive paths.
-4. **Untrusted source annotation**: If `untrusted_source=true` in ENVIRONMENT.md isolation_strategy, annotate risk in EXECUTION.md. See §4.1.6 dispatch prompt for the unified untrusted_source flow.
+4. **Untrusted source annotation**: If `untrusted_source=true` in ENVIRONMENT.md isolation_strategy, annotate risk in EXECUTION.md. See references/worker-prompts.md §ENVIRONMENT.md YAML Structure (`untrusted_source` field) for the unified untrusted_source flow.
 5. **GPU execution**: Allowed locally. Follow Step 3.5 procedure for GPU verification and recording.
 6. **No network-facing binaries**: MUST NOT compile or execute binaries that open network listeners, unless explicitly declared in PLAN.md `environment_requirements` with `network_access: true`.
 

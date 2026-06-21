@@ -67,7 +67,7 @@ For each finding in the audit_3 report, classify and determine repair approach:
 | Framework element 溯源 inconsistency                        | Re-map framework elements to their source in Solution Paths Survey                                                                                       |
 | Unresolved knowledge gaps not considered                    | Add mitigation notes in framing_reasoning.md §Unresolved Knowledge Gaps                                                                                  |
 | LOW confidence without LOW type                             | Add LOW type annotation (default: foundation_insufficient)                                                                                               |
-| Type B frontier without PoC question                        | Add PoC question reasoning chain subsection (if coordinator has confirmed Type B)                                                                        |
+| frontier_problem without PoC question                       | Add PoC question reasoning chain subsection (if coordinator has confirmed frontier_problem)                                                              |
 | PoC falsification criterion duplicates original             | Redesign PoC falsification criterion to target method feasibility assumption                                                                             |
 
 ### Step 3: Execute Repairs
