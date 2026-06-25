@@ -180,7 +180,8 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       // overwrite (not merge) semantics in prompt.ts:189-192; passing it would
       // silently clobber the intersection-derived finalPermission. task.ts
       // intentionally keeps permission on the session so the intersection results
-      // survive.
+      // survive. promptWithFallback structurally omits `tools`, enforcing this
+      // by construction.
       const result = await promptWithFallback({
         sessionID: session.id,
         messageID,
