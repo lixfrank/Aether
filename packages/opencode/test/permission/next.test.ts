@@ -742,6 +742,40 @@ test("reply - always persists approval and resolves", async () => {
   })
 })
 
+test("approved - returns copy of accumulated approved ruleset", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const askPromise = Permission.ask({
+        id: PermissionID.make("per_approved"),
+        sessionID: SessionID.make("session_test"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: ["ls"],
+        ruleset: [],
+      })
+
+      await waitForPending(1)
+
+      await Permission.reply({
+        requestID: PermissionID.make("per_approved"),
+        reply: "always",
+      })
+
+      await askPromise
+
+      const snapshot = await Permission.approved()
+      expect(snapshot).toEqual([{ permission: "bash", pattern: "ls", action: "allow" }])
+
+      snapshot.push({ permission: "edit", pattern: "*", action: "allow" })
+      const again = await Permission.approved()
+      expect(again).toEqual([{ permission: "bash", pattern: "ls", action: "allow" }])
+    },
+  })
+})
+
 test("reply - reject cancels all pending for same session", async () => {
   await using tmp = await tmpdir({ git: true })
   await Instance.provide({

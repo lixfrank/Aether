@@ -1002,11 +1002,10 @@ export namespace SessionPrompt {
       tools[key] = item
     }
 
-    const effectivePermission = Permission.merge(input.agent.permission, input.session.permission ?? [])
-    for (const key of Object.keys(tools)) {
-      const permKey = Permission.EDIT_TOOLS.includes(key) ? "edit" : key
-      const rule = Permission.evaluate(permKey, "*", effectivePermission)
-      if (rule.action === "deny") delete tools[key]
+    const base = Permission.merge(input.agent.permission, input.session.permission ?? [])
+    const approved = await Permission.approved()
+    for (const tool of Permission.disabled(Object.keys(tools), Permission.merge(base, approved))) {
+      delete tools[tool]
     }
 
     return tools
