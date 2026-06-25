@@ -14,7 +14,6 @@ import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import { Permission } from "@/permission"
-import { Discipline } from "@/session/discipline"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@/global"
 import path from "path"
@@ -47,9 +46,6 @@ export namespace Agent {
       prompt: z.string().optional(),
       options: z.record(z.string(), z.any()),
       steps: z.number().int().positive().optional(),
-      delegationDepth: z.number().int().min(0).optional(),
-      fileScope: z.string().array().optional(),
-      maxSteps: z.number().int().positive().optional(),
       fallbackModels: z
         .array(
           z.union([
@@ -62,11 +58,6 @@ export namespace Agent {
             }),
           ]),
         )
-        .optional(),
-      envScope: z
-        .object({
-          allowed_commands: z.string().array().optional(),
-        })
         .optional(),
       mcp: z.record(z.string(), z.boolean()).optional(),
       owner: z.string().optional(),
@@ -285,24 +276,11 @@ export namespace Agent {
             item.steps = value.steps ?? item.steps
             item.options = mergeDeep(item.options, value.options ?? {})
             item.permission = Permission.merge(item.permission, Permission.fromConfig(value.permission ?? {}))
-            item.delegationDepth = value.delegation_depth ?? item.delegationDepth
-            item.fileScope = value.file_scope ?? item.fileScope
-            item.maxSteps = value.max_steps ?? item.maxSteps ?? item.steps
             item.fallbackModels = value.fallback_models ?? item.fallbackModels
-            item.envScope = value.env_scope ?? item.envScope
 
             item.mcp = value.mcp ?? item.mcp
             item.owner = value.owner ?? item.owner
             item.owns = value.owns ?? item.owns
-            const compileInput: z.infer<typeof Discipline.Schema> = {}
-            if (value.env_scope?.allowed_commands || value.env_scope?.denied_commands) {
-              compileInput.env_scope = value.env_scope
-            }
-            if (value.file_scope) compileInput.file_scope = value.file_scope
-            if (Object.keys(compileInput).length > 0) {
-              const compiled = Discipline.compile(compileInput)
-              item.permission = Permission.merge(item.permission, compiled)
-            }
           }
 
           // Promote first fallback to primary model when agent.model is absent

@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { Permission } from "../../src/permission"
-import { Discipline } from "../../src/session/discipline"
 
 const skip = process.env.RESEARCH_AGENT_TEST !== "1"
 
@@ -43,32 +42,10 @@ describe.skipIf(skip)("Permission.intersection — subagent permission safety", 
     expect(Permission.evaluate("read", "*", result).action).toBe("allow")
   })
 
-  test("intersection with discipline override: env_scope whitelist", () => {
-    const parent = Permission.fromConfig({ bash: "allow" })
-    const child = Permission.fromConfig({ bash: "allow" })
-    const override = Discipline.compile({
-      env_scope: { allowed_commands: ["docker", "uv"] },
-    })
-    const result = Permission.intersection(parent, child, override)
-    expect(Permission.evaluate("bash", "docker run nginx", result).action).toBe("allow")
-    expect(Permission.evaluate("bash", "uv run .aether/skills/paper-search/arxiv_search.py test", result).action).toBe(
-      "allow",
-    )
-    expect(Permission.evaluate("bash", "rm -rf /", result).action).toBe("deny")
-  })
-
-  test("intersection with discipline override: delegation_depth=0 blocks task", () => {
-    const parent = Permission.fromConfig({ "*": "allow" })
-    const child = Permission.fromConfig({ "*": "allow" })
-    const override = Discipline.compile({ delegation_depth: 0 })
-    const result = Permission.intersection(parent, child, override)
-    expect(Permission.evaluate("task", "*", result).action).toBe("deny")
-  })
-
   test("intersection without override preserves v0.6.0 behavior", () => {
     const parent = Permission.fromConfig({ "*": "allow", todowrite: "deny" })
     const child = Permission.fromConfig({ "*": "allow", todowrite: "deny" })
-    const result = Permission.intersection(parent, child, [])
+    const result = Permission.intersection(parent, child)
     expect(Permission.evaluate("bash", "*", result).action).toBe("allow")
     expect(Permission.evaluate("todowrite", "*", result).action).toBe("deny")
   })

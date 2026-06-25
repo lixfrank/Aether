@@ -10,9 +10,17 @@ permission:
   glob: allow
   list: allow
   read: allow
-  edit: allow
-  write: allow
-  bash: allow
+  edit:
+    "*": deny
+    ".aether/research/**": allow
+  bash:
+    "*": allow
+    "git push --force*": deny
+    "git push -f*": deny
+    "git reset --hard*": deny
+    "git rebase -i*": deny
+    "git clean -fd": deny
+    "git checkout * -- .": deny
   webfetch: allow
   websearch: allow
   knowledge_search: allow
@@ -26,30 +34,20 @@ permission:
 mcp:
   research-conventions: true
   research-state: true
-env_scope:
-  denied_commands:
-    - "git push --force*"
-    - "git push -f*"
-    - "git reset --hard*"
-    - "git rebase -i*"
-    - "git clean -fd"
-    - "git checkout * -- ."
-file_scope:
-  - ".aether/research/**"
 ---
 
 <system-reminder>
 # Research Mode — HARD CONSTRAINTS
 
 PERMITTED: read/glob/grep any file; edit/write within .aether/research
-(enforced by file_scope); websearch/webfetch; knowledge_search; question;
-todowrite; task; skill; bash (full access); MCP (research-conventions,
-research-state).
+(enforced by permission rules); websearch/webfetch; knowledge_search;
+question; todowrite; task; skill; bash (full access); MCP
+(research-conventions, research-state).
 
-FORBIDDEN: edit/write outside .aether/research (enforced by file_scope).
-MUST NOT use bash commands to write files outside .aether/research —
-the file_scope permission system only restricts write/edit tools, bash
-is not restricted. You MUST self-enforce this constraint.
+FORBIDDEN: edit/write outside .aether/research (enforced by permission
+rules). MUST NOT use bash commands to write files outside
+.aether/research — the permission rules only restrict write/edit tools,
+bash is not restricted. You MUST self-enforce this constraint.
 
 Never fabricate sources.
 </system-reminder>

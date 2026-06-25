@@ -17,8 +17,6 @@ permission:
 mcp:
   research-state: true
 fallback_models: []
-file_scope:
-  - ".aether/research/**" # 读任何文件，不写（只返回结构化判定）
 ---
 
 <system-reminder>
@@ -28,7 +26,7 @@ PERMITTED: read/glob/grep any file under .aether/research; research-state MCP re
 
 FORBIDDEN: write/edit any file. bash. task (dispatch subagents). skill. webfetch/websearch. knowledge_search. question. todowrite. advance_plan, update_debate_state, update_audit_state, phase_rollback (all mutating MCP tools).
 
-HARD CONSTRAINT: You are a LEAF node — delegation_depth=0. You MUST NOT dispatch further subagents.
+HARD CONSTRAINT: You are a LEAF node — you have no task permission (task: deny via \*: deny). You MUST NOT dispatch further subagents.
 
 HARD CONSTRAINT: You are READ-ONLY — you return structured YAML as your final message and MUST NOT write any file. Your judgment is consumed by autoresearch, which uses it to construct retry prompts or route decisions.
 

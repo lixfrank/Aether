@@ -11,7 +11,9 @@ permission:
   glob: allow
   list: allow
   read: allow
-  edit: allow
+  edit:
+    "*": deny
+    ".aether/research/**": allow
   bash: allow
   webfetch: allow
   websearch: allow
@@ -21,8 +23,6 @@ permission:
   research_conventions_*: allow
   research_state_*: allow
 fallback_models: []
-file_scope:
-  - ".aether/research/**"
 mcp:
   research-conventions: true
   research-state: true

@@ -85,19 +85,4 @@ describe.skipIf(skip)("promptWithFallback — model resolution & retry logic", (
     }
     expect(thrown).toBe(true)
   })
-
-  test("Discipline.compile for task.ts params: permission_override + file_scope + delegation_depth", () => {
-    const { Discipline } = require("../../src/session/discipline") as typeof import("../../src/session/discipline")
-    const rules = Discipline.compile({
-      permission_override: { bash: ["deny"] },
-      file_scope: ["output/**"],
-      delegation_depth: 0,
-      max_steps: 10,
-      timeout_seconds: 120,
-    })
-    expect(rules.some((r) => r.permission === "bash" && r.action === "deny")).toBe(true)
-    expect(rules.some((r) => r.permission === "edit" && r.pattern === "*" && r.action === "deny")).toBe(true)
-    expect(rules.some((r) => r.permission === "edit" && r.pattern === "output/**" && r.action === "allow")).toBe(true)
-    expect(rules.some((r) => r.permission === "task" && r.action === "deny")).toBe(true)
-  })
 })

@@ -11,8 +11,9 @@ permission:
   glob: allow
   list: allow
   read: allow
-  edit: allow
-  write: allow
+  edit:
+    "*": deny
+    ".aether/research/**": allow
   bash: allow
   webfetch: allow
   external_directory: ask
@@ -20,20 +21,18 @@ permission:
 mcp:
   research-conventions: true
 fallback_models: []
-file_scope:
-  - ".aether/research/**"
 ---
 
 <system-reminder>
 # Local Executor — HARD CONSTRAINTS
 
-PERMITTED: read/glob/grep any file; edit/write within .aether/research (enforced by file_scope); bash (full access for local execution); MCP (research-conventions, read-only).
+PERMITTED: read/glob/grep any file; edit/write within .aether/research (enforced by permission rules); bash (full access for local execution); MCP (research-conventions, read-only).
 
-FORBIDDEN: edit/write outside .aether/research (enforced by file_scope — permission system blocks these operations). HARD CONSTRAINT: MUST NOT use bash commands to write files outside .aether/research. The file_scope permission system only restricts write/edit tools — bash is not restricted. You MUST self-enforce this constraint and only write files within .aether/research.
+FORBIDDEN: edit/write outside .aether/research (enforced by permission rules — permission system blocks these operations). HARD CONSTRAINT: MUST NOT use bash commands to write files outside .aether/research. The permission rules only restrict write/edit tools — bash is not restricted. You MUST self-enforce this constraint and only write files within .aether/research.
 
 HARD CONSTRAINT: MUST NOT call advance_plan. The coordinator manages state transitions.
 
-HARD CONSTRAINT: MUST NOT dispatch further subagents. You are the leaf executor; delegation_depth=0 context.
+HARD CONSTRAINT: MUST NOT dispatch further subagents. You are the leaf executor; you have no task permission (task: deny via \*: deny).
 
 HARD CONSTRAINT: MUST NOT use bare python/pip commands. All Python execution MUST use .aether/research/.venv/bin/python (for venv tasks) or uv run <script.py> (for PEP 723 inline-script tasks). Commands like `python3 -c '...'` or `pip install ...` (without venv prefix) are FORBIDDEN.
 
@@ -133,7 +132,7 @@ local-executor does NOT modify persistence/ shared files (ENVIRONMENT.md) — �
 
 ### Step 7: Collect Results
 
-Ensure all output files are in `.aether/research/` (within file_scope).
+Ensure all output files are in `.aether/research/` (within the permitted edit scope).
 
 ### Step 8: Verify Against Acceptance Tests
 

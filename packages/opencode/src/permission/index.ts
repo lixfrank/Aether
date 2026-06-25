@@ -296,10 +296,9 @@ export namespace Permission {
     return rulesets.flat()
   }
 
-  export function intersection(parent: Ruleset, child: Ruleset, override?: Ruleset): Ruleset {
-    const childEffective = merge(child, override ?? [])
+  export function intersection(parent: Ruleset, child: Ruleset): Ruleset {
     const result: Ruleset = []
-    for (const rule of childEffective) {
+    for (const rule of child) {
       const parentRule = evaluate(rule.permission, rule.pattern, parent)
       if (parentRule.action === "deny") {
         result.push({ permission: rule.permission, pattern: rule.pattern, action: "deny" })

@@ -11,7 +11,6 @@ import { iife } from "@/util/iife"
 import { defer } from "@/util/defer"
 import { Config } from "../config/config"
 import { Permission } from "@/permission"
-import { Discipline } from "@/session/discipline"
 import { Provider } from "../provider/provider"
 import { ProviderID, ModelID } from "../provider/schema"
 import { APICallError } from "@ai-sdk/provider"
@@ -27,12 +26,6 @@ const parameters = z.object({
     )
     .optional(),
   command: z.string().describe("The command that triggered this task").optional(),
-  mode: z.enum(["serial", "concurrent", "background"]).optional(),
-  permission_override: z.record(z.string(), z.string().array().optional()).optional(),
-  file_scope: z.string().array().optional(),
-  delegation_depth: z.number().int().min(0).max(3).optional(),
-  max_steps: z.number().int().min(1).max(50).optional(),
-  timeout_seconds: z.number().int().min(30).max(600).optional(),
 })
 
 async function promptWithFallback(input: {
@@ -120,20 +113,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       const hasTaskPermission = agent.permission.some((rule) => rule.permission === "task")
       const hasTodoWritePermission = agent.permission.some((rule) => rule.permission === "todowrite")
 
-      const discipline = {
-        permission_override: params.permission_override,
-        file_scope: params.file_scope,
-        delegation_depth: params.delegation_depth,
-        max_steps: params.max_steps,
-        timeout_seconds: params.timeout_seconds,
-      }
-      const disciplineRules = Discipline.compile(discipline)
-
-      const sessionPermission = Permission.intersection(
-        callerAgent?.permission ?? [],
-        agent.permission,
-        disciplineRules,
-      )
+      const sessionPermission = Permission.intersection(callerAgent?.permission ?? [], agent.permission)
 
       // v0.6.0 fallback: deny task/todowrite for agents without explicit rules.
       // Intersection only propagates existing deny rules — it doesn't create new ones.

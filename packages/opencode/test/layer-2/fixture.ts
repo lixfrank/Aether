@@ -15,7 +15,7 @@ export function evalPerm(agent: Agent.Info, permission: string, pattern = "*"): 
 export type PermValue = "allow" | "deny" | "ask"
 
 export function makeResearchConfig(): Config.Agent {
-  const permission: Record<string, PermValue> = {
+  const permission: Record<string, PermValue | Record<string, PermValue>> = {
     "*": "deny",
     grep: "allow",
     glob: "allow",
@@ -23,7 +23,14 @@ export function makeResearchConfig(): Config.Agent {
     read: "allow",
     edit: "allow",
     write: "allow",
-    bash: "allow",
+    bash: {
+      "*": "deny",
+      "uv*": "allow",
+      "curl*": "allow",
+      "rg*": "allow",
+      "grep*": "allow",
+      "git*": "allow",
+    },
     webfetch: "allow",
     websearch: "allow",
     knowledge_search: "allow",
@@ -39,10 +46,9 @@ export function makeResearchConfig(): Config.Agent {
     description: "Research mode — deep search, analysis, and verification",
     color: "#7C3AED",
     mode: "primary",
-    permission,
+    permission: permission as Config.Permission,
     fallback_models: ["anthropic/claude-sonnet-4-5"],
     mcp: { "research-conventions": true, "research-state": true },
-    env_scope: { allowed_commands: ["uv", "curl", "rg", "grep", "git"] },
   }
 }
 

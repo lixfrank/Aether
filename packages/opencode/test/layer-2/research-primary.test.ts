@@ -41,7 +41,7 @@ describe.skipIf(skip)("Layer 2 — research primary agent", () => {
     })
   })
 
-  test("T2.4: env_scope compiles to deny-before-allow bash rules", async () => {
+  test("T2.4: declarative bash rules deny-default allowlist", async () => {
     await using tmp = await tmpdir({ config: { agent: { research: makeResearchConfig() } } })
     await Instance.provide({
       directory: tmp.path,
@@ -105,10 +105,13 @@ describe.skipIf(skip)("Layer 2 — research primary agent", () => {
     })
   })
 
-  test("T2.24: bash controlled by env_scope, not manually declared", () => {
+  test("T2.24: bash declaratively declared as deny-default allowlist", () => {
     const cfg = makeResearchConfig()
-    expect(cfg.permission!["bash"]).toBe("allow")
-    expect(cfg.env_scope?.allowed_commands).toBeDefined()
-    expect(cfg.env_scope!.allowed_commands!.length).toBeGreaterThan(0)
+    const bash = cfg.permission!["bash"]
+    expect(typeof bash).toBe("object")
+    expect((bash as Record<string, string>)["*"]).toBe("deny")
+    expect((bash as Record<string, string>)["uv*"]).toBe("allow")
+    expect((bash as Record<string, string>)["git*"]).toBe("allow")
+    expect(cfg.env_scope).toBeUndefined()
   })
 })

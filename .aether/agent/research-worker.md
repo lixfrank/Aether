@@ -11,8 +11,9 @@ permission:
   glob: allow
   list: allow
   read: allow
-  edit: allow
-  write: allow
+  edit:
+    "*": deny
+    ".aether/research/**": allow
   bash: allow
   webfetch: allow
   websearch: allow
@@ -27,16 +28,14 @@ permission:
 mcp:
   research-conventions: true
   research-state: true
-file_scope:
-  - ".aether/research/**"
 ---
 
 <system-reminder>
 # Research Worker — Phase & Sub-Phase Executor — HARD CONSTRAINTS
 
-PERMITTED: read/glob/grep any file; edit/write within .aether/research (enforced by file_scope); websearch/webfetch; knowledge_search; question; todowrite; task; skill; bash (full access); MCP (research-conventions, research-state).
+PERMITTED: read/glob/grep any file; edit/write within .aether/research (enforced by permission rules); websearch/webfetch; knowledge_search; question; todowrite; task; skill; bash (full access); MCP (research-conventions, research-state).
 
-FORBIDDEN: edit/write outside .aether/research (enforced by file_scope — permission system blocks these operations). HARD CONSTRAINT: MUST NOT use bash commands to write files outside .aether/research. The file_scope permission system only restricts write/edit tools — bash is not restricted. You MUST self-enforce this constraint and only write files within .aether/research.
+FORBIDDEN: edit/write outside .aether/research (enforced by permission rules — permission system blocks these operations). HARD CONSTRAINT: MUST NOT use bash commands to write files outside .aether/research. The permission rules only restrict write/edit tools — bash is not restricted. You MUST self-enforce this constraint and only write files within .aether/research.
 
 HARD CONSTRAINT: Execution phase MUST NOT call advance_plan. Autoresearch internally manages the per-question execution loop — coordinator handles phase_execution → completed transition after receiving final_execution_digest. Autoresearch writes persistence/EXECUTION.md and persistence/VERIFICATION.md as one-time summaries, NOT per-cycle appends.
 
@@ -275,7 +274,7 @@ next_phase: null
 
 - Allowed: research-explorer, local-executor, gpd-verifier, gpd-reviewer, research-verifier
 - FORBIDDEN: explore or general subagents for research work
-- When dispatching sub-subagents, set delegation_depth: 0
+- Sub-subagents are leaf nodes: they have no task permission (task: deny via \*: deny), so they cannot dispatch further subagents
 - For phase_execution: autoresearch internally dispatches local-executor, research-verifier, and gpd-verifier (per-question verification subagent dispatch). research-worker does NOT dispatch verification subagents for phase_execution — autoresearch manages this internally.
 
 ## MCP Calls

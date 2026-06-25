@@ -871,9 +871,6 @@ export namespace Config {
         .describe("Maximum number of agentic iterations before forcing text-only response"),
       maxSteps: z.number().int().positive().optional().describe("@deprecated Use 'steps' field instead."),
       permission: Permission.optional(),
-      delegation_depth: z.number().int().min(0).max(3).optional(),
-      file_scope: z.string().array().optional(),
-      max_steps: z.number().int().positive().optional(),
       fallback_models: z
         .array(
           z.union([
@@ -886,12 +883,6 @@ export namespace Config {
             }),
           ]),
         )
-        .optional(),
-      env_scope: z
-        .object({
-          allowed_commands: z.string().array().optional(),
-          denied_commands: z.string().array().optional(),
-        })
         .optional(),
       mcp: z
         .record(z.string(), z.boolean())
@@ -931,11 +922,7 @@ export namespace Config {
         "permission",
         "disable",
         "tools",
-        "delegation_depth",
-        "file_scope",
-        "max_steps",
         "fallback_models",
-        "env_scope",
         "mcp",
         "owner",
         "owns",

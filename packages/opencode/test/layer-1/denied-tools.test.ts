@@ -66,7 +66,7 @@ describe.skipIf(skip)("Layer 1 — denied tools filtering via Permission.disable
     expect(disabled.has("read")).toBe(false)
   })
 
-  test("research agent: bash restricted via env_scope, edit allowed", () => {
+  test("research agent: bash restricted via declarative permission rules, edit allowed", () => {
     const researchPerm = Permission.fromConfig({
       "*": "deny",
       grep: "allow",

@@ -13,8 +13,6 @@ permission:
   bash: allow
   skill: allow
 fallback_models: []
-file_scope:
-  - ".aether/research/**"
 mcp:
   research-conventions: true
   research-state: true

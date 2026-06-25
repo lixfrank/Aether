@@ -44,7 +44,7 @@ describe.skipIf(skip)("Layer 2.1 — skill file existence", () => {
 })
 
 describe("Layer 2 — .aether/agent/ file loading", () => {
-  test("research.md from .aether/agent/ creates primary agent with env_scope", async () => {
+  test("research.md from .aether/agent/ creates primary agent with declarative bash permission", async () => {
     await using tmp = await tmpdir({
       git: true,
       init: async (dir) => {
@@ -60,14 +60,13 @@ permission:
   grep: allow
   glob: allow
   read: allow
-  bash: allow
+  bash:
+    "*": deny
+    "uv*": allow
+    "curl*": allow
 mcp:
   research-conventions: true
   research-state: true
-env_scope:
-  allowed_commands:
-    - uv
-    - curl
 ---
 
 # Research Mode
