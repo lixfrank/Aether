@@ -21,7 +21,6 @@ describe.skipIf(skip)("Layer 2 — research-explorer subagent", () => {
       fn: async () => {
         const e = await Agent.get("research-explorer")
         expect(e?.mode).toBe("subagent")
-        expect(e?.skillRefs).toEqual(["paper-search"])
         expect(evalPerm(e!, "grep")).toBe("allow")
         expect(evalPerm(e!, "list")).toBe("allow")
         expect(evalPerm(e!, "websearch")).toBe("allow")
@@ -49,14 +48,14 @@ describe.skipIf(skip)("Layer 2 — research-explorer subagent", () => {
 })
 
 describe("Layer 2 — research-verifier subagent", () => {
-  test("T2.8/T2.10: research-verifier with MCP wildcard + only research-verification skill", async () => {
+  test("T2.8/T2.10: research-verifier with MCP wildcard + skill access for research-verification", async () => {
     await using tmp = await tmpdir({ config: { agent: { "research-verifier": makeResearchVerifierConfig() } } })
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
         const v = await Agent.get("research-verifier")
         expect(v?.mode).toBe("subagent")
-        expect(v?.skillRefs).toEqual(["research-verification"])
+        expect(evalPerm(v!, "skill")).toBe("allow")
         expect(Permission.evaluate("research_conventions_convention_lock_status", "*", v!.permission).action).toBe(
           "allow",
         )
@@ -71,19 +70,13 @@ describe("Layer 2 — research-verifier subagent", () => {
 })
 
 describe("Layer 2 — gpd-verifier subagent", () => {
-  test("T2.9/T2.11: gpd-verifier inherits research-verifier + 4 gpd skills", async () => {
+  test("T2.9/T2.11: gpd-verifier has skill access for gpd verification skills", async () => {
     await using tmp = await tmpdir({ config: { agent: { "gpd-verifier": makeGpdVerifierConfig() } } })
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
         const g = await Agent.get("gpd-verifier")
-        expect(g?.skillRefs).toEqual([
-          "research-verification",
-          "gpd-verification",
-          "gpd-errors",
-          "gpd-domain-check",
-          "gpd-conventions",
-        ])
+        expect(evalPerm(g!, "skill")).toBe("allow")
         expect(Permission.evaluate("research_conventions_convention_lock_status", "*", g!.permission).action).toBe(
           "allow",
         )
@@ -94,14 +87,14 @@ describe("Layer 2 — gpd-verifier subagent", () => {
 })
 
 describe("Layer 2 — gpd-reviewer subagent", () => {
-  test("T2.14: gpd-reviewer with gpd skill_refs", async () => {
+  test("T2.14: gpd-reviewer with skill access for gpd review skills", async () => {
     await using tmp = await tmpdir({ config: { agent: { "gpd-reviewer": makeGpdReviewerConfig() } } })
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
         const rev = await Agent.get("gpd-reviewer")
         expect(rev?.mode).toBe("subagent")
-        expect(rev?.skillRefs).toEqual(["gpd-errors", "gpd-conventions", "gpd-domain-check"])
+        expect(evalPerm(rev!, "skill")).toBe("allow")
         expect(evalPerm(rev!, "bash")).toBe("allow")
         expect(evalPerm(rev!, "webfetch")).toBe("allow")
         expect(rev?.mcp).toEqual({ "research-conventions": true, "research-state": true })

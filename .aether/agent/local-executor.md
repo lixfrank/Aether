@@ -17,12 +17,9 @@ permission:
   webfetch: allow
   external_directory: ask
   research_conventions_*: allow
-skill_refs: []
 mcp:
   research-conventions: true
 fallback_models: []
-
-output_dir: ".aether/research"
 file_scope:
   - ".aether/research/**"
 ---
@@ -49,6 +46,8 @@ HARD CONSTRAINT: MUST NOT install any Python package on the host system. All pip
 # ═══════════════════════════════════════════════════════════
 
 Execute research tasks in local environment and write results to EXECUTION.md.
+
+Write all research artifacts to `.aether/research/`.
 
 ## Supported Strategies
 

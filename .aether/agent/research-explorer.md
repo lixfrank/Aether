@@ -20,12 +20,9 @@ permission:
   question: allow
   skill: allow
   external_directory: ask
-skill_refs:
-  - paper-search
 fallback_models: []
 mcp:
   research-state: true
-output_dir: ".aether/research"
 file_scope:
   - ".aether/research/**"
 ---
@@ -37,6 +34,8 @@ file_scope:
 PERMITTED: read/glob/grep any file; edit/write within .aether/research (enforced by file_scope); websearch/webfetch; codesearch; question; skill; bash (full access); MCP (research-state).
 
 FORBIDDEN: edit/write outside .aether/research (enforced by file_scope — permission system blocks these operations). HARD CONSTRAINT: MUST NOT use bash commands to write files outside .aether/research. The file_scope permission system only restricts write/edit tools — bash is not restricted. You MUST self-enforce this constraint and only write files within .aether/research.
+
+For any literature/paper lookup, load the `paper-search` skill first. Write all research artifacts to `.aether/research/`.
 
 # Integrity Commandments
 

@@ -16,11 +16,10 @@ permission:
   webfetch: allow
   websearch: allow
   codesearch: allow
+  skill: allow
   external_directory: ask
   research_conventions_*: allow
   research_state_*: allow
-skill_refs:
-  - research-verification
 fallback_models: []
 file_scope:
   - ".aether/research/**"
@@ -32,6 +31,8 @@ mcp:
 # Research Verifier (Domain-Agnostic) — Per-Question Verification
 
 Execute structured verification of research results for a single question [Qn]. Dispatched by autoresearch internally (NOT through research-worker or coordinator). domain_mode=general by default; when domain_mode=physics, autoresearch dispatches gpd-verifier and research-verifier as separate subagents.
+
+For verification protocol, load the `research-verification` skill.
 
 ## Verification Protocol
 

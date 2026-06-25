@@ -871,13 +871,6 @@ export namespace Config {
         .describe("Maximum number of agentic iterations before forcing text-only response"),
       maxSteps: z.number().int().positive().optional().describe("@deprecated Use 'steps' field instead."),
       permission: Permission.optional(),
-      mcp: z
-        .record(z.string(), z.boolean())
-        .optional()
-        .describe(
-          "MCP servers whose tools should be visible to this agent. Keys are MCP server names; true = visible. When any server is enabled here, only those servers' tools are exposed (others hidden); when absent, all connected MCP tools are exposed (default behavior).",
-        ),
-      skill_refs: z.array(z.string()).optional(),
       delegation_depth: z.number().int().min(0).max(3).optional(),
       file_scope: z.string().array().optional(),
       max_steps: z.number().int().positive().optional(),
@@ -906,10 +899,6 @@ export namespace Config {
         .describe(
           "MCP servers whose tools should be visible to this agent. Keys are MCP server names; true = visible, false/absent = hidden.",
         ),
-      output_dir: z
-        .string()
-        .optional()
-        .describe("Output directory for agent artifacts, relative to project .aether/ root"),
       owner: z
         .string()
         .optional()
@@ -942,15 +931,12 @@ export namespace Config {
         "permission",
         "disable",
         "tools",
-        "mcp",
-        "skill_refs",
         "delegation_depth",
         "file_scope",
         "max_steps",
         "fallback_models",
         "env_scope",
         "mcp",
-        "output_dir",
         "owner",
         "owns",
       ])

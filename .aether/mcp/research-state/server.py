@@ -1051,7 +1051,7 @@ def _check_skill_chain(project_dir: Path) -> dict:
     checks = {}
     issues = []
 
-    skill_refs_map = {
+    expected_skill_chain = {
         "research_worker_paper_search": "paper-search",
         "research_worker_debate_advocate": "debate-advocate",
         "research_worker_debate_critic": "debate-critic",
@@ -1071,7 +1071,7 @@ def _check_skill_chain(project_dir: Path) -> dict:
         "research_worker_audit_reasoning": "research-audit-reasoning",
         "research_worker_audit_repair_reasoning": "research-audit-repair-reasoning",
     }
-    for key, skill_name in skill_refs_map.items():
+    for key, skill_name in expected_skill_chain.items():
         found = _find_skill_md(project_dir, skill_name)
         if found:
             checks[key] = {"status": "pass", "path": str(found)}
@@ -1607,7 +1607,7 @@ def get_phase_info(project_dir: str) -> dict[str, Any]:
 @mcp.tool(annotations=READ_ONLY)
 def get_config(project_dir: str) -> dict[str, Any]:
     """Return project configuration summary from aether.jsonc/opencode.jsonc.
-    Includes agent definitions, MCP config, skills.paths, and output_dir settings."""
+    Includes agent definitions, MCP config, and skills.paths."""
     pd = _resolve_project_dir(project_dir)
     cfg = _read_project_config(pd)
     agents = []
@@ -1630,8 +1630,6 @@ def get_config(project_dir: str) -> dict[str, Any]:
                             "description": fm.get("description", ""),
                             "mode": fm.get("mode", ""),
                             "mcp": fm.get("mcp", {}),
-                            "output_dir": fm.get("output_dir", ""),
-                            "skill_refs": fm.get("skill_refs", []),
                         }
                     )
     mcp_config = cfg.get("mcp", {})

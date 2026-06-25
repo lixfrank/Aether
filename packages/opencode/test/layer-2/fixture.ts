@@ -43,7 +43,6 @@ export function makeResearchConfig(): Config.Agent {
     fallback_models: ["anthropic/claude-sonnet-4-5"],
     mcp: { "research-conventions": true, "research-state": true },
     env_scope: { allowed_commands: ["uv", "curl", "rg", "grep", "git"] },
-    output_dir: ".aether/research",
   }
 }
 
@@ -65,7 +64,6 @@ export function makeResearchExplorerConfig(): Config.Agent {
       read: "allow",
       external_directory: "ask",
     },
-    skill_refs: ["paper-search"],
     fallback_models: ["anthropic/claude-sonnet-4-5"],
     mcp: { "research-state": true },
   }
@@ -83,6 +81,7 @@ export function makeResearchVerifierConfig(): Config.Agent {
     webfetch: "allow",
     websearch: "allow",
     codesearch: "allow",
+    skill: "allow",
     external_directory: "ask",
   }
   permission["research_conventions_*"] = "allow"
@@ -92,7 +91,6 @@ export function makeResearchVerifierConfig(): Config.Agent {
     color: "#DC2626",
     mode: "subagent",
     permission,
-    skill_refs: ["research-verification"],
     mcp: { "research-conventions": true, "research-state": true },
   }
 }
@@ -109,6 +107,7 @@ export function makeGpdVerifierConfig(): Config.Agent {
     webfetch: "allow",
     websearch: "allow",
     codesearch: "allow",
+    skill: "allow",
     external_directory: "ask",
   }
   permission["research_conventions_*"] = "allow"
@@ -118,7 +117,6 @@ export function makeGpdVerifierConfig(): Config.Agent {
     color: "#DC2626",
     mode: "subagent",
     permission,
-    skill_refs: ["research-verification", "gpd-verification", "gpd-errors", "gpd-domain-check", "gpd-conventions"],
     mcp: { "research-conventions": true, "research-state": true },
   }
 }
@@ -135,12 +133,12 @@ export function makeGpdReviewerConfig(): Config.Agent {
       list: "allow",
       read: "allow",
       bash: "allow",
+      skill: "allow",
       webfetch: "allow",
       websearch: "allow",
       codesearch: "allow",
       external_directory: "ask",
     },
-    skill_refs: ["gpd-errors", "gpd-conventions", "gpd-domain-check"],
     mcp: { "research-conventions": true, "research-state": true },
   }
 }

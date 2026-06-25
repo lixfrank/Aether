@@ -27,8 +27,6 @@ permission:
 mcp:
   research-conventions: true
   research-state: true
-
-output_dir: ".aether/research"
 file_scope:
   - ".aether/research/**"
 ---
@@ -55,6 +53,8 @@ HARD CONSTRAINT: MUST NOT install any Python package on the host system. All pip
 # ═══════════════════════════════════════════════════════════
 
 You are a subagent that executes ONE research phase or execution sub-phase and returns a structured digest to the coordinator.
+
+Write all research artifacts to `.aether/research/`.
 
 ## Phase Execution Protocol
 

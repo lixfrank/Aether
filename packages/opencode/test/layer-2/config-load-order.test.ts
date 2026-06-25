@@ -142,7 +142,7 @@ steps: 5
     })
   })
 
-  test(".opencode/ jsonc overrides .md for research-specific fields", async () => {
+  test(".opencode/ jsonc overrides .md for agent fields", async () => {
     await using tmp = await tmpdir({
       git: true,
       init: async (dir) => {
@@ -151,9 +151,7 @@ steps: 5
           path.join(agentDir, "research.md"),
           `---
 model: anthropic/claude-opus-4
-skill_refs:
-  - arxiv-search
-output_dir: research
+steps: 5
 ---
 
 Research agent prompt from .md.
@@ -165,8 +163,7 @@ Research agent prompt from .md.
             $schema: "https://opencode.ai/config.json",
             agent: {
               research: {
-                skill_refs: ["paper-search", "deep-research"],
-                output_dir: "research-output",
+                steps: 25,
               },
             },
           }),
@@ -179,8 +176,7 @@ Research agent prompt from .md.
       fn: async () => {
         const agent = await Agent.get("research")
         expect(agent).toBeDefined()
-        expect(agent?.skillRefs).toEqual(["paper-search", "deep-research"])
-        expect(agent?.outputDir).toBe("research-output")
+        expect(agent?.steps).toBe(25)
       },
     })
   })

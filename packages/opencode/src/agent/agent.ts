@@ -47,8 +47,6 @@ export namespace Agent {
       prompt: z.string().optional(),
       options: z.record(z.string(), z.any()),
       steps: z.number().int().positive().optional(),
-      mcp: z.record(z.string(), z.boolean()).optional(),
-      skillRefs: z.array(z.string()).optional(),
       delegationDepth: z.number().int().min(0).optional(),
       fileScope: z.string().array().optional(),
       maxSteps: z.number().int().positive().optional(),
@@ -71,7 +69,6 @@ export namespace Agent {
         })
         .optional(),
       mcp: z.record(z.string(), z.boolean()).optional(),
-      outputDir: z.string().optional(),
       owner: z.string().optional(),
       owns: z.string().array().optional(),
     })
@@ -288,8 +285,6 @@ export namespace Agent {
             item.steps = value.steps ?? item.steps
             item.options = mergeDeep(item.options, value.options ?? {})
             item.permission = Permission.merge(item.permission, Permission.fromConfig(value.permission ?? {}))
-            item.mcp = value.mcp ?? item.mcp
-            item.skillRefs = value.skill_refs ?? item.skillRefs
             item.delegationDepth = value.delegation_depth ?? item.delegationDepth
             item.fileScope = value.file_scope ?? item.fileScope
             item.maxSteps = value.max_steps ?? item.maxSteps ?? item.steps
@@ -297,7 +292,6 @@ export namespace Agent {
             item.envScope = value.env_scope ?? item.envScope
 
             item.mcp = value.mcp ?? item.mcp
-            item.outputDir = value.output_dir ?? item.outputDir
             item.owner = value.owner ?? item.owner
             item.owns = value.owns ?? item.owns
             const compileInput: z.infer<typeof Discipline.Schema> = {}

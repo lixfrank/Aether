@@ -4,6 +4,7 @@ import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { Agent } from "../../src/agent/agent"
 import { SystemPrompt } from "../../src/session/system"
+import { Permission } from "../../src/permission"
 
 const skip = process.env.RESEARCH_AGENT_TEST !== "1"
 
@@ -11,8 +12,8 @@ afterEach(async () => {
   await Instance.disposeAll()
 })
 
-describe.skipIf(skip)("skill_refs injection — research agent skill whitelist", () => {
-  test("agent with skillRefs gets only injected content (replaces broadcast)", async () => {
+describe.skipIf(skip)("SystemPrompt.skills — lazy skill loading (no eager injection)", () => {
+  test("agent with skill permission gets lazy available-skills list, not full content", async () => {
     await using tmp = await tmpdir({
       git: true,
       init: async (dir) => {
@@ -28,60 +29,6 @@ description: Search arXiv papers.
 Search arXiv for preprints and academic papers.
 `,
         )
-        const skillDir2 = path.join(dir, ".aether", "skills", "deep-research")
-        await Bun.write(
-          path.join(skillDir2, "SKILL.md"),
-          `---
-name: deep-research
-description: Comprehensive research assistant.
----
-
-# Deep Research
-Conduct comprehensive research with citations.
-`,
-        )
-      },
-      config: {
-        agent: {
-          general: {
-            skill_refs: ["arxiv-search", "deep-research"],
-          },
-        },
-      },
-    })
-
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const general = await Agent.get("general")
-        const output = await SystemPrompt.skills(general!)
-
-        expect(output).toContain("Skills (mandatory)")
-        expect(output).toContain("Skill: arxiv-search")
-        expect(output).toContain("Skill: deep-research")
-        expect(output).toContain("# ArXiv Search")
-        expect(output).toContain("# Deep Research")
-
-        expect(output).not.toContain("<available_skills>")
-      },
-    })
-  })
-
-  test("agent without skillRefs gets only broadcast (v0.6.0 unchanged)", async () => {
-    await using tmp = await tmpdir({
-      git: true,
-      init: async (dir) => {
-        const skillDir = path.join(dir, ".aether", "skills", "arxiv-search")
-        await Bun.write(
-          path.join(skillDir, "SKILL.md"),
-          `---
-name: arxiv-search
-description: Search arXiv papers.
----
-
-# ArXiv Search
-`,
-        )
       },
     })
 
@@ -90,20 +37,27 @@ description: Search arXiv papers.
       fn: async () => {
         const build = await Agent.get("build")
         const output = await SystemPrompt.skills(build!)
-        expect(output).toContain("<available_skills>")
+
+        expect(output).toContain("Use the skill tool to load a skill")
         expect(output).toContain("arxiv-search")
+        expect(output).toContain("<available_skills>")
+
+        // lazy branch: skill full content is NOT injected into system prompt
+        expect(output).not.toContain("# ArXiv Search")
         expect(output).not.toContain("Skills (mandatory)")
+        expect(output).not.toContain("do NOT use the skill tool")
       },
     })
   })
 
-  test("skillRefs referencing nonexistent skill shows warning", async () => {
+  test("agent with skill denied returns undefined (no skill list)", async () => {
     await using tmp = await tmpdir({
       git: true,
       config: {
         agent: {
-          general: {
-            skill_refs: ["nonexistent-skill"],
+          "no-skill-agent": {
+            mode: "subagent",
+            permission: { "*": "deny", read: "allow" },
           },
         },
       },
@@ -112,10 +66,51 @@ description: Search arXiv papers.
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const general = await Agent.get("general")
-        const output = await SystemPrompt.skills(general!)
-        expect(output).toContain("referenced but not found")
-        expect(output).toContain("nonexistent-skill")
+        const agent = await Agent.get("no-skill-agent")
+        const output = await SystemPrompt.skills(agent!)
+        expect(output).toBeUndefined()
+      },
+    })
+  })
+
+  test("*: deny + skill: allow yields skill list via SystemPrompt.skills (gpd-verifier path)", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+      init: async (dir) => {
+        const skillDir = path.join(dir, ".aether", "skills", "gpd-verification")
+        await Bun.write(
+          path.join(skillDir, "SKILL.md"),
+          `---
+name: gpd-verification
+description: Physics verification with SymPy.
+---
+
+# GPD Verification
+Deterministic SymPy checks.
+`,
+        )
+      },
+      config: {
+        agent: {
+          "deny-with-skill-allow": {
+            mode: "subagent",
+            permission: { "*": "deny", read: "allow", skill: "allow" },
+          },
+        },
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const agent = await Agent.get("deny-with-skill-allow")
+        expect(Permission.disabled(["skill"], agent!.permission).has("skill")).toBe(false)
+        expect(Permission.evaluate("skill", "*", agent!.permission).action).toBe("allow")
+        const output = await SystemPrompt.skills(agent!)
+        expect(output).toBeDefined()
+        expect(output).toContain("<available_skills>")
+        expect(output).toContain("gpd-verification")
+        expect(output).not.toContain("# GPD Verification")
       },
     })
   })

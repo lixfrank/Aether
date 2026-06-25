@@ -17,7 +17,6 @@ permission:
 mcp:
   research-state: true
 fallback_models: []
-output_dir: ".aether/research"
 file_scope:
   - ".aether/research/**" # 读任何文件，不写（只返回结构化判定）
 ---

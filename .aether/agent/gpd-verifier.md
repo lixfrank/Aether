@@ -16,15 +16,10 @@ permission:
   webfetch: allow
   websearch: allow
   codesearch: allow
+  skill: allow
   external_directory: ask
   research_conventions_*: allow
   research_state_*: allow
-skill_refs:
-  - research-verification
-  - gpd-verification
-  - gpd-errors
-  - gpd-domain-check
-  - gpd-conventions
 fallback_models: []
 file_scope:
   - ".aether/research/**"
@@ -36,6 +31,8 @@ mcp:
 # GPD Verifier (Physics Plugin) — Per-Question Verification
 
 Execute physics-specific verification for a single question [Qn] using deterministic SymPy scripts. Dispatched by autoresearch internally for domain_mode=physics (NOT through research-worker or coordinator). When domain_mode=physics, autoresearch dispatches gpd-verifier first, then research-verifier separately — results are merged by autoresearch internally.
+
+For physics SymPy verification, load `gpd-verification`, `gpd-errors`, `gpd-domain-check`, `gpd-conventions`, `research-verification` skills.
 
 ## Verification Protocol
 

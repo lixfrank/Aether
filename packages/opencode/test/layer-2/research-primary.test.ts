@@ -111,15 +111,4 @@ describe.skipIf(skip)("Layer 2 — research primary agent", () => {
     expect(cfg.env_scope?.allowed_commands).toBeDefined()
     expect(cfg.env_scope!.allowed_commands!.length).toBeGreaterThan(0)
   })
-
-  test("research agent has no skill_refs (primary agent free access)", async () => {
-    await using tmp = await tmpdir({ config: { agent: { research: makeResearchConfig() } } })
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const r = await Agent.get("research")
-        expect(r?.skillRefs ?? []).toEqual([])
-      },
-    })
-  })
 })

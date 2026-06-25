@@ -68,7 +68,6 @@ env_scope:
   allowed_commands:
     - uv
     - curl
-output_dir: research
 ---
 
 # Research Mode
@@ -86,7 +85,6 @@ Route based on intent.
           const r = await Agent.get("research")
           expect(r?.mode).toBe("primary")
           expect(r?.mcp).toEqual({ "research-conventions": true, "research-state": true })
-          expect(r?.outputDir).toBe("research")
           expect(r?.prompt).toContain("Research Mode")
           expect(
             Permission.evaluate("bash", "uv run .aether/skills/paper-search/arxiv_search.py test", r!.permission)
@@ -118,8 +116,6 @@ permission:
   bash: allow
   read: allow
   webfetch: allow
-skill_refs:
-  - paper-search
 ---
 
 # Integrity Commandments
@@ -136,7 +132,6 @@ Never fabricate a source.
         fn: async () => {
           const e = await Agent.get("research-explorer")
           expect(e?.mode).toBe("subagent")
-          expect(e?.skillRefs).toEqual(["paper-search"])
           expect(e?.prompt).toContain("Integrity Commandments")
         },
       })
@@ -165,7 +160,6 @@ mcp:
   research-conventions: true
 fallback_models:
   - alibaba-cn/glm-5.1
-output_dir: .aether/research
 ---
 
 # Local Executor

@@ -11,10 +11,7 @@ permission:
   glob: allow
   read: allow
   bash: allow
-skill_refs:
-  - gpd-errors
-  - gpd-conventions
-  - gpd-domain-check
+  skill: allow
 fallback_models: []
 file_scope:
   - ".aether/research/**"
@@ -26,6 +23,8 @@ mcp:
 # GPD Reviewer (Physics Plugin)
 
 Review physics research for methodological soundness, convention consistency, and known error patterns.
+
+For physics peer review, load `gpd-errors`, `gpd-conventions`, `gpd-domain-check` skills.
 
 ## Review Protocol
 
