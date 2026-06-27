@@ -7,8 +7,8 @@ import { Flag } from "@/flag/flag"
 import { Log } from "@/util/log"
 import { Filesystem } from "@/util/filesystem"
 import { CFG, LEGACY_CFG, Persist, legacyPlatformDir, platformDir } from "./naming"
-import { AETHER_HOME } from "@/util/python"
 
+const AETHER_HOME = path.join(os.homedir(), ".aether")
 const log = Log.create({ service: "migrate" })
 
 const MARK = "migration-v1.json"

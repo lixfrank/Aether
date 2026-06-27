@@ -54,8 +54,7 @@ For each authorized item:
 4. If `verify_delay_seconds` is set → wait that many seconds (inform user "等待服务启动...")
 5. Execute `verify_command` to verify installation
 6. Verification failure:
-   - For uv: suggest user `source ~/.bashrc` or restart terminal (PATH may not be updated in current process)
-   - For others: mark as `install_failed`, inform user
+   - mark as `install_failed`, inform user
 7. Verification success → mark as `installed`
 8. If `post_install_note` exists → inform user
 9. If `auto_installable == "partial"` → inform user they need to run `manual_step` (e.g., web-based account setup)
@@ -81,7 +80,7 @@ After installation completes, the coordinator should dispatch research-worker(mo
 
 ## Key Design
 
-- **Per-item authorization**: Each item is authorized individually. User can install only uv (required) and skip optional tools.
+- **Per-item authorization**: Each item is authorized individually. User can install only git (required) and skip optional tools. (uv is installed by the research-coordinator before MCP servers start; env-setup does not handle uv.)
 - **Read-only health check**: The health check MCP tool is READ_ONLY. Installation is a write operation handled by this skill with per-item user authorization.
 - **No batch authorization**: NEVER ask "Install all missing items?" — always ask per-item.
 

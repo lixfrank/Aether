@@ -492,15 +492,31 @@ These are NOT new debate topics — they are **prefatory notes** injected into t
 
 ## §8 Session Start Procedure
 
-1. Health check: invoke /health-check skill (or `uv --version` for Tier 0)
+1. **uv bootstrap**: ensure uv exists at `~/.aether/bin/uv` before any MCP server starts (research-state / research-conventions MCP `command` uses absolute path `~/.aether/bin/uv`, which must exist at startup).
+   - Detect: `~/.aether/bin/uv --version` (absolute path, no PATH dependency).
+   - If unavailable: use question tool for per-item authorization:
+     ```
+     uv 不可用（priority: critical），uv 是 research-state / research-conventions MCP server 的启动依赖（PEP 723 inline 依赖由 uv run 解析）。
+     安装到 ~/.aether/bin（UV_UNMANAGED_INSTALL，不修改 shell PATH/profile）？
+     [yes/no]
+     ```
+   - User authorizes → install:
+     ```sh
+     curl -LsSf https://astral.sh/uv/install.sh | env UV_UNMANAGED_INSTALL="$HOME/.aether/bin" sh
+     ```
+   - Verify: `~/.aether/bin/uv --version` → must succeed.
+   - User declines → cannot start MCP servers → abort research session, inform user uv is required.
+   - Design note: research agent uses `~/.aether/bin/uv` as the authoritative path (does not reuse user's uv elsewhere) to eliminate PATH ambiguity.
+2. Health check: invoke /health-check skill
    → degraded: read references/session-recovery.md §Health Check Digest Processing
-2. Git check: `git rev-parse --is-inside-work-tree 2>/dev/null`
+   (uv_available / uv_python_management are confirmation-only checks — uv is guaranteed by step 1)
+3. Git check: `git rev-parse --is-inside-work-tree 2>/dev/null`
    → If NOT in repo: `git init && git add -A && git commit -m "research: initial state"`
-3. Read STATE.md + state.json → determine current phase
+4. Read STATE.md + state.json → determine current phase
    → Active project: resume from current phase
    (crash recovery: read references/session-recovery.md §Phase-Specific Crash Recovery)
    → No active project: classify via Entry Gate (in research.md)
-4. Dispatch research-worker for current phase
+5. Dispatch research-worker for current phase
 
 ---
 

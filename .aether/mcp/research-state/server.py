@@ -22,6 +22,12 @@ from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 from pydantic import BaseModel, ValidationError, create_model
 
+# Ensure uv at ~/.aether/bin is discoverable by bare `uv` calls in _run_cmd.
+# uv is installed to ~/.aether/bin before this process starts.
+_uv_bin = os.path.expanduser("~/.aether/bin")
+if _uv_bin not in os.environ.get("PATH", "").split(os.pathsep):
+    os.environ["PATH"] = _uv_bin + os.pathsep + os.environ.get("PATH", "")
+
 mcp = FastMCP("research-state")
 
 DEFAULT_STATE_DIR = ".aether/research/persistence"

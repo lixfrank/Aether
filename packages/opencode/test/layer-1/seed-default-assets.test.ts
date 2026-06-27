@@ -43,15 +43,6 @@ describe.skipIf(skip)("seedDefaultAssets — incremental seeding logic", () => {
       expect(exists).toBe(true)
     }
   })
-
-  test("~/.aether/bin/ directory exists for uv installation", async () => {
-    const binDir = path.join(AETHER_HOME, "bin")
-    const exists = await fs
-      .stat(binDir)
-      .then(() => true)
-      .catch(() => false)
-    expect(exists).toBe(true)
-  })
 })
 
 describe.skipIf(skip)("seedDefaultAssets — findServerProjectDir logic", () => {

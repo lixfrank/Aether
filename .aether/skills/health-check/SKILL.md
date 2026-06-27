@@ -33,6 +33,8 @@ This skill implements the health_check execution mode for the research agent. It
 
 ## Procedure
 
+> **Note**: uv is guaranteed to exist at `~/.aether/bin/uv` by the research-coordinator's uv bootstrap step (research-coordinator §8 Session Start Procedure, Step 1), which runs **before** the research-state MCP server starts (and thus before this skill is invoked). The `uv_available` / `uv_python_management` checks are confirmation-only — they will pass. The `failed_items` mapping `uv_available → auto_installable:true, priority:critical` (Step 5) is retained but will no longer trigger (harmless).
+
 ### Step 1: Read Dispatch Parameters
 
 1. Read dispatch prompt to identify `layers` parameter

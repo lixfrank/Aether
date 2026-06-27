@@ -1,16 +1,4 @@
 {
-  "uv": {
-    "auto_installable": true,
-    "platforms": {
-      "macos": "curl -LsSf https://astral.sh/uv/install.sh | sh",
-      "linux": "curl -LsSf https://astral.sh/uv/install.sh | sh"
-    },
-    "verify_command": "uv --version",
-    "post_install_note": "可能需要重新启动 shell 或 source ~/.bashrc/~/.zshrc；同一进程的 PATH 可能未更新，若 verify 失败请建议用户 source 或重开终端",
-    "layer": "infrastructure",
-    "health_check_key": "uv_available",
-    "priority": "critical"
-  },
   "git": {
     "auto_installable": true,
     "platforms": {

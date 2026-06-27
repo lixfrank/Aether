@@ -3,12 +3,12 @@
   "mcp": {
     "research-conventions": {
       "type": "local",
-      "command": ["uv", "run", "~/.aether/mcp/research-conventions/server.py"],
+      "command": ["~/.aether/bin/uv", "run", "~/.aether/mcp/research-conventions/server.py"],
       "enabled": false,
     },
     "research-state": {
       "type": "local",
-      "command": ["uv", "run", "~/.aether/mcp/research-state/server.py"],
+      "command": ["~/.aether/bin/uv", "run", "~/.aether/mcp/research-state/server.py"],
       "enabled": false,
     },
   },

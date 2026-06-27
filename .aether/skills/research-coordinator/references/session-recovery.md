@@ -250,14 +250,11 @@ When uv is unavailable and user declines installation:
 
 ### Tier 0 LLM Bootstrap
 
-If `uv --version` fails:
+If `~/.aether/bin/uv --version` fails:
 
 1. Inform user: "uv 不可用，MCP 工具无法启动。uv 是所有 Python 计算的基础依赖。"
-2. Load env-setup skill, ask user whether to auto-install uv (per-item authorization)
-3. User agrees → execute: `curl -LsSf https://astral.sh/uv/install.sh | sh`
-4. Re-check `uv --version` → if still unavailable → suggest `source ~/.bashrc` or restart terminal
-5. uv ultimately available → proceed to Tier 0.5
-6. User declines → continue in LLM-only mode
+2. uv installation is handled by the coordinator's uv bootstrap step (research-coordinator §8 Session Start Procedure, Step 1) — this recovery path only **detects**; it does not install. Re-run that uv bootstrap step if needed.
+3. User declines uv installation → continue in LLM-only mode
 
 ### Tier 0.5: Cache validity + global directory pre-creation
 

@@ -9,7 +9,6 @@ import { CodexAuthPlugin } from "./codex"
 import { Session } from "../session"
 import { NamedError } from "@opencode-ai/util/error"
 import { CopilotAuthPlugin } from "./copilot"
-import { AetherBinPlugin } from "./aether-bin"
 import { gitlabAuthPlugin as GitlabAuthPlugin } from "opencode-gitlab-auth"
 import { PoeAuthPlugin } from "opencode-poe-auth"
 import { Effect, Layer, ServiceMap, Stream } from "effect"
@@ -52,7 +51,6 @@ export namespace Plugin {
     GitlabAuthPlugin,
     PoeAuthPlugin,
     MemoryPlugin,
-    AetherBinPlugin,
   ]
 
   // Old npm package names for plugins that are now built-in — skip if users still have them in config
