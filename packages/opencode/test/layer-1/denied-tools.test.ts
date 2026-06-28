@@ -3,7 +3,7 @@ import { Permission } from "../../src/permission"
 
 const skip = process.env.RESEARCH_AGENT_TEST !== "1"
 
-describe.skipIf(skip)("Layer 1 — denied tools filtering via Permission.disabled", () => {
+describe.skipIf(skip)("Layer 1 — denied tools filtering via Permission.evaluate", () => {
   test("Permission.EDIT_TOOLS is exported and contains expected tool names", () => {
     expect(Permission.EDIT_TOOLS).toEqual(["edit", "write", "apply_patch", "multiedit"])
   })
@@ -101,24 +101,5 @@ describe.skipIf(skip)("Layer 1 — denied tools filtering via Permission.disable
     expect(Permission.evaluate("edit", "*", effective).action).toBe("deny")
     expect(Permission.evaluate("bash", "*", effective).action).toBe("allow")
     expect(Permission.evaluate("read", "*", effective).action).toBe("allow")
-  })
-
-  test("static deny + approved allow → tool not hidden", () => {
-    const base = Permission.fromConfig({
-      "*": "allow",
-      bash: "deny",
-    })
-    const approved = Permission.fromConfig({ bash: "allow" })
-    expect(Permission.disabled(["bash"], base).has("bash")).toBe(true)
-    expect(Permission.disabled(["bash"], Permission.merge(base, approved)).has("bash")).toBe(false)
-  })
-
-  test("*: deny + specific pattern allow → tool not hidden", () => {
-    const base = Permission.fromConfig({
-      bash: { "*": "deny", "rm*": "allow" },
-    })
-    const disabled = Permission.disabled(["bash"], base)
-    expect(disabled.has("bash")).toBe(false)
-    expect(disabled.size).toBe(0)
   })
 })

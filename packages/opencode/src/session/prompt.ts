@@ -1002,12 +1002,6 @@ export namespace SessionPrompt {
       tools[key] = item
     }
 
-    const base = Permission.merge(input.agent.permission, input.session.permission ?? [])
-    const approved = await Permission.approved()
-    for (const tool of Permission.disabled(Object.keys(tools), Permission.merge(base, approved))) {
-      delete tools[tool]
-    }
-
     return tools
   }
 
