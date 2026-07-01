@@ -43,6 +43,9 @@
 ```yaml
 name: research-verifier
 mode: subagent
+owner: research
+owns:
+  - research
 permission: { edit: { "*": deny, ".aether/research/**": allow } }
 description: |
   对单个 question [Qn] 执行独立验证。verifier 即 judge——验证就是对执行质量的独立判断。
@@ -113,3 +116,32 @@ Qn 只需正确使用依赖结果即可，dependency_usage 覆盖此检查。
 - `.aether/skills/research-verification/` 删除（142行）
 - `.aether/agent/research-verifier.md`：61行 → ~100行（合并 skill 验证协议 + 删 domain_mode/fallback_applicability + 强化 verdict）
 - gpd-\* skill 保留不变（research-verifier 按需加载，不硬编码名称）
+
+---
+
+## 验收目标
+
+### 语义验收
+
+- [ ] research-verification skill 整体删除，内容合并入 `agent/research-verifier.md` agent 定义
+- [ ] research-verifier.md front matter 必须含 `owner: research` + `owns: - research` + `mode: subagent`（与现有文件一致，不得遗漏此字段）
+- [ ] verifier 即 judge：验证就是对执行质量的独立判断，不需要额外 judgment-worker
+- [ ] Qn_VERIFICATION.md 必须包含：Verdict（PASS/FAIL/PARTIAL）+ Evidence + Reasoning Verification（4 子项：method_fidelity / step_completeness / assumption_audit / dependency_usage）+ Conclusion Verification
+- [ ] 删 domain_mode：agent 自行判断是否需加载领域 skill（如 gpd-\* skill），不硬编码 skill 名称
+- [ ] 删 fallback_applicability：与 dependency_usage 重复，fallback 合理性是 framing 层面问题（debate/audit 审）
+- [ ] 环境策略：从"uv-first Python 执行"改为"读 persistence/ENVIRONMENT.md 了解可用环境"
+- [ ] verifier 不关心 Qn 依赖的结果从哪来（原定计划或 fallback 均可），dependency_usage 覆盖"是否正确使用了依赖结果"
+- [ ] "Never report independently confirmed based on LLM-only reasoning" 约束保留：独立确认须有计算/引用证据
+
+### 脚本强制验收
+
+- [ ] `不得存在` `skills/research-verification/` 目录（已删除，合并入 agent 定义）
+- [ ] `不得存在` research-verifier.md 中的 `domain_mode` 参数及相关描述
+- [ ] `不得存在` research-verifier.md 中的 `fallback_applicability` 子项
+- [ ] `不得存在` research-verifier.md 中的 `PhaseResultDigest` 输出（verifier 只写 Qn_VERIFICATION.md，不回传 digest）
+- [ ] `不得存在` research-verifier.md 中的 `establish contract targets` / 与 PLAN.md Contract 的强绑定描述（改为 per-claim 验证）
+- [ ] `不得存在` research-verifier.md 中的 `phase_execution` / `autoresearch` FSM 衔接描述
+- [ ] `不得存在` research-verifier.md 中的 `MUST NOT include status field` 旧约束（新设计 verifier 直接给 verdict）
+- [ ] `不得存在` research-verifier.md 中的 `uv-first` 硬约束（改为读 ENVIRONMENT.md）
+- [ ] research-verifier.md front matter 含 `owner: research`
+- [ ] `check_verification.py` 验证 Qn_VERIFICATION.md 非空 + 含 verdict（PASS/FAIL/PARTIAL）

@@ -100,3 +100,27 @@ check_sources.py 的路径引用需同步更新：
 - SKILL.md 从 264行 → ~250行（删 Path 分类 + 禁止性语言，加 registry 闭环说明）
 - download_paper.py 新增 ~20行 registry 更新逻辑
 - check_sources.py 验证引用→下载文件映射（路径指向 literatures/）
+
+---
+
+## 验收目标
+
+### 语义验收
+
+- [ ] `literatures/` 目录名保留，路径不变（`.aether/research/literatures/`）
+- [ ] download_paper.py 下载成功后追加条目到 `literatures/registry.json`，字段为 `id` / `type` / `title` / `authors` / `year` / `file` / `downloaded_at`（与 newlayer-1 §3.3 的 registry.json 结构一致）
+- [ ] registry.json 去重逻辑：按 `id` 检查是否已存在，已存在则跳过
+- [ ] check_sources.py 路径引用更新：查 `.aether/research/literatures/registry.json` + `literatures/<id>.*`（非旧 `persistence/sources/`）
+- [ ] research-explorer 保留为标准搜索接口（集中搜索策略 + 跨库去重 + 干净接口）
+- [ ] 搜索与下载脚本不变：arxiv_search.py / inspire_search.py / s2_search.py / pubmed_search.py / download_paper.py / extract_citations.py
+- [ ] 4 个 Mode 保留：Multi-Database Search / Paper Download / Citation Extraction / Citation Discovery
+
+### 脚本强制验收
+
+- [ ] `不得存在` SKILL.md 中的 `Path 1` / `Path 2` / `Path 3` 调用区分（旧 Entry Gate 路径）
+- [ ] `不得存在` SKILL.md 中的 `NOT the intended usage pattern` 禁止性语言
+- [ ] `不得存在` SKILL.md 中的 `Sole entry point` 强制性语言（research-explorer 仍是标准接口但不强制）
+- [ ] `不得存在` download_paper.py 中对 `persistence/sources/registry.json` 的路径引用（应为 `literatures/registry.json`）
+- [ ] `check_sources.py` 验证 `[src:<id>]` 引用 → registry.json 有注册 → `literatures/<id>.*` 文件存在（anti-fabrication 闭环）
+- [ ] `check_sources.py` 输出 JSON 含 `ok` / `cited_without_source` / `missing_files`
+- [ ] registry.json 结构含 `entries` 数组，每个 entry 含 7 个字段（id/type/title/authors/year/file/downloaded_at）

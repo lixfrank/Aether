@@ -108,8 +108,8 @@ Write <workdir>landscape_map.md
 
 末尾: 更新 persistence/research_state.md
 
-- Phase History 追加 landscape✓
-- Current Understanding 追加景观发现（school / controversy / open problem）
+- 推荐更新: Phase History 追加 landscape✓ / Current Understanding 追加景观发现
+  （agent 据发现可灵活更新其他节，不限于以上推荐）
 - 若回写了 analysis.md，在 Phase History 注明 "analysis.md updated by landscape"
 ```
 
@@ -124,7 +124,7 @@ Step N: 质量门
    - check_artifacts.py → 验证 <workdir>landscape_map.md 存在非空
    - check_sources.py → 验证 landscape_map.md 中 [src:id] 引用都有下载文件
    - 不过 → worker 自补，重跑 scripts
-2. worker dispatch research-audit sub-subagent（fresh context，避免 self-review bias）:
+2. worker dispatch research-audit agent（fresh context，避免 self-review bias）:
    - sub-subagent 读 <workdir>landscape_map.md，按 newlayer-7 §2 审计方向审:
      学派分类是否准确 / 时间线是否完整 / 争议标注是否有据 / 覆盖度是否充分
    - 输出 FATAL/CONCERN/PASS 报告
@@ -146,3 +146,30 @@ Step N: 质量门
 ## 预期结果
 
 SKILL.md 从 247行 → ~210行（删 audit_1 路由 / SUPPLEMENTARY TASK / digest，加 research_state.md 更新 + 质量门 + 保留内容明确化）。
+
+---
+
+## 验收目标
+
+### 语义验收
+
+- [ ] skill name 保留 `literature-landscape-scan`（不改名），front matter description 标注"可选调用，非强制 phase"
+- [ ] landscape 是可选 phase：analysis 后 framing 前按需调用，非强制执行
+- [ ] 读取 Failed Attempts 作为景观扫描排除线索（避免重复扫描已排除方向）
+- [ ] 读取 analysis.md 的 gap 识别作为扫描聚焦点（非无目标泛搜）
+- [ ] landscape_map.md 产出结构包含：domain map / school classification / timeline / controversies（须有 [src:id] 引用）/ open problems
+- [ ] 若扫描中发现 analysis.md 的 gap 识别有误或遗漏，可回写补充 analysis.md
+- [ ] 产出路径为 `<workdir>landscape_map.md`（配合 slug 机制）
+- [ ] 质量门流程与 newlayer-7 §1 对齐：check_artifacts.py + check_sources.py → dispatch research-audit agent → 自修
+- [ ] 回传格式：Last Phase Result 节写入 `phase=landscape / status / summary / issues`
+
+### 脚本强制验收
+
+- [ ] `不得存在` SKILL.md 中的 `audit_1` / `SUPPLEMENTARY TASK` / `audit_1 findings injection` 引用
+- [ ] `不得存在` SKILL.md 中的 `advance_plan` 调用
+- [ ] `不得存在` SKILL.md 中的 `state.json` / `get_state` 引用
+- [ ] `不得存在` SKILL.md 中的 `PhaseResultDigest` 引用
+- [ ] `不得存在` SKILL.md 中的 `Phase 4` / `phase_landscape` FSM 标识
+- [ ] `不得存在` 产出路径引用 `persistence/landscape_map.md`（应为 `<workdir>landscape_map.md`）
+- [ ] `check_artifacts.py` 验证 `<workdir>landscape_map.md` 存在非空
+- [ ] `check_sources.py` 验证 landscape_map.md 中所有 `[src:id]` 引用都有下载文件

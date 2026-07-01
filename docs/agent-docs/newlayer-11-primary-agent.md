@@ -1,14 +1,14 @@
 # newlayer-11: primary agent 重写 + 删除 research-coordinator
 
 > `.aether/agent/research.md` (179行) 重写
-> `.aether/skills/research-coordinator/` (525+refs 1638行) 删除（已在 newlayer-1 处理）
+> `.aether/skills/research-coordinator/` (541 SKILL.md + 3 refs 1110 + backup_repair.sh 68 = 1719行) 删除（已在 newlayer-1 处理）
 > 对应设计文档 §2（架构总览）、§4.2（phase 选择器）、§5（人类交互）、§3.6（slug）
 
 ---
 
 ## 修改原因与设计依据
 
-**大方向**：research.md 是 primary agent 定义，旧设计有 Entry Gate Path 0/1/2/3 分类 FSM + Terminal Action 硬约束 + phase 强制序，这些是把 agent 当状态机解释器。新设计改为 phase 选择器（智能判断下一步）+ 对话式 pause + 统一中断响应 + slug 管理 + 多阶段。research-coordinator skill（1638行）整体删除，有用知识迁移到 research.md 及各 phase skill。
+**大方向**：research.md 是 primary agent 定义，旧设计有 Entry Gate Path 0/1/2/3 分类 FSM + Terminal Action 硬约束 + phase 强制序，这些是把 agent 当状态机解释器。新设计改为 phase 选择器（智能判断下一步）+ 对话式 pause + 统一中断响应 + slug 管理 + 多阶段。research-coordinator skill（1719行）整体删除，有用知识迁移到 research.md 及各 phase skill。
 **设计依据**：design doc §2（架构总览）、§4.2（phase 选择器）、§5（人类交互）、§3.6（slug）、§8（多阶段）、§13 决策 4/7/11/12。
 **具体决策理由**：
 
@@ -207,21 +207,21 @@ research_state.md 不显式分 stage, 连续演进。
 
 ## 2. research-coordinator skill 删除 — 有用知识迁移
 
-coordinator skill（SKILL.md 525行 + 3 refs 1638行）删除。以下是具体知识迁移：
+coordinator skill（SKILL.md 541行 + 3 refs 1110行 + backup_repair.sh 68行 = 1719行）删除。以下是具体知识迁移：
 
 ### 从 coordinator SKILL.md 迁移
 
-| coordinator SKILL.md 段落                  | 迁移到                           | 迁移内容                                                         |
-| ------------------------------------------ | -------------------------------- | ---------------------------------------------------------------- |
-| §Phase Routing（phase 依赖序说明）         | research.md §2 phase 选择器      | 默认序 analysis→landscape→framing→debate→execution + 可回退/重入 |
-| §Dispatch Protocol（dispatch prompt 模板） | research.md §3 Worker 派遣       | 简化为：prompt = phase名 + Active Workdir + 指示上下文           |
-| §Checkpoint（呈现内容优先级）              | research.md §4 pause 点          | 简化为"简短摘要"（目标进展/关键发现/待决事项）                   |
-| §Git Commit 流程                           | research.md §3 step 5            | git add + commit -m "research: phase_X"                          |
-| §Integrity 约束                            | research.md §7 硬约束（分层）    | 拆分为 primary 约束 + per-skill 约束                             |
-| §Convention awareness                      | 各 phase skill（framing Step 9） | 读 research_state.md ## Conventions + check_conventions.py       |
-| §Notice Templates（4 类模板）              | 删除                             | 不再有固定模板，agent 自然输出                                   |
-| §Terminal Action 规则                      | 删除                             | Terminal Action 概念删除                                         |
-| §Entry Gate Path 分类                      | 删除                             | 不再有 Path 0/1/2/3                                              |
+| coordinator SKILL.md 段落                  | 迁移到                        | 迁移内容                                                                                                                            |
+| ------------------------------------------ | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| §Phase Routing（phase 依赖序说明）         | research.md §2 phase 选择器   | 默认序 analysis→landscape→framing→debate→execution + 可回退/重入                                                                    |
+| §Dispatch Protocol（dispatch prompt 模板） | research.md §3 Worker 派遣    | 简化为：prompt = phase名 + Active Workdir + 指示上下文                                                                              |
+| §Checkpoint（呈现内容优先级）              | research.md §4 pause 点       | 简化为"简短摘要"（目标进展/关键发现/待决事项）                                                                                      |
+| §Git Commit 流程                           | research.md §3 step 5         | git add + commit -m "research: phase_X"                                                                                             |
+| §Integrity 约束                            | research.md §7 硬约束（分层） | 拆分为 primary 约束 + per-skill 约束                                                                                                |
+| §Convention awareness                      | 各 phase skill                | 读 research_state.md ## Conventions + check_conventions.py（任何 phase 发现需要时可写入，framing Step 9 是主要设置+验证点但非唯一） |
+| §Notice Templates（4 类模板）              | 删除                          | 不再有固定模板，agent 自然输出                                                                                                      |
+| §Terminal Action 规则                      | 删除                          | Terminal Action 概念删除                                                                                                            |
+| §Entry Gate Path 分类                      | 删除                          | 不再有 Path 0/1/2/3                                                                                                                 |
 
 ### 从 coordinator references 迁移
 
@@ -237,20 +237,41 @@ coordinator skill（SKILL.md 525行 + 3 refs 1638行）删除。以下是具体�
 
 - research.md: 179行 → ~180行（删 Entry Gate/Terminal Action/旧 Hard Constraints/Session Start，加 phase选择器/人类交互/slug/多阶段/分层约束）
 - front matter: 删 mcp（2行）+ research\*\*\* permissions（2行）
-- research-coordinator skill: 1638行 → 0（删除）
-- 净减: 179 + 1638 → 180 = 净减 1637行
+- research-coordinator skill: 1719行 → 0（删除）
+- 净减: 179 + 1719 → 180 = 净减 1718行
 
-## 4. 验证清单
+---
 
-- [ ] research.md 不含 Entry Gate / Path 0/1/2/3 / Terminal Action
-- [ ] research.md front matter 无 mcp 字段、无 research\*\*\* permissions
-- [ ] research.md 含 phase 选择器逻辑（§2）
-- [ ] research.md §2 不规定各 phase 读哪些节（由各 skill 指定）
-- [ ] research.md §2 不机械分类消息类型
+## 4. 验收目标
+
+### 语义验收
+
+- [ ] research.md 不含 Entry Gate / Path 0/1/2/3 / Classification Rules / Gate Enforcement / Terminal Action 概念
+- [ ] research.md 含 phase 选择器逻辑（§2）：按优先级判断——unprocessed Human Directives → pause 点等待 → 默认前进路径 → execution 完成呈现结果
+- [ ] research.md phase 选择器是 agent 判断而非条件路由表；判断依据（research_state.md 结构化字段）是确定的
+- [ ] research.md §2 不规定各 phase 读 research_state.md 的哪些节（由各 skill 指定）
+- [ ] research.md §2 不机械分类消息类型（理解意图后自然响应）
+- [ ] research.md §3 Worker 派遣：dispatch research-worker，prompt 含 phase 名 + Active Workdir + 人类指示上下文
+- [ ] research.md §3 worker 返回后：读 Last Phase Result → git commit → phase 选择器决定下一步
 - [ ] research.md §4 含统一"响应用户消息"节（基于语义判断意图，含文献调研路径）
 - [ ] research.md §4 不区分 session 类型（据语义意图判断响应）
-- [ ] research.md 无 §8 首次响应（已并入 §4）
-- [ ] research.md §7 只含 primary agent 约束 + 一句引用 per-skill 约束
-- [ ] research.md §7 无 file_scope 引用
-- [ ] research-coordinator skill 目录已删
-- [ ] coordinator 有用知识迁移表详细（§2）
+- [ ] research.md §4 pause 点：analysis 完成后 / debate 完成后 / execution 中人类指示的暂停点 / 遇到 open decision 时；pause 行为为输出简短摘要 + 等待人类消息（不弹 question 选项列表）
+- [ ] research.md §5 slug 管理：从 Research Goal 派生 slug（≤30 字符）+ 读 Workdir History 防冲突 + 旧 slug 保留不删
+- [ ] research.md §6 多阶段研究：execution 完成后呈现结果自然停止，不主动问"是否开启下一阶段"
+- [ ] research.md §7 硬约束只含 primary agent 约束 + 一句引用 per-skill 约束（分层）
+- [ ] research-coordinator skill 目录已删，有用知识已迁移（§2 迁移表）
+- [ ] coordinator references 中 session-recovery.md（284行恢复决策树）删除——agent 读 research_state.md 自行判断
+
+### 脚本强制验收
+
+- [ ] `不得存在` research.md 中的 `Entry Gate` / `Path 0` / `Path 1` / `Path 2` / `Path 3` / `Classification Rules` / `Gate Enforcement`
+- [ ] `不得存在` research.md 中的 `Terminal Action` 概念
+- [ ] `不得存在` research.md 中的 `Session Start` 独立流程（已并入 §4 响应用户消息）
+- [ ] `不得存在` research.md front matter 中的 `mcp` 字段
+- [ ] `不得存在` research.md front matter 中的 `research_state_*` / `research_conventions_*` 权限条目
+- [ ] `不得存在` `skills/research-coordinator/` 目录（已删除）
+- [ ] `不得存在` research.md 中的 `advance_plan` / `phase_rollback` 调用
+- [ ] `不得存在` research.md 中的 `PhaseResultDigest` 引用
+- [ ] `不得存在` research.md 中的 `file_scope` 引用（§7 硬约束中）
+- [ ] `不得存在` research.md 中的 `phase_checkpoint` / `phase_checkpoint_callback` 引用
+- [ ] research.md §7 硬约束含：FORBIDDEN 编造来源 / FORBIDDEN 编辑 .aether/research/ 之外文件 / MUST worker 返回后读 Last Phase Result / MUST phase 完成后 git commit / MUST 在 pause 点暂停等待人类 / MUST 呈现结果前跑全套结构 checker scripts / MUST 不声称 resolved 而无验证记录

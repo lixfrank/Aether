@@ -77,6 +77,9 @@ description: |
 # 新 (agent front matter)
 name: debate-critic
 mode: subagent
+owner: research
+owns:
+  - research
 permission: { edit: { "*": deny, ".aether/research/**": allow } }
 description: |
   辩论 Critic 角色。系统化审视 framing 合理性。
@@ -101,7 +104,6 @@ description: |
 
 - 移除 "Advocate's advocacy brief"（critic 先行，无 advocate brief 可读）
 - 移除 ROADMAP.md（已删）
-- 移除 framing_reasoning.md（critic 审 PLAN.md 即可，推理链由 audit sub-subagent 审，critic 不需读推理过程）
 - 新增 research_state.md（Research Goal 给critic上下文，Failed Attempts 避免提出已知失败的critique）
 
 #### M3. 删 "Final Output" YAML
@@ -139,6 +141,9 @@ debate-rebuttal 是全新 agent 定义，不是 debate-advocate skill 的改名�
 ```yaml
 name: debate-rebuttal
 mode: subagent
+owner: research
+owns:
+  - research
 permission: { edit: { "*": deny, ".aether/research/**": allow } }
 description: |
   辩论 Rebuttal 角色（守方）。回应 Critic 的 critique。
@@ -208,8 +213,8 @@ worker 读 <workdir>PLAN.md, persistence/research_state.md
 │ 写 repair 到 <workdir>DEBATE.md
 ├─ worker 判断是否需下一轮:
 │ 有 ESCALATE 且 round < 2 → worker 内部继续下一轮
-│ round 2 仍有 ESCALATE → 写 Last Phase Result (status=needs_attention, issues=[ESCALATE topics]), 回传 needs_attention
-│ 无 ESCALATE → 写 Last Phase Result (status=completed), 回传 completed
+│ round 2 仍有 ESCALATE → 写 Last Phase Result (phase=debate / status=needs_attention / summary / issues=[ESCALATE topics]), 回传 needs_attention
+│ 无 ESCALATE → 写 Last Phase Result (phase=debate / status=completed / summary / issues=[]), 回传 completed
 ```
 
 - round 2 聚焦：worker 给 critic/rebuttal dispatch prompt 加 "FOCUS on: [ESCALATE topics]"
@@ -225,7 +230,7 @@ Step N: 质量门
    - check_artifacts.py → 验证 <workdir>DEBATE.md 存在非空
    - 若修订了 PLAN.md → check_artifacts.py 验证 PLAN.md 存在非空
    - 不过 → worker 自补，重跑 scripts
-2. worker dispatch research-audit sub-subagent（fresh context，避免 self-review bias）:
+2. worker dispatch research-audit agent（fresh context，避免 self-review bias）:
    - sub-subagent 读 <workdir>DEBATE.md + 修订后的 PLAN.md，按 newlayer-7 §2 审计方向审:
      critique 是否覆盖关键 debate topics / rebuttal 是否回应所有 critique points /
      adjudication 裁决是否合理 / repair 修订是否正确
@@ -252,3 +257,37 @@ Step N: 质量门
 | **合计**                  | **734** | **~260** |                               |
 
 最多 5 次 dispatch（primary→worker 1 + worker→critique/rebuttal 2 × max 2 轮）。
+
+---
+
+## 验收目标
+
+### 语义验收
+
+- [ ] 旧 4 个 debate skill 全部删除（debate-advocate / debate-critic / debate-adjudicator / debate-repair）
+- [ ] 新建 3 个文件：`agent/debate-critic.md`（从 skill 迁移为 agent 定义）+ `agent/debate-rebuttal.md`（新建 agent 定义）+ `skills/debate/SKILL.md`（编排 skill）
+- [ ] debate-critic 和 debate-rebuttal 的 front matter 必须含 `owner: research` + `owns: - research` + `mode: subagent`，才能被 research-worker 通过 own/owner 机制 dispatch
+- [ ] debate-critic 输入为 `<workdir>PLAN.md` + `research_state.md`（Research Goal / Failed Attempts）+ `<workdir>DEBATE.md`（prior rounds）；不含 advocate's advocacy brief（critic 先行）、不含 ROADMAP.md（已删）；不在定义中提及 framing_reasoning.md（agent 自行判断是否需要读）
+- [ ] debate-rebuttal 自行读 `<workdir>DEBATE.md` 获取最新 critique，对每个 critique point 回应 REBUT / CONCEDE（unresponded = CONCEDE）
+- [ ] debate skill 编排逻辑：worker dispatch debate-critic → dispatch debate-rebuttal → worker 自做 adjudication（UPHELD/REVISE/ESCALATE）→ worker 自做 repair（若 REVISE）→ 判断是否下一轮
+- [ ] max 2 轮：round 2 聚焦 ESCALATE topics；round 2 仍有 ESCALATE → 回传 needs_attention
+- [ ] 回传格式：Last Phase Result 节写入 `phase=debate / status / summary / issues`，回传 `completed` 或 `needs_attention`
+- [ ] adjudication+repair 由 worker 自做（非独立 subagent），裁决决定修什么
+- [ ] DEBATE.md 结构不严格要求：agent 灵活组织，只需 critique/rebuttal/adjudication/repair 各轮内容可辨识
+- [ ] 人类参与：debate 完成后在 pause 点呈现裁决摘要
+- [ ] 质量门流程与 newlayer-7 §1 对齐：check_artifacts.py（验证 DEBATE.md 存在非空 + 若修订了 PLAN.md 则验证 PLAN.md）→ dispatch research-audit agent
+
+### 脚本强制验收
+
+- [ ] `不得存在` `skills/debate-advocate/` 目录（已删除）
+- [ ] `不得存在` `skills/debate-adjudicator/` 目录（已删除）
+- [ ] `不得存在` `skills/debate-repair/` 目录（已删除）
+- [ ] `不得存在` `skills/debate-critic/` 目录（已迁移为 agent 定义）
+- [ ] `不得存在` debate-critic.md 中的 `PhaseResultDigest` / `phase_result` YAML 输出（critique 追加写入 DEBATE.md，不回传 digest）
+- [ ] `不得存在` debate-critic.md 中的 "Advocate's advocacy brief" 输入引用（critic 先行，无 advocate brief）
+- [ ] `不得存在` debate-critic.md 中的 `ROADMAP.md` 引用
+- [ ] `不得存在` debate-rebuttal.md 中的 advocacy Mode 内容（旧 advocacy 整节丢弃）
+- [ ] `不得存在` debate skill 中的 `advance_plan` 调用
+- [ ] `check_artifacts.py` 验证 `<workdir>DEBATE.md` 存在非空
+- [ ] debate-critic.md front matter 含 `owner: research`
+- [ ] debate-rebuttal.md front matter 含 `owner: research`

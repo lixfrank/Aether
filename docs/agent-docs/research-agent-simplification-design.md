@@ -45,7 +45,7 @@
    - _原因_：旧设计有五重叠加的状态存储（STATE.md / state.json / DIGESTS.md / git commits / phase_commits），且 coordinator 有专门的"State Consistency Check"对账逻辑——需要"对账"即说明抽象错了。单一来源不需要对账。
 4. **subagent 隔离保留**：重上下文 phase（分析/landscape/framing/debate/execution）由 research-worker subagent 在隔离 context 执行，status 信号回传。
    - _原因_：每个 phase 产出体量巨大（分析 50 篇文献、landscape 图谱、framing 推理链、辩论 transcript），若全部加载进主 agent 上下文，context window 会爆。status 信号回传机制（worker 写 Last Phase Result 到 research_state.md，回传 status 信号）让主 agent 只携带摘要前进——这是真实的上下文管理，非仪式。早期方案曾提议"agent 直接加载 skill"但这对大型研究不可行。
-5. **结构检查(确定性) + 语义审计(LLM) 合一**为 research-audit skill，由 worker 自动执行。
+5. **结构检查(确定性) + 语义审计(LLM) 合一**为 research-audit（agent + skill），由 worker 自动执行。
    - _原因_：旧设计把"验证"和"judgment"当两个东西——verifier 验证，judgment-worker 判断 verifier 是否 shallow。这是给"verifier 有时产出浅薄内容"打的补丁，越打越重。核心洞察：**verifier 本身就是 judge**。结构检查（文件存在/引用→下载映射）由确定性脚本判定，零 token 且可靠；语义判断（推理成立/引用支持/方法适用）由轻量 LLM audit 判定。两者合一为单一 skill，概念统一为"质量保证"。
 6. **结构化执行保留但可灵活调度**：逐问题执行保留 Wave/依赖/失败传播/early-abort 结构（agent 不会自然做这些），但人类可指示执行优先级、暂停审核、调整方法。
    - _原因_：实测 LLM agent 行为——倾向频繁停下问"是否继续"（过度谨慎）、多步计划无显式结构会丢失追踪、失败传播需显式逻辑、early abort 需显式状态追踪。autoresearch 的结构恰恰是因为 agent **不**擅长自然做这些才存在。"内化为常识"基本不可行。
@@ -241,7 +241,7 @@ agent 读取 Active Workdir 字段作为当前工作目录。所有该阶段工�
 | 位置                            | 内容                     | 跨阶段                     |
 | ------------------------------- | ------------------------ | -------------------------- |
 | `persistence/research_state.md` | 单一状态（理解累积）     | 共享                       |
-| `persistence/ENVIRONMENT.md`    | 主机环境探测             | 共享（机器级，不随阶段变） |
+| `persistence/ENVIRONMENT.md`    | 主机环境探测             | 共享（跨阶段，可增量更新） |
 | `literatures/`                  | 文献下载 + registry.json | 共享（一次下载跨阶段用）   |
 | `notepads/<slug>/audits/`       | audit 报告               | 分离（与产物在一起）       |
 | `notepads/<slug>/`              | 各 phase 工作产物        | 分离                       |
@@ -397,7 +397,7 @@ per-question:
 失败传播无需单独步骤——按 Wave 顺序处理时，后续 question 的依赖检查自然发现上游失败。
 
 per-Wave:
-  6. dispatch research-audit sub-subagent 检查跨问题一致性
+  6. dispatch research-audit agent 检查跨问题一致性
      （避免后续 Wave 基于错误前提执行）
 
 终止:
@@ -442,11 +442,11 @@ _原因_：这使人类能"先看几个问题的结果再决定其余怎么做"�
 
 ---
 
-## 7. 约束层：research-audit skill（结构检查 + 语义审计合一）
+## 7. 约束层：research-audit（agent + skill，结构检查 + 语义审计合一）
 
 ### 7.1 合一 rationale
 
-结构 checker（确定性脚本，判存在性/格式/引用映射）与语义 audit（LLM，判内容合理性）性质不同，但都是"质量保证"能力。合并为单一 `research-audit` skill：scripts/（确定性检查）+ SKILL.md（语义审计指引）。worker 调用流程：先跑 scripts（bash，确定性，快）→ 再按 SKILL.md 指引做语义审计（LLM）。
+结构 checker（确定性脚本，判存在性/格式/引用映射）与语义 audit（LLM，判内容合理性）性质不同，但都是"质量保证"能力。合并为单一 `research-audit`（agent + skill）：`agent/research-audit.md`（薄 agent 定义，提供身份/权限，fresh context 做语义审计）+ `skills/research-audit/`（scripts/ 确定性检查 + SKILL.md 语义审计指引，agent 加载）。worker 调用流程：先跑 scripts（bash，确定性，快）→ 再 dispatch research-audit agent 按 SKILL.md 指引做语义审计（LLM，fresh context）。
 
 _原因_：减少 skill 数量，概念统一为"质量保证"。旧设计把结构检查散落在 MCP + 3 个 audit phase + 3 个 repair skill 中，过度拆分。
 
@@ -473,9 +473,9 @@ research-state MCP 整体删除：旧 server.py（1833行）含 5 个 mutating t
 
 research-conventions MCP 整体删除：旧 server.py（484行）含 7 个 tools，硬编码了物理 domain 知识（19 个约定键、合法值、跨字段规则）。convention 值存储迁移到 research_state.md 的 ## Conventions 节；ASSERT_CONVENTION 检查 + 完整性 + 跨字段一致性迁移到 research-audit skill 的 check_conventions.py（从 domain 约定 skill 的 reference 文件加载规则，不硬编码）；CONVENTION_OPTIONS + CROSS_FIELD_WARNINGS 迁移到 gpd-conventions skill reference 文件；skill_resolve_path 删除。两个 MCP 均不保留瘦身版本。
 
-### 7.4 语义审计（通用，worker dispatch 独立 sub-subagent）
+### 7.4 语义审计（通用，worker dispatch research-audit agent）
 
-新设计——**通用 audit skill，worker 完成产出后 dispatch 独立 sub-subagent 做语义审计**。
+新设计——**通用 audit，worker 完成产出后 dispatch research-audit agent（fresh context）做语义审计**。research-audit agent 加载 research-audit skill 获取审计方向指引。
 
 _scripts 由 worker 直接跑（bash，确定性，无 bias）；语义审计由 worker dispatch 独立 sub-subagent（fresh context，不带 worker 推理历史，避免 self-review bias）。_ worker 刚完成产出，其 context 充满自己的推理过程，同一 context 自审会倾向于认为自己写的合理。sub-subagent fresh 读产物文件，提供独立判断。这与 debate 的 critique sub-subagent 机制一致。
 
@@ -545,7 +545,7 @@ research-worker / analysis（原 deep-research，重命名+简化） / research-
 
 ### 新增/合并
 
-research-audit（结构 checker + 语义审计合一：scripts/ + SKILL.md）
+research-audit（结构 checker + 语义审计合一：agent/research-audit.md + skills/research-audit/ 的 scripts/ + SKILL.md）
 debate-critic + debate-rebuttal（agent 定义，从旧 skill 迁移/新建）+ debate skill（编排指引）
 
 ### 删除
@@ -600,6 +600,6 @@ research.md（重写：删 Entry Gate/Terminal Action，加 phase 选择器/对�
 7. **人类注入指示统一响应**：暂停点对话与中断后指示的 agent 响应逻辑一致，统一处理于 §3.3，消除原独立的中断恢复小节。（见 §3.3）
 8. **ROADMAP.md 取消**：内容被 research_state.md/landscape_map.md/PLAN.md 瓜分。analysis 改为产出 `<workdir>analysis.md` + 初始化 research_state.md。（见 §3.4, §4.3）
 9. **autoresearch judgment**：verifier 即 judge，取代 judgment-worker。执行后结构 checker 验产出非空→verifier 独立验证（含 verdict）→checker 验验证报告非空→据 verdict 决策。删 shallow-retry 双层/多类型计数器/failure-synthesis。语义质量由 phase 级通用 audit 兜底。（见 §6.2）
-10. **guard+audit 合一**：结构 checker 脚本 + 语义审计指引合并为单一 research-audit skill（scripts/ + SKILL.md）。（见 §7.1）
+10. **guard+audit 合一**：结构 checker 脚本 + 语义审计指引合并为单一 research-audit（agent + skill：agent/research-audit.md + skills/research-audit/ 的 scripts/ + SKILL.md）。（见 §7.1）
 11. **多阶段无需 agent 主动问**：execution 完成后呈现结果即自然停止，用户若要继续会自然发指令，不主动问"是否开启下一阶段"。（见 §8）
 12. **slug 工作目录机制**：按阶段分离工作文件（notepads/<slug>/），research_state.md 跨阶段共享。slug 名由 agent 自由命名（约束：与项目相关 + 读 Workdir History 防冲突），无需确定性脚本；Active Workdir 完整路径记录在 research_state.md，agent 读取拼接；checker 强制验证文件在 Active Workdir 内兜底路径可靠性。（见 §3.6）

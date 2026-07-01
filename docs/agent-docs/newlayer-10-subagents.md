@@ -73,7 +73,7 @@
 | execution    | Invoke /autoresearch skill                                                                    | <workdir>execution/Qn\_\*.md + EXECUTION.md + VERIFICATION.md   |
 | health_check | Invoke /health-check skill                                                                    | health 报告                                                     |
 
-各 phase 完成后: worker 跑 research-audit scripts (bash, 确定性), 然后 dispatch research-audit sub-subagent 做语义审计 (fresh context), 据报告自修 (推荐 2 次), 然后更新 research_state.md 的 Last Phase Result 节 + 回传 status 信号。
+各 phase 完成后: worker 跑 research-audit scripts (bash, 确定性), 然后 dispatch research-audit agent 做语义审计 (fresh context), 据报告自修 (推荐 2 次), 然后更新 research_state.md 的 Last Phase Result 节 + 回传 status 信号。
 ```
 
 #### M2. worker 回传机制
@@ -83,12 +83,13 @@
 
 worker 完成 phase 后:
 
-1. 按 phase skill 指引更新 persistence/research_state.md（各 skill 指定更新哪些节）
+1. 按 phase skill 指引更新 persistence/research_state.md（各 skill 标注推荐更新的节，
+   agent 据发现可灵活更新其他节；确定性内容如 Active Workdir 路径除外）
 2. 在 research_state.md 的 **Last Phase Result** 节写入: phase / status / summary / issues
 3. 回传消息（LAST message）仅含 status 信号: completed | needs_attention
 
 primary agent 读 research_state.md 的 Last Phase Result 节获取详情。
-（各 phase skill 指定具体更新 research_state.md 的哪些内容，research-worker.md 只规定回传机制本身）
+（各 phase skill 标注推荐更新 research_state.md 的哪些内容，research-worker.md 只规定回传机制本身）
 ```
 
 #### M3. 删除旧 debate 编排节
@@ -109,6 +110,8 @@ worker 可 dispatch 同 owner (research) 的 subagent（task: allow + own/owner 
 无需在 system-reminder 中维护 allowed 列表——新增 research owner 的 agent 自动可被 dispatch。
 各 phase skill 指定实际 dispatch 哪些 subagent（如 debate skill dispatch debate-critic/rebuttal，
 autoresearch skill dispatch local-executor/research-verifier/research-audit）。
+research-audit 为 agent 定义（agent/research-audit.md，见 newlayer-7），含 owner: research，
+自动可被 dispatch；agent 加载 research-audit skill 获取审计指引。
 ```
 
 #### M5. MCP Calls
@@ -256,7 +259,7 @@ gpd-\* skill 本身保留不变。
 
 ### gpd-reviewer.md → 删除
 
-gpd-reviewer agent 定义整体删除。其功能（convention 检查 / 物理错误筛查 / domain review）被 research-audit sub-subagent（加载 `gpd-*` skill）+ check_conventions.py 覆盖。
+gpd-reviewer agent 定义整体删除。其功能（convention 检查 / 物理错误筛查 / domain review）被 research-audit agent（加载 `gpd-*` skill）+ check_conventions.py 覆盖。
 `gpd-*` skill（gpd-verification / gpd-errors / gpd-conventions / gpd-domain-check）保留不变，research-audit / research-verifier 按需加载。
 
 ## 预期结果
@@ -267,3 +270,39 @@ gpd-reviewer agent 定义整体删除。其功能（convention 检查 / 物理�
 - gpd-verifier.md: 74行 → 0（删除，合并入 research-verifier）
 - gpd-reviewer.md: 37行 → 0（删除，功能被 research-audit + gpd-\* skill 覆盖）
 - research-explorer.md: 不变（删 mcp 引用）
+
+---
+
+## 验收目标
+
+### 语义验收
+
+- [ ] research-worker.md 删复杂 PhaseResultDigest schema（6 种）+ phase routing 表 + advance_plan 调用规则 + MCP Calls 节
+- [ ] research-worker.md 新 Phase Routing 表：analysis→/analysis skill / landscape→/literature-landscape-scan skill / framing→/research-question-framing skill / debate→/debate skill / execution→/autoresearch skill / health_check→/health-check skill
+- [ ] research-worker.md worker 回传机制：更新 research_state.md → 写 Last Phase Result 节 → 回传 status 信号（completed/needs_attention）
+- [ ] research-worker.md Subagent Dispatch Rules：删 allowed 列表，改为"可 dispatch 同 owner (research) 的 subagent"；各 phase skill 指定实际 dispatch 谁
+- [ ] research-worker M4 中"autoresearch skill dispatch local-executor/research-verifier/research-audit"的"research-audit"指 dispatch research-audit agent（agent/research-audit.md，owner: research，自动可被 dispatch）；agent 加载 research-audit skill 获取审计指引
+- [ ] local-executor.md 从固定 Step 0-10 workflow 重构为原则+约束（硬约束/必须/执行方式/环境/失败处理）
+- [ ] local-executor 是叶子执行者，不 dispatch 进一步 subagent
+- [ ] local-executor 可自行安装所需软件（限 .aether/research/.venv 内，如 uv pip install）
+- [ ] local-executor 可增量更新 ENVIRONMENT.md（追加新发现的环境信息）
+- [ ] gpd-verifier agent 整体删除，research-verifier 是唯一 verifier agent
+- [ ] gpd-reviewer agent 整体删除，功能被 research-audit agent（加载 gpd-\* skill）+ check_conventions.py 覆盖
+- [ ] research-explorer.md 删 mcp 引用（mcp: research-state + mcp: research-conventions）
+
+### 脚本强制验收
+
+- [ ] `不得存在` research-worker.md 中的 `PhaseResultDigest` / `phase_result_digest` 引用
+- [ ] `不得存在` research-worker.md 中的 `advance_plan` 调用规则
+- [ ] `不得存在` research-worker.md 中的 `mcp: research-state` / `mcp: research-conventions` front matter 字段
+- [ ] `不得存在` research-worker.md 中的 `research_state_*: allow` / `research_conventions_*: allow` 权限条目
+- [ ] `不得存在` research-worker.md 中的旧 debate 编排节（advocacy/critique/rebuttal/adjudication/repair sub_phase 路由）
+- [ ] `不得存在` local-executor.md 中的 `mcp: research-conventions: true` front matter 字段
+- [ ] `不得存在` local-executor.md 中的 `MUST NOT call advance_plan` 约束
+- [ ] `不得存在` local-executor.md 中的 Step 0-10 固定 workflow（改为原则+约束）
+- [ ] `不得存在` local-executor.md 中的 `Convention Awareness` 节（读 MCP）
+- [ ] `不得存在` local-executor.md 中的 `Verify Against Acceptance Tests` Step（验证是 research-verifier 的职责）
+- [ ] `不得存在` `agent/gpd-verifier.md` 文件（已删除）
+- [ ] `不得存在` `agent/gpd-reviewer.md` 文件（已删除）
+- [ ] `不得存在` research-explorer.md 中的 `mcp: research-state` / `mcp: research-conventions` front matter 字段
+- [ ] local-executor.md front matter 含 `owner: research` + `owns: - research`

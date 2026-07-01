@@ -26,9 +26,9 @@
 
 | 文件                                                   | 行数 | 理由                                            |
 | ------------------------------------------------------ | ---- | ----------------------------------------------- |
-| skills/research-coordinator/SKILL.md                   | 525  | phase FSM 由 research.md phase 选择器替代       |
-| skills/research-coordinator/references/\*.md（3 refs） | 1113 | 同上                                            |
-| skills/research-coordinator/scripts/backup_repair.sh   | —    | 同上                                            |
+| skills/research-coordinator/SKILL.md                   | 541  | phase FSM 由 research.md phase 选择器替代       |
+| skills/research-coordinator/references/\*.md（3 refs） | 1110 | 同上                                            |
+| skills/research-coordinator/scripts/backup_repair.sh   | 68   | 同上                                            |
 | agent/judgment-worker.md                               | 161  | verifier 即 judge，不再有独立 failure-synthesis |
 | skills/research-audit-reasoning/SKILL.md               | 277  | 合并进 research-audit                           |
 | skills/research-audit-repair/SKILL.md                  | 142  | 同上                                            |
@@ -38,7 +38,7 @@
 | mcp/research-state/server.py                           | 1833 | 全部功能有替代方案，见 §2                       |
 | mcp/research-conventions/server.py                     | 484  | 全部功能有替代方案，见 §2b                      |
 
-合计删除 ~5173 行。
+合计删除 ~5254 行。
 
 ---
 
@@ -198,7 +198,8 @@ Q1 → Q2 → Q3
 
 [研究约定值（如物理: natural_units=natural, metric_signature=mostly-minus, ...）。
 非物理 domain 可为空或填该 domain 的约定。
-由 framing Step 9 设置，agent 直接读写。]
+由 agent 在工作过程中灵活写入（任何 phase 发现需要约定时均可设置），agent 直接读写。
+check_conventions.py 验证一致性与完整性，但不限定哪个 phase 可以写。]
 
 ## Next To Handle
 
@@ -231,7 +232,7 @@ check_sources.py 据此验证引用 → 下载文件映射，实现 anti-fabrica
 
 ### 3.4 persistence/ENVIRONMENT.md
 
-跨阶段共享的环境探测记录。记录主机可用软件、Python 版本、隔离策略等。机器级环境不随研究阶段变化，跨阶段共享避免重复探测。后续阶段可增量更新（追加新发现的环境依赖）。
+跨阶段共享的环境探测记录。记录主机可用软件、Python 版本、隔离策略等。跨阶段共享避免重复探测，后续阶段可增量更新（追加新发现的环境依赖）。
 
 ---
 
@@ -301,10 +302,12 @@ research-worker.md 的 "LAST message MUST be single YAML with phase_result" 规�
     ├── research_questions.md
     ├── framing_reasoning.md
     ├── DEBATE.md
+    ├── EXECUTION.md            # phase 汇总（workdir 根目录）
+    ├── VERIFICATION.md         # phase 汇总（workdir 根目录）
     ├── execution/
-    │   ├── Qn_*.md
-    │   ├── EXECUTION.md
-    │   └── VERIFICATION.md
+    │   ├── Qn_REASONING.md     # per-question 推理
+    │   ├── Qn_EXECUTION.md     # per-question 执行结果
+    │   └── Qn_VERIFICATION.md  # per-question 验证报告
     └── audits/               # audit 报告（与产物在一起）
 ```
 
@@ -319,9 +322,35 @@ research-worker.md 的 "LAST message MUST be single YAML with phase_result" 规�
 
 ## 预期结果
 
-- 删除文件 ~5173 行（含 research-state server.py 1833 行 + research-conventions server.py 484 行）
+- 删除文件 ~5254 行（含 research-state server.py 1833 行 + research-conventions server.py 484 行）
 - research-state MCP 整体删除（server.py + 目录 + agent front matter 中的 mcp 注册）
 - run_health_check 逻辑迁移到 health-check skill scripts/（~400 行）
 - 状态存储: state.json / STATE.md / DIGESTS.md / ROADMAP.md（4）→ research_state.md（1）
 - worker 回传: phase_result YAML（5 字段）→ status 信号（1 词）+ Last Phase Result 节
 - 新增 research_state.md 模板 + literatures/registry.json 闭环
+
+---
+
+## 验收目标
+
+### 语义验收
+
+- [ ] research_state.md 模板包含全部 13 个节：Active Workdir / Workdir History / Research Goal / Current Understanding / Questions/Claims / Dependency Graph / Failed Attempts / Phase History / Last Phase Result / Human Directives / Open Decisions / Conventions / Next To Handle
+- [ ] Last Phase Result 节字段为 `phase` / `status` / `summary` / `issues`，与所有 phase skill（newlayer-2~6）回传格式一致
+- [ ] worker 回传机制为 status 信号（`completed` / `needs_attention`），替代旧的 phase_result YAML
+- [ ] slug 机制：agent 从 Research Goal 派生 slug（≤30 字符），读 Workdir History 防冲突，旧 slug 保留不删
+- [ ] 文件布局与设计文档 §3.6.3 一致：persistence/ 放跨阶段共享状态，literatures/ 放文献，notepads/<slug>/ 放阶段产出
+- [ ] 文件布局：EXECUTION.md 和 VERIFICATION.md 位于 `<workdir>` 根目录（非 execution/ 子目录内），与 newlayer-6 M2 和设计文档 §4.3 一致
+- [ ] registry.json 字段为 `id` / `type` / `title` / `authors` / `year` / `file` / `downloaded_at`，与 newlayer-9 M2 的 `update_registry()` 函数签名一致
+- [ ] run_health_check 迁移后更新 `_check_persistence`（检查 research_state.md 而非 state.json/STATE.md）、`_check_skill_chain`（删旧 skill 检查 + 加新 checker 脚本检查）、`_check_runtime`（删 advance_plan/phase_rollback 测试）
+
+### 脚本强制验收
+
+- [ ] `不得存在` `.aether/mcp/research-state/` 目录（整体删除）
+- [ ] `不得存在` `.aether/mcp/research-conventions/` 目录（整体删除）
+- [ ] `不得存在` persistence/ 下的 `state.json` / `STATE.md` / `DIGESTS.md` / `ROADMAP.md` 文件
+- [ ] `不得存在` agent front matter 中的 `mcp: research-state: true` 或 `mcp: research-conventions: true`
+- [ ] `不得存在` agent front matter 中的 `research_state_*: allow` 或 `research_conventions_*: allow` 权限条目
+- [ ] `check_artifacts.py` 验证 persistence/ 白名单：只允许 `research_state.md` + `ENVIRONMENT.md`，不允许其他文件
+- [ ] `check_artifacts.py` 验证 notepads/ 下所有工作文件路径以 Active Workdir 开头
+- [ ] `check_artifacts.py` 输出 JSON 含 `ok` / `missing` / `empty` / `outside_workdir` / `persistence_violations` 字段

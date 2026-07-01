@@ -41,8 +41,8 @@
 - Step5（Derive Falsification）
 - Step6（Inter-Question Dependencies）
 - Step7（Write Research Questions + Framing Reasoning）
-- Step8（Map to PLAN.md）
-- Step9（Check Conventions — 读 research_state.md ## Conventions 节 + 跑 check_conventions.py 验证）
+- Step8（Map to PLAN.md — 须为每个 question 给出明确的、符合研究要求的 **Acceptance Tests**，防止 execution 过程中刻意简化测试轻易宣称达成目标）
+- Step9（Conventions — 读 research_state.md ## Conventions 节 + 若需设置则写入 + 跑 check_conventions.py 验证。注：任何 phase 发现需要约定时均可写入 ## Conventions 节，framing Step 9 是主要设置点但非唯一）
 - Integrity 节
 
 > 以上是 framing 的核心能力，原样保留。
@@ -90,7 +90,8 @@ debate 修订后 framing_reasoning.md 与 PLAN.md 对账...
 
 framing_reasoning.md 是推理记录文件，用于检测推理正确性（audit 审推理链）。
 PLAN.md 是后续工作（debate/execution）实际读取的信息文件。
-debate 修订 PLAN.md 后，PLAN.md 为执行阶段的权威源，framing_reasoning.md 不随后续修订同步。
+debate 修订 PLAN.md 后，PLAN.md 为执行阶段的权威源。
+framing_reasoning.md 可被后续 phase 追加修正（append 修正说明，不删原文），保持推理链可追溯。
 ```
 
 ### M4. Step1 简化
@@ -146,9 +147,9 @@ Step 10: advance_plan(phase=debate, ...)
 
 Step 10: 更新 persistence/research_state.md
 
-- Questions / Claims: 写入各 question（status=open / method / dependencies / notes）
-- Dependency Graph: 写入 Q1→Q2→Q3
-- Phase History 追加 framing✓
+- 推荐更新: Questions / Claims（写入各 question: status=open / method / dependencies / notes）
+  / Dependency Graph（写入 Q1→Q2→Q3）/ Phase History 追加 framing✓
+  （agent 据发现可灵活更新其他节，不限于以上推荐）
 ```
 
 ### M8. 回传 status 信号
@@ -191,7 +192,7 @@ Step N: 质量门
    - check_artifacts.py → 验证 <workdir>PLAN.md + research_questions.md + framing_reasoning.md 存在非空
    - check_sources.py → 验证 framing_reasoning.md 中 [src:id] 引用都有下载文件
    - 不过 → worker 自补，重跑 scripts
-2. worker dispatch research-audit sub-subagent（fresh context，避免 self-review bias）:
+2. worker dispatch research-audit agent（fresh context，避免 self-review bias）:
    - sub-subagent 读 framing_reasoning.md + PLAN.md，按 newlayer-7 §2 审计方向审:
      推理链是否完整(无跳步) / 问题是否可证伪 / 方法是否适用 / 依赖图是否无环 / 验收标准是否充分
    - 输出 FATAL/CONCERN/PASS 报告
@@ -207,3 +208,37 @@ Step N: 质量门
 
 - SKILL.md 从 484行 → ~400行（删 re_derive_gap 模式 / 复杂权威源规则 / FSM 衔接，加 research_state.md 更新 + 质量门）
 - references/re_derive_gap.md: 93行 → 0（删除）
+- **行数标注口径**：SKILL.md 484 行 + re_derive_gap.md 93 行 = 目录总计 577 行（与 newlayer-0 文件索引一致）
+
+---
+
+## 验收目标
+
+### 语义验收
+
+- [ ] skill name 保留 `research-question-framing`（不改名），front matter description 删 "Phase 6 / two modes" 标识
+- [ ] 核心 Step 2-9 不动：Select Gaps → Solution Paths → Derive Question → Derive Falsification → Inter-Question Dependencies → Write Research Questions + Framing Reasoning → Map to PLAN.md → Check Conventions
+- [ ] Step 9 是 conventions 的主要设置+验证点，但任何 phase 发现需要约定时均可写入 research_state.md ## Conventions 节（不限定 framing）。Step 9 读+设置+验证约定（跑 check_conventions.py）
+- [ ] **Acceptance Tests**：Step 8 Map to PLAN.md 时，须为每个 question 给出明确的、符合研究要求的 Acceptance Tests，防止 execution 过程中刻意简化测试轻易宣称达成目标
+- [ ] 删 re_derive_gap.md（L3 回滚 splice 机制）：回退用 git log + checkout 或重入 framing
+- [ ] 权威源规则：framing_reasoning.md 是推理记录（供 audit 审推理链）；PLAN.md 是后续工作读取的信息文件；debate 修订 PLAN.md 后 PLAN.md 为权威源；framing_reasoning.md 可被后续 phase 追加修正（不删原文）
+- [ ] gap 来源改为 `<workdir>analysis.md`（非 ROADMAP.md）；若 landscape_map.md 存在则读其 open problems / controversies 作为补充参考
+- [ ] 读 Failed Attempts 作为 framing 约束：已验证为错的方法直接排除，不出现在 Step 3 的备选 solution paths 中
+- [ ] 读 Human Directives：人类指示可能涉及增删问题/调整方法/修改依赖关系，agent 理解意图后自然融入 framing 推理
+- [ ] 产出路径为 `<workdir>PLAN.md` + `<workdir>research_questions.md` + `<workdir>framing_reasoning.md`
+- [ ] 质量门流程与 newlayer-7 §1 对齐：check_artifacts.py（验证 3 个文件存在非空）+ check_sources.py → dispatch research-audit agent 审推理链
+- [ ] 回传格式：Last Phase Result 节写入 `phase=framing / status / summary / issues`
+
+### 脚本强制验收
+
+- [ ] `不得存在` `references/re_derive_gap.md` 文件（已删除）
+- [ ] `不得存在` SKILL.md 中的 `re_derive_gap` / `L3 rollback` / `splice-update` 引用
+- [ ] `不得存在` SKILL.md 中的 `advance_plan` 调用
+- [ ] `不得存在` SKILL.md 中的 `ROADMAP.md` 引用（gap 来源改为 analysis.md）
+- [ ] `不得存在` SKILL.md 中的 `state.json` / `get_state` / `AUDIT reports` 读取引用
+- [ ] `不得存在` SKILL.md 中的 `Phase 6` / `phase_framing` FSM 标识
+- [ ] `不得存在` SKILL.md 中的 `PhaseResultDigest` 引用
+- [ ] `不得存在` SKILL.md 中的 `convention_lock_status` MCP 调用（改为直接读 research_state.md ## Conventions 节）
+- [ ] `check_artifacts.py` 验证 `<workdir>PLAN.md` + `<workdir>research_questions.md` + `<workdir>framing_reasoning.md` 存在非空
+- [ ] `check_sources.py` 验证 framing_reasoning.md 中所有 `[src:id]` 引用都有下载文件
+- [ ] `check_conventions.py` 验证 ASSERT_CONVENTION 行与 research_state.md ## Conventions 节一致 + critical 约定已设 + 跨字段一致性
