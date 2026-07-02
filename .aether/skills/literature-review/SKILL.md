@@ -2,16 +2,16 @@
 name: literature-review
 owner: research
 description: |
-  Path 2 of the research agent Entry Gate — independent workflow with its own state machine.
+  Comprehensive literature review workflow with its own state machine.
   Conduct comprehensive, systematic literature reviews using multiple academic databases
   (arXiv, INSPIRE-HEP, Semantic Scholar, PubMed, etc.). This skill should be used when
   the user explicitly requests a literature review, survey, or summary of existing research.
-  Do NOT invoke for quick lookups (Path 1) or research projects (Path 3).
+  Do NOT invoke for quick lookups or research projects (which use the analysis→...→execution workflow).
 ---
 
-# Literature Review — Path 2 (Independent State Machine)
+# Literature Review — Independent Workflow
 
-This skill implements **Path 2** of the research agent, triggered when the Entry Gate classifies a prompt as a literature review request. It has its own internal state machine, independent of the Path 3 state machine.
+This skill implements a comprehensive literature review, triggered when the user explicitly requests a literature review, survey, or summary. It has its own internal state machine, independent of the research project workflow.
 
 ## Lifecycle Contract
 
@@ -25,9 +25,7 @@ This skill implements **Path 2** of the research agent, triggered when the Entry
 
 **State machine**: Planning → Search → Screening → Extraction → Synthesis → Verification → Completed
 
-**MUST NOT**: Write to Path 3 persistence files (ROADMAP.md, PLAN.md for research project). Use Path 3 state.json.
-
-**MUST NOT**: Enter Path 3 phases. This is a complete independent workflow.
+**MUST NOT**: Write to research project persistence files (research_state.md, PLAN.md). This is a complete independent workflow.
 
 ## Internal State Machine
 
@@ -35,7 +33,7 @@ This skill implements **Path 2** of the research agent, triggered when the Entry
 planning → search → screening → extraction → synthesis → verification → completed
 ```
 
-State is tracked in `output_dir/notepads/<slug>/review_state.md`, NOT in STATE.md or state.json.
+State is tracked in `output_dir/notepads/<slug>/review_state.md`.
 
 ## Procedure
 
@@ -120,18 +118,16 @@ After full-text screening identifies the final included set:
 1. **Write review.md**: Complete literature review document
 2. **Quality Checklist**: All DOIs verified, PRISMA diagram included, citations formatted, methodology documented, limitations acknowledged
 3. **Update review_state.md**: Mark as completed
-4. **Clear gate classification from STATE.md**: Return to idle state
-5. **Present results to user**
+4. **Present results to user**
 
 ## MCP Integration
 
-- research-conventions: Call convention_lock_status before starting; convention_check before finalizing
-- research-state: NOT used for Path 2 — this path has its own state machine in review_state.md
+This skill does not use MCP. State is tracked in review_state.md (independent of research_state.md).
 
 ## Subagent Dispatch
 
 - Dispatch `research-explorer` subagent for parallel database searches
-- Delegate verification to `research-verifier` or `gpd-verifier` subagent when needed
+- Delegate verification to `research-verifier` subagent when needed
 - FORBIDDEN: Dispatching explore or general subagents — use research-explorer only
 
 ## Notepad Output Structure

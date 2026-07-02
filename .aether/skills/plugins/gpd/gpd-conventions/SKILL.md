@@ -44,7 +44,7 @@ Call `convention_validate(project_dir)` to check lock completeness and cross-fie
 
 When referencing prior phase results, conventions may differ across phases. To check:
 
-1. Read both phases' `state.json` conventions dicts
+1. Read both phases' conventions from `research_state.md` ## Conventions section
 2. Compare key-by-key: changed, added, removed
 3. **Critical severity** for differences in: `metric_signature`, `fourier_convention`, `natural_units` — these require explicit conversion before using prior results
 4. **Warning severity** for differences in: `gauge_choice`, `renormalization_scheme`, `coordinate_system`

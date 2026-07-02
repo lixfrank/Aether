@@ -1,14 +1,14 @@
 ---
 name: gpd-verification
 owner: research
-description: Physics verification with deterministic computational scripts (SymPy). Establish contract targets, execute computational checks, produce VERIFICATION.md. Supplements research-verification with domain-specific physics computation.
+description: Physics verification with deterministic computational scripts (SymPy). Execute computational checks, produce verification results. Loaded by research-verifier when physics domain verification is needed.
 ---
 
 # Physics Verification (Deterministic Computation Layer)
 
 ## When to Use
 
-During verification of physics research results. Used by gpd-verifier subagent (research-verification provides the general framework; this skill adds physics-specific computation).
+During verification of physics research results. Used by research-verifier subagent (which loads this skill when physics domain verification is needed; this skill adds physics-specific computation).
 
 ## Verification Computation Procedure
 

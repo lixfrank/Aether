@@ -10,12 +10,12 @@ description: |
 
 # env-setup — Per-Item Authorization Auto-Install
 
-This skill guides the coordinator through installing missing software detected by the health check, using per-item user authorization (D11).
+This skill guides the primary agent through installing missing software detected by the health check, using per-item user authorization (D11).
 
 ## Prerequisites
 
-- Health check has been run and a `PhaseResultDigest` with `status: degraded` or `status: failed` is available
-- The digest contains `failed_items` with `auto_installable`, `priority`, and `failure_class` fields
+- Health check has been run and the result shows `status: degraded` or `status: failed`
+- The result contains `failed_items` with `auto_installable`, `priority`, and `failure_class` fields
 
 ## Procedure
 
@@ -76,11 +76,11 @@ After all items processed:
 
 ### Step 6: Re-check
 
-After installation completes, the coordinator should dispatch research-worker(mode=health_check, layers=None) to verify the full environment.
+After installation completes, the primary agent should dispatch research-worker for health_check to verify the full environment.
 
 ## Key Design
 
-- **Per-item authorization**: Each item is authorized individually. User can install only git (required) and skip optional tools. (uv is installed by the research-coordinator before MCP servers start; env-setup does not handle uv.)
+- **Per-item authorization**: Each item is authorized individually. User can install only git (required) and skip optional tools. (uv is installed by the primary agent before research starts; env-setup does not handle uv.)
 - **Read-only health check**: The health check MCP tool is READ_ONLY. Installation is a write operation handled by this skill with per-item user authorization.
 - **No batch authorization**: NEVER ask "Install all missing items?" — always ask per-item.
 

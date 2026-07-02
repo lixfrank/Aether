@@ -2,236 +2,152 @@
 name: research-audit
 owner: research
 description: |
-  Audit skill for Path 3 research state machine. Used in phase_audit_1 (light mode)
-  and phase_audit_2 (full mode). Verifies citation support, factual accuracy,
-  method applicability, and domain coverage of ROADMAP.md, research_analysis.md,
-  and landscape_map.md. Produces structured audit reports in persistence/audits/.
+  质量保证 skill（结构 checker 脚本 + 语义审计指引）。
+  scripts/ 为确定性检查（worker 经 bash 调用）。
+  SKILL.md 为语义审计指引（research-audit agent 加载，fresh context 避免 self-review bias）。
 ---
 
-# Research Audit — phase_audit_1 / phase_audit_2
+# Research Audit — 结构 checker + 语义审计
 
-This skill implements the audit phases of the Path 3 research state machine. It verifies the knowledge foundation produced by analysis and landscape phases before framing and debate consume it.
+## §1 调用流程
 
-## Lifecycle Contract
+worker 完成 phase 产出后:
 
-**Input**: Audit target files + audit scope (light/full) + audit_round number
+1. 跑 scripts/（bash，确定性，无 bias）:
+   - `check_artifacts.py <research_state.md_path> <expected_files>` → 验证文件存在非空 + 在 workdir 内 + persistence 白名单
+   - `check_sources.py <files...>` → 验证 [src:id] 引用都有下载文件
+   - `check_verification.py <research_state.md>` → 验证 resolved claims 有验证记录
+   - `check_conventions.py <research_state.md_path> <files_to_check...>` → 验证 ASSERT_CONVENTION 一致性 + 约定完整性
+   - scripts 不过 → worker 自补缺失文件/引用/验证，重跑 scripts
 
-**Output** (MUST write all of these):
+2. dispatch research-audit subagent（subagent*type: "research-audit", delegation_depth: 0）
+   → research-audit agent fresh 读产物文件（不带 worker 推理历史）
+   → 加载 research-audit skill，按 §2 指引做语义审计
+   → 输出 FATAL/CONCERN/PASS 报告，写入 `<workdir>audits/audit*[phase]\_[date].md`
+   → 返回报告给 worker
 
-1. `.aether/research/persistence/audits/audit_[1|2]_round[N].md` — Structured audit report (YAML Summary + Findings)
-2. PhaseResultDigest with has_citation_gaps, issues_found, findings_summary
+3. worker 读审计报告:
+   - PASS → 质量门通过，继续后续流程
+   - CONCERN/FATAL → 自修（推荐 2 次，非强制上限）
+     - 修后重新 dispatch 审计 sub-subagent 验证修复
+     - 若多次自修仍有问题，worker 须判断是否"严重到无法自修"
+   - 严重问题（无法自修）→ 须写明无法自修的原因（具体说明什么阻碍了修复），
+     写入 research_state.md 的 Last Phase Result issues 字段，回传 needs_attention
 
-**State transition**: audit digest → coordinator routes per §Coordinator Routing
+**关键设计点**：
 
-**MUST NOT**: Repair files (that is research-audit-repair's responsibility). Modify ROADMAP.md, research_analysis.md, or landscape_map.md.
+- scripts 由 worker 直接跑（确定性，无 self-review bias 问题）
+- 语义审计由独立 sub-subagent 跑（fresh context，避免 worker 对自己产出的确认偏差）
+- 自修次数推荐 2 次但非强制——worker 可据问题性质判断是否值得继续修
+- "严重问题"必须写明无法自修的原因，不能笼统标记
 
-## Audit Modes
+## §2 语义审计方向（按产物类型）
 
-### Light Mode (phase_audit_1)
+| 产物类型                       | 审计方向                                                                                                                     |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| analysis.md                    | 引用是否真支持论断; 事实是否准确; gap 识别是否合理; 领域覆盖是否充分                                                         |
+| landscape_map.md               | 学派分类是否准确; 时间线是否完整; 争议标注是否有据; 覆盖度是否充分                                                           |
+| framing_reasoning.md + PLAN.md | 推理链是否完整(无跳步); 问题是否可证伪; 方法是否适用; 依赖图是否无环; 验收标准是否充分; tractability confidence 是否符合规则 |
+| execution 汇总                 | 结论是否由验证支持; 验证质量是否充分; 跨问题一致性; Failed Attempts 是否诚实记录                                             |
 
-Scope: Citation verification only
+注：此表为方向性指引，非 rigid checklist。sub-subagent 应据产物具体内容自主判断需重点审计什么。
 
-Audit targets:
+审计输出格式:
 
-- `research_analysis.md`
-- `ROADMAP.md`
+```markdown
+## Audit Report — [phase] — [date]
 
-Check items:
+### FATAL
 
-| Check item                 | Severity | Description                                                         |
-| -------------------------- | -------- | ------------------------------------------------------------------- |
-| Claim without citation     | MISSING  | Claim lacks any citation support                                    |
-| Citation does not support  | CONCERN  | Citation exists but content does not match                          |
-| Factual misstatement       | FATAL    | Method applicability, formula, conclusion incorrectly described     |
-| Missing foundational lit   | MISSING  | Well-known foundational literature not cited                        |
-| Unreliable citation source | CONCERN  | Citation from non-peer-reviewed source without reliable alternative |
+- [文件:位置] [问题] [证据] [建议修复方向]
 
-### Full Mode (phase_audit_2)
+### CONCERN
 
-Scope: Citation verification + domain coverage + method applicability
+- [文件:位置] [问题] [建议]
 
-Audit targets:
+### PASS
 
-- `landscape_map.md` (new)
-- `ROADMAP.md` (landscape-updated version)
-- `research_analysis.md` (potentially supplemented by landscape)
-
-Additional check items beyond light mode:
-
-| Check item                         | Severity      | Description                                                   |
-| ---------------------------------- | ------------- | ------------------------------------------------------------- |
-| Incomplete domain coverage         | MISSING       | landscape_map.md missing important school or branch           |
-| Inaccurate classification          | CONCERN       | Paper assigned to wrong school, or school definition vague    |
-| Timeline gaps                      | MISSING       | Key papers missing from timeline                              |
-| Unsupported controversy annotation | CONCERN       | Marked controversy lacks literature support                   |
-| audit_1 gaps resolved by landscape | CONCERN/FATAL | Whether landscape supplementation actually fills audit_1 gaps |
-
-## Procedure
-
-### Step 1: Read Current State
-
-1. Read `.aether/research/persistence/STATE.md` — confirm phase is phase_audit_1 or phase_audit_2
-2. Read `state.json` via research-state MCP (`get_state`) — confirm audit.audit_round
-3. Determine audit mode from phase:
-   - phase_audit_1 → light mode
-   - phase_audit_2 → full mode
-4. Read all audit target files
-
-### Step 2: Extract and Catalog Claims
-
-For each audit target file:
-
-1. Parse document structure — identify sections, claims, citations
-2. For each factual claim or methodological statement:
-   - Extract the claim text
-   - Identify associated citations (if any)
-   - Record section and claim location
-3. Build a claim catalog: `{section, claim_text, citations, has_citation}`
-
-### Step 3: Verify Citations (light and full mode)
-
-For each claim in the catalog:
-
-1. **No citation** → mark as MISSING
-   - Provide `suggested_search`: keywords, domain, time period
-2. **Has citation** → verify citation content:
-   - First check `.aether/research/literatures/` for local copy → read directly
-   - Local copy unavailable → paper-search skill
-   - Record `verification_source: local | paper_search | web_search`
-3. **Citation does not match claim** → mark as CONCERN
-   - Record `current_ref`, `suggested_ref`
-4. **Factual misstatement detected** → mark as FATAL
-   - Cross-verify with at least 2 independent sources (web search + original comparison)
-   - For physics domain FATAL (formula/derivation errors): optionally call SymPy spot-check via gpd-verification skill
-   - Provide `evidence` (why this is wrong) + `suggested_fix`
-5. **Unreliable source** → mark as CONCERN
-   - Record `current_ref`, `suggested_ref`
-
-### Step 4: Verify Domain Coverage (full mode only)
-
-For landscape_map.md:
-
-1. **School completeness**: Check if all significant schools/approaches are represented
-   - Cross-reference with known domain taxonomy
-   - Missing important school → MISSING
-2. **Classification accuracy**: Verify papers are correctly assigned to schools
-   - Paper in wrong school → CONCERN
-3. **Timeline completeness**: Verify key papers appear in chronological timeline
-   - Missing key paper → MISSING
-4. **Controversy support**: Verify annotated controversies have literature evidence
-   - Unsupported controversy → CONCERN
-5. **audit_1 gap resolution**: For each audit_1 MISSING/CONCERN finding:
-   - Check if landscape supplementation addressed it
-   - Unresolved → CONCERN or FATAL (depending on severity)
-
-### Step 5: Write Audit Report
-
-Write to `.aether/research/persistence/audits/audit_[1|2]_round[N].md`:
-
-````markdown
-# Audit [1|2] Report — Round [N]
-
-## Summary
-
-```yaml
-total_claims_checked: [N]
-citation_gaps: [N] # MISSING class citation absence count
-issues_found: [N] # total issue count
-has_citation_gaps: [true/false] # determines landscape skip eligibility
-audit_1_gaps_resolved: "[N/M]" # audit_2 only: N gaps resolved out of M audit_1 gaps
-```
-````
-
-## Findings
-
-### [FATAL] Section X, Claim Y
-
-- claim: "original claim text"
-- issue: factual misstatement / method misdescription
-- evidence: why this is wrong (at least 2 independent sources cross-verify)
-- suggested_fix: recommended correction direction
-- verification_source: local | paper_search | web_search
-
-### [MISSING] Section X, Claim Z
-
-- claim: "original claim text"
-- issue: no citation support / missing foundational literature
-- suggested_search: recommended search direction (keywords, domain, time period)
-
-### [CONCERN] Section X, Claim W
-
-- claim: "original claim text"
-- issue: citation does not support / unreliable source
-- current_ref: current citation
-- suggested_ref: suggested replacement or supplementary citation
-- verification_source: local | paper_search | web_search
-
-````
-
-### Step 6: Output PhaseResultDigest
-
-**audit_1 digest schema**:
-
-```yaml
-phase_result_digest:
-  phase: phase_audit_1
-  sub_phase: audit
-  cycle: null
-  audit_round: [N]
-  status: completed
-  total_claims_checked: [N]
-  citation_gaps: [N]
-  issues_found: [N]
-  has_citation_gaps: [true/false]
-  findings_summary:
-    fatal: [N]
-    missing: [N]
-    concern: [N]
-  output_paths:
-    audit_report: persistence/audits/audit_1_round[N].md
-  next_phase: phase_landscape | phase_audit_1 | phase_framing
-````
-
-**audit_2 digest schema**:
-
-```yaml
-phase_result_digest:
-  phase: phase_audit_2
-  sub_phase: audit
-  cycle: null
-  audit_round: [N]
-  status: completed
-  total_claims_checked: [N]
-  citation_gaps: [N]
-  issues_found: [N]
-  has_citation_gaps: [true/false]
-  audit_1_gaps_resolved: "[N/M]"
-  findings_summary:
-    fatal: [N]
-    missing: [N]
-    concern: [N]
-  output_paths:
-    audit_report: persistence/audits/audit_2_round[N].md
-  next_phase: phase_audit_2 | phase_framing
+[无问题的简要确认]
 ```
 
-MUST NOT output any other text after this YAML block. The coordinator routes based on digest fields (has_citation_gaps, issues_found).
+## §3 scripts 规格
 
-## Cross-Verification Strategy
+### check_artifacts.py
 
-For each FATAL/CONCERN finding, at least 2 independent sources must be used:
+```
+用法: uv run check_artifacts.py <research_state.md_path> <expected_file1> <expected_file2> ...
+逻辑:
+  1. 解析 research_state.md 的 Active Workdir
+  2. 对每个 expected_file: 拼接 <workdir><file>, stat 存在 + 非空
+  3. 验证 persistence/ 白名单: persistence/ 下只允许 research_state.md + ENVIRONMENT.md
+  4. 扫描 notepads/ 下所有文件, 验证工作文件路径以 Active Workdir 开头
+输出 JSON:
+  {"ok": bool, "missing": [...], "empty": [...], "outside_workdir": [...], "persistence_violations": [...]}
+```
 
-- Web search (general academic search engines)
-- Original paper comparison (via literatures/ local copy or paper-search skill)
-- For physics domain FATAL (formula/derivation errors): optional SymPy spot-check via gpd-verification computational scripts
+### check_sources.py
 
-This reduces single-LLM-judgment randomness. Reference gpd-errors skill's error pattern recognition strategies for methodology misdescription detection.
+```
+用法: uv run check_sources.py <file1> <file2> ...
+逻辑:
+  1. 扫描所有 [src:<id>] 引用模式
+  2. 对每个 id: 查 .aether/research/literatures/registry.json 是否注册 → 查 literatures/<id>.* 文件是否存在
+  3. 报告 cited_without_source（引用了但没下载 → 编造风险）
+输出 JSON:
+  {"ok": bool, "cited_without_source": [<id>...], "missing_files": [<id>...]}
+```
 
-## MCP Integration
+### check_verification.py
 
-- research-state: Call get_state before starting; update_audit_state after completing (increment audit_round)
-- research-conventions: Call convention_lock_status before auditing physics domain claims
+```
+用法: uv run check_verification.py <research_state.md_path>
+逻辑:
+  1. 解析 research_state.md 的 Questions/Claims, 提取 status=resolved 的 claims
+  2. 对每个 resolved claim: 查其 ver 路径引用的验证文件是否存在 + 非空(≥30行) + 含 verdict (PASS/FAIL/PARTIAL)
+  3. 报告 unverified_claims
+输出 JSON:
+  {"ok": bool, "unverified_claims": [<claim_id>: <reason>...]}
+```
 
-## Integrity
+**check_artifacts 与 check_verification 的区分**：check_artifacts 检查 phase 是否产出了预期文件（phase 级结构检查）；check_verification 检查 research_state.md 中所有 resolved claims 是否有验证记录（state 级约束检查，跨 phase）。
 
-Never fabricate verification sources. Record actual verification_source used. Do not mark a claim as verified without at least one independent source confirming it.
+### check_conventions.py
+
+```
+用法: uv run check_conventions.py <research_state.md_path> <files_to_check...>
+逻辑:
+  1. 解析 research_state.md 的 ## Conventions 节，获取当前约定值
+  2. 对每个 files_to_check: 扫描 <!-- ASSERT_CONVENTION: key=value --> 行，验证与当前约定一致
+  3. 检查完整性: critical 约定（如 metric_signature / fourier_convention / natural_units）是否已设
+  4. 跨字段一致性: 从 domain 约定 skill 的 reference 文件加载跨字段规则（如 gpd-conventions/references/cross_field_rules.json），检查是否有矛盾
+  5. 若 ## Conventions 节为空或无 ASSERT_CONVENTION 行 → 跳过（非物理 domain 可能无约定）
+输出 JSON:
+  {"ok": bool, "mismatches": [<file:key:expected:actual>...], "critical_unset": [<key>...], "cross_field_warnings": [...]}
+```
+
+注：check_conventions.py 从 domain 约定 skill（如 gpd-conventions）的 reference 文件加载约定选项和跨字段规则，不硬编码 domain 知识。非物理 domain 若无约定 skill，脚本自动跳过约定检查。
+
+## §4 与旧 audit 的映射
+
+| 旧 audit 检查项         | 新机制                   | 位置        |
+| ----------------------- | ------------------------ | ----------- |
+| citation support        | check_sources.py         | scripts/    |
+| factual accuracy        | 语义审计(analysis 类型)  | SKILL.md §2 |
+| method applicability    | 语义审计(framing 类型)   | SKILL.md §2 |
+| reasoning chain quality | 语义审计(framing 类型)   | SKILL.md §2 |
+| domain coverage         | 语义审计(landscape 类型) | SKILL.md §2 |
+| resolved claim 有验证   | check_verification.py    | scripts/    |
+| 文件存在非空            | check_artifacts.py       | scripts/    |
+
+## §5 审计原则（替代 rigid checklist）
+
+**不照搬旧 audit 的 rigid checklist**（Cross-Verification 2+来源硬规则、severity 查找表、推理链检查项列表），仅参考其思路。新设计采用灵活原则，让审计 sub-subagent 自主判断：
+
+- **独立性**：审计 sub-subagent fresh 读产物文件，不带 worker 推理历史，独立判断
+- **科学严谨性**：评估推理是否成立、证据是否支持论断、方法是否适用——据产物具体内容自主决定重点审计什么
+- **严重度判断**（sub-subagent 自主，非查表）：
+  - FATAL = 会导致结论无效的问题
+  - CONCERN = 应修正但不导致结论无效
+  - PASS = 无重大问题
+- **多角度验证**：对关键发现，从不同角度交叉验证（非机械"2+来源"规则，而是据判断需要时自然采用）
+- **参考旧知识但不照搬**：旧 audit 的 Cross-Verification 思路（多来源验证）、severity 分级思路（按影响判严重度）、推理链检查思路（跳步/遗漏/不一致）可作参考，但不作为 rigid checklist 强制执行

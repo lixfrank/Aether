@@ -1,0 +1,14 @@
+{
+  "rules": [
+    {
+      "keys": ["metric_signature", "fourier_convention"],
+      "warning": "Euclidean metric + physics Fourier convention: sign conventions may be inconsistent for QFT Wick rotation",
+      "trigger_combinations": ["metric_signature=euclidean|fourier_convention=physics"]
+    },
+    {
+      "keys": ["natural_units", "metric_signature"],
+      "warning": "SI units + mostly-plus metric: ensure explicit c factors appear in all expressions",
+      "trigger_combinations": ["natural_units=SI|metric_signature=mostly-plus"]
+    }
+  ]
+}

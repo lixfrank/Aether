@@ -2,51 +2,32 @@
 name: health-check
 owner: research
 description: |
-  Research agent health check execution — 4-layer progressive detection
-  (infrastructure → persistence → skill_chain → runtime) + cross-MCP arbitration.
-  Invoked by research-worker via skill tool when coordinator dispatches
-  health_check mode. Writes temp files to .aether/research/ for coordinator
-  migration to ~/.aether/health/.
+  Research agent health check — 4-layer progressive detection
+  (infrastructure → persistence → skill_chain → runtime).
+  Self-contained: runs scripts/run_health_check.py directly via bash.
+  No MCP dependency. Invoked by research-worker or primary agent.
 ---
 
 # Health Check — 4-Layer Progressive Detection
 
-This skill implements the health_check execution mode for the research agent. It is invoked by the research-worker via the skill tool, receiving `layers` parameter from the dispatch prompt.
-
-## Lifecycle Contract
-
-**Input**: dispatch prompt with `layers` parameter (default: `["infrastructure","persistence","skill_chain"]`), `project_dir` from MCP calls
-
-**Output** (MUST write all of these):
-
-1. `.aether/research/.health_global.json` — Global health data (infrastructure + network)
-2. `.aether/research/.health_network.md` — Network status markdown (Reachable/Unreachable/Recommendations)
-
-**State transition**: None. health_check does NOT call advance_plan or modify STATE.md.
-
-**MUST NOT**:
-
-- Call advance_plan (does not advance state machine)
-- Modify STATE.md (coordinator writes STATE.md based on digest)
-- Write files outside `.aether/research/` (file_scope constraint, D17)
-- Write to `~/.aether/health/` directly (coordinator migrates temp files)
+This skill runs a standalone health check script. No MCP dependency.
 
 ## Procedure
 
-> **Note**: uv is guaranteed to exist at `~/.aether/bin/uv` by the research-coordinator's uv bootstrap step (research-coordinator §8 Session Start Procedure, Step 1), which runs **before** the research-state MCP server starts (and thus before this skill is invoked). The `uv_available` / `uv_python_management` checks are confirmation-only — they will pass. The `failed_items` mapping `uv_available → auto_installable:true, priority:critical` (Step 5) is retained but will no longer trigger (harmless).
+### Step 1: Run Health Check Script
 
-### Step 1: Read Dispatch Parameters
+```bash
+uv run .aether/skills/health-check/scripts/run_health_check.py [project_dir] [layers...]
+```
 
-1. Read dispatch prompt to identify `layers` parameter
-   - Default: `["infrastructure","persistence","skill_chain"]`
-   - Full check (user-requested): `["infrastructure","persistence","skill_chain","runtime"]` or `None`
-2. Determine project directory: use current working directory as `project_dir`
+- `project_dir` (optional): defaults to current working directory
+- `layers` (optional): subset of `infrastructure persistence skill_chain runtime`
 
-### Step 2: Call run_health_check MCP
+Default runs all 4 layers. Detection order is enforced: infrastructure → persistence → skill_chain → runtime. If a previous layer fails, subsequent layers are blocked.
 
-Call research-state MCP `run_health_check(project_dir, layers=specified layers)` → get result dict.
+### Step 2: Read Result
 
-The MCP tool returns a 4-layer progressive detection result with the structure:
+The script outputs JSON with structure:
 
 ```json
 {
@@ -56,141 +37,100 @@ The MCP tool returns a 4-layer progressive detection result with the structure:
     "infrastructure": { "healthy": bool, "checks": {...}, "issues": [...] },
     "persistence": { "healthy": bool, "checks": {...}, "issues": [...] },
     "skill_chain": { "healthy": bool, "checks": {...}, "issues": [...] },
-    "runtime": { "healthy": bool, "checks": {...}, "issues": [...], "cross_mcp_pending": [...] }
+    "runtime": { "healthy": bool, "checks": {...}, "issues": [...] }
   },
-  "summary": { "total_checks": N, "passed": N, "failed": N, "degradations": [...], "cross_mcp_pending_count": N }
+  "summary": { "total_checks": N, "passed": N, "failed": N, "degradations": [...] }
 }
 ```
 
-Detection order is enforced by the MCP tool: infrastructure → persistence → skill_chain → runtime. If a previous layer fails, subsequent layers are blocked.
+### Step 3: Write Temp Files
 
-### Step 3: Cross-MCP Arbitration
+Write two temp files under `.aether/research/`:
 
-If runtime layer was executed and result contains `cross_mcp_pending` list:
+**`.aether/research/.health_global.json`** — infrastructure + network status from the JSON result.
 
-1. Call research-conventions MCP `convention_lock_status(project_dir)` → get result
-2. Call research-conventions MCP `skill_resolve_path(skill_name="gpd-conventions", project_dir)` → get result
-3. Merge cross_mcp results into health status dict:
-   - `convention_lock_status` return with `conventions` and `completeness_percent` → cross_mcp: pass
-   - `skill_resolve_path` return with `found: true` + `skill_dir` → cross_mcp: pass
-   - Any failure → cross_mcp: fail
-
-### Step 4: Write Temp Files
-
-Write two temp files under `.aether/research/` (within file_scope, D17):
-
-**`.aether/research/.health_global.json`**:
-
-```json
-{
-  "schema_version": 1,
-  "updated_at": "[current UTC ISO 8601]",
-  "infrastructure": {
-    "uv_available": { "status": "...", "version": "..." },
-    "uv_python_management": { "status": "...", "versions": [...] },
-    "git_available": { "status": "...", "version": "..." },
-    "git_working_dir": { "status": "...", "git_dir": "..." },
-
-    "network_arxiv": { "status": "...", "method": "...", "http_code": N },
-    "network_s2": { "status": "...", "method": "...", "http_code": N },
-    "network_inspire_hep": { "status": "...", "method": "...", "http_code": N },
-    "network_pubmed": { "status": "...", "method": "...", "http_code": N },
-    "network_alphaxiv": { "status": "...", "method": "...", "http_code": N },
-    "network_crossref": { "status": "...", "method": "...", "http_code": N }
-  },
-  "network": {
-    "arxiv": { ... },
-    "semantic_scholar": { ... },
-    "inspire_hep": { ... }
-  }
-}
-```
-
-**`.aether/research/.health_network.md`**:
+**`.aether/research/.health_network.md`** — network reachability summary:
 
 ```markdown
 # Network Status (updated: [current UTC ISO 8601])
 
 ## Reachable
 
-- [endpoint]: OK "[method], [http_code]"
+- [endpoint]: OK
 
 ## Unreachable
 
-- [endpoint]: FAIL → [impact description]
+- [endpoint]: FAIL
 
 ## Degraded
 
-- [endpoint]: DEGRADED "rate limited, [http_code]"
+- [endpoint]: DEGRADED "rate limited"
 
 ## Recommendations
 
 - [reachability-based recommendations]
 ```
 
-### Step 5: Build Degradation Summary
+### Step 4: Build Degradation Summary
 
-From the health status result, build a degradation_summary:
+From the health result, determine per-layer pass/degraded/failed:
 
-1. For each layer, determine pass/degraded/failed:
-   - `healthy: true` + no issues → pass
-   - `healthy: false` with non-critical issues → degraded
-   - `healthy: false` with critical issues (persistence fail) → failed
+- `healthy: true` + no issues → pass
+- `healthy: false` with non-critical issues → degraded
+- `healthy: false` with critical issues → failed
 
-2. Collect failed_items from all layers:
-   - Each item: `{layer, key, failure_class, auto_installable, priority}`
-   - `failure_class` comes from the check result's `failure_class` field
+Collect `failed_items` with `{layer, key, failure_class, auto_installable, priority}`.
 
-3. auto_installable mapping (from install_registry.json):
-   - uv_available, git_available, git_working_dir → `true`
-   - paper_search_scripts → `true` (paper-search scripts require no auth, all PEP 723 auto-install)
-   - All other items → `false`
+auto_installable mapping:
 
-4. priority mapping:
-   - uv_available → `critical`
-   - git_available, git_working_dir → `high`
-   - paper_search_scripts → `high` (paper search is core research functionality)
-   - All other items → `medium`
+- uv_available, git_available, git_working_dir → `true`
+- paper_search_scripts → `true`
+- All other items → `false`
 
-### Step 6: Output PhaseResultDigest
+priority mapping:
 
-Output health_check digest as FINAL message:
+- uv_available → `critical`
+- git_available, git_working_dir, paper_search_scripts → `high`
+- All other items → `medium`
 
-```yaml
-phase_result_digest:
-  phase: health_check
-  sub_phase: null
-  cycle: null
-  status: pass | degraded | failed
-  degradation_summary:
-    infrastructure: pass | degraded | failed
-    persistence: pass | degraded | failed
-    skill_chain: pass | degraded | failed
-    runtime: pass | degraded | failed
-    cross_mcp: pass | degraded | failed
-    failed_items:
-      - layer: [infrastructure | persistence | skill_chain | runtime]
-        key: [health_check_key, e.g. "uv_available"]
-        failure_class:
-          [not_installed | not_configured | daemon_not_running | not_authenticated | unreachable | missing | corrupt]
-        auto_installable: true | "partial" | false
-        priority: critical | high | medium | low
-  output_paths:
-    temp_global_health_json: ".aether/research/.health_global.json"
-    temp_network_status_md: ".aether/research/.health_network.md"
-    final_global_health_json: "~/.aether/health/global_health.json"
-    final_network_status_md: "~/.aether/health/network_status.md"
-  next_phase: null
-```
+### Step 5: Return
 
-MUST NOT output any other text after this YAML block.
+Return a one-line summary to the caller. The caller reads the temp files for details.
 
 ## Key Constraints
 
-- **MUST NOT call advance_plan** — health_check does not advance the state machine
-- **MUST NOT modify STATE.md** — coordinator writes STATE.md based on digest
-- **ONLY write temp files under `.aether/research/`** — `.health_global.json` + `.health_network.md`, never outside file_scope (D17)
-- Temp files are migrated by coordinator to `~/.aether/health/` and deleted; worker never writes to global directory
-- `next_phase` field is always `null`
-- Detection order is enforced by the MCP tool: infrastructure → persistence → skill_chain → runtime
-- If a previous layer is unhealthy, subsequent layers are blocked and skipped automatically by the MCP tool
+- Self-contained: runs `scripts/run_health_check.py` via bash, no MCP
+- Only write temp files under `.aether/research/`
+- Temp files migrated to `~/.aether/health/` by primary agent
+- `persistence` layer checks `research_state.md` (not state.json/STATE.md — those are deleted)
+
+## Layer Details
+
+### infrastructure
+
+- uv available + version
+- uv python management
+- git available + version
+- git working directory
+- network reachability (arXiv, Semantic Scholar, INSPIRE-HEP, PubMed, alphaxiv, Crossref)
+
+### persistence
+
+- persistence directory writable
+- `research_state.md` existence + format (has `## Research Goal` + `## Phase History` sections)
+- `ENVIRONMENT.md` existence
+- `convention_defaults.json` readable (gpd-conventions)
+
+### skill_chain
+
+- Phase skills: analysis, literature-landscape-scan, research-question-framing, autoresearch, debate, research-audit
+- Support skills: paper-search, health-check, literature-review, gpd-\* (4 skills)
+- Agent definitions: research, research-worker, research-verifier, local-executor, research-explorer, research-audit, debate-critic, debate-rebuttal
+- Checker scripts: research-audit/scripts/ (check_sources, check_verification, check_artifacts, check_conventions)
+- gpd-verification scripts (9 SymPy checkers)
+- paper-search scripts (6 scripts)
+
+### runtime
+
+- SymPy dry-run (9 gpd-verification scripts with trivial inputs)
+- paper-search arxiv_search test query

@@ -2,91 +2,73 @@
 name: research-question-framing
 owner: research
 description: |
-  Phase 6 (phase_framing) of the Path 3 research state machine.
-  Converts gaps from literature-landscape-scan into structured, falsifiable research questions
-  with verification criteria, with explicit reasoning chains from knowledge base to questions.
-  Supports PICO (biomedical) and SMED (physics) frameworks.
-  Outputs map directly to PLAN.md contracts.
-  If audit phases found unresolved gaps, these are injected as constraints in framing.
-  Produces framing_reasoning.md as the authoritative source for dependency data.
-  Two running modes: full_derive (default — write complete files from scratch) and
-  re_derive_gap (L3 rollback mode — splice-update existing files, re-derive only affected Gap).
+  将 gap 转化为可证伪问题 + 依赖图 + 验收。方向指导核心能力。
+  由 research-worker 调用。产出 <workdir>PLAN.md + research_questions.md + framing_reasoning.md。
 ---
 
-# Research Question Framing — phase_framing
+# Research Question Framing — 方向指导核心
 
-This skill implements **Phase 6** of the Path 3 research state machine. It converts landscape gaps and analysis findings into structured research questions that become the PLAN.md contract, with explicit reasoning chains documenting the derivation from knowledge base to each question.
+framing 将 gap 转化为可证伪的研究问题 + 依赖图 + 验收标准。核心 Step 2-9 是方向指导能力，保持不动。
 
 ## Lifecycle Contract
 
-**Input**: ROADMAP.md + landscape_map.md (gap_list) + research_analysis.md + AUDIT_1/2 resolution status
+**Input**: `<workdir>analysis.md`（gap 来源）+ `<workdir>landscape_map.md`（若存在，补充参考）+ `persistence/research_state.md`
 
-**Mode parameter**: `mode = full_derive (default) | re_derive_gap`. re_derive_gap 模式仅用于 L3 回退——若 dispatch prompt 指定 `mode=re_derive_gap`，先读 `references/re_derive_gap.md` 了解各 Step delta，再按 delta 执行. 默认模式（full_derive）按本文档 Procedure 执行.
+**Output** (MUST write all):
 
-**Output** (MUST write all of these):
+1. `<workdir>PLAN.md` — Contract with claims, deliverables, acceptance_tests, forbidden_proxies, environment_requirements. Execution Plan is multi-Wave structure.
+2. `<workdir>research_questions.md` — Structured question framing with Depends_on/Required_by reference-type fields
+3. `<workdir>framing_reasoning.md` — Reasoning chain from knowledge base to questions
 
-1. `.aether/research/persistence/PLAN.md` — Contract with claims, deliverables, acceptance_tests, forbidden_proxies, **environment_requirements**. Claims include derived_from/tractability/question fields. Execution Plan is multi-Wave structure.
-2. `.aether/research/notepads/<slug>/research_questions.md` — Structured question framing with Depends_on/Required_by reference-type fields
-3. `.aether/research/notepads/<slug>/framing_reasoning.md` — Reasoning chain from knowledge base to questions (authoritative source for dependency data)
-4. `.aether/research/persistence/STATE.md` — Updated with phase=phase_framing completed
+**MUST NOT**: Execute experiments (execution's responsibility). Modify PLAN.md during execution (method modifications by primary agent before dispatch).
 
-**Output 变化**: re_derive_gap 模式 splice 更新 3 文件（framing_reasoning.md / research_questions.md / PLAN.md），STATE.md 更新由 coordinator 负责——完整细节见 `references/re_derive_gap.md`.
+**权威源规则**:
 
-**Downstream note**: The `environment_requirements` field in PLAN.md is NOT just informational — it is consumed by the `/autoresearch` skill during execution_cycle to probe the host system and write `.aether/research/persistence/ENVIRONMENT.md`. ENVIRONMENT.md contains: (1) host_system probe results (what software is actually available), (2) plan_requirements (what was declared), (3) isolation_strategy (per-task decisions: uv_venv/local/local_compile), (4) gaps (missing critical software). The coordinator uses gaps to inform the user about unavailable software. **You MUST write environment_requirements with enough specificity for the execution phase to classify each requirement into an isolation strategy (uv_venv/local/local_compile).**
-
-**State transition**: `phase_framing → phase_audit_3`（framing 调 advance_plan）. re_derive_gap 模式跳过 advance_plan——见 `references/re_derive_gap.md`.
-
-**MUST NOT**: Execute experiments (that is phase_execution). Skip to phase_execution without phase_audit_3 and phase_debate.
-
-**权威源规则**: framing_reasoning.md is the authoritative source for all dependency data (Dependency Graph, Execution Order, Inter-Question Dependencies) during framing and audit_3 phases. research_questions.md contains only Depends_on/Required_by quick reference summaries. PLAN.md Execution Plan Dependencies fields are **self-contained** — each dependency includes: dependency description, critical=true/false with reasoning, fallback path (if non-critical). No reference-only pointers to framing_reasoning.md without the full description. All dependency modifications are done first in framing_reasoning.md, then mechanically synced to research_questions.md and PLAN.md. After debate-repair modifies question structure, **PLAN.md Execution Plan Dependencies becomes the authoritative source** for dependency data — autoresearch reads PLAN.md as primary source, framing_reasoning.md only as fallback reference (when PLAN.md Dependencies info is incomplete after debate repair).
+framing_reasoning.md 是推理记录文件，用于检测推理正确性（audit 审推理链）。
+PLAN.md 是后续工作（debate/execution）实际读取的信息文件。
+debate 修订 PLAN.md 后，PLAN.md 为执行阶段的权威源。
+framing_reasoning.md 可被后续 phase 追加修正（append 修正说明，不删原文），保持推理链可追溯。
 
 ## Procedure
 
-### Step 1: Read Current State
+### Step 1: Read State & Context
 
-1. Read `.aether/research/persistence/STATE.md` — confirm phase is phase_audit_2 completed (or phase_audit_1 completed if landscape was skipped)
-2. Read `.aether/research/persistence/ROADMAP.md` — understand project scope; record commit SHA (via `git rev-parse HEAD`)
-3. Read landscape_map.md (if exists) — extract gap_list; record commit SHA. If landscape was skipped, note landscape_map.md as "skipped (no file)"
-4. Read research_analysis.md — extract initial findings; record commit SHA
-5. Read STATE.md Blockers section — check for unresolved_gaps from audit phases (if audit_repair loop reached max 3 repairs)
-6. Read state.json via research-state MCP (`get_state`)
-7. Check AUDIT_1/2 resolution status:
-   - Read latest audit_1 report from persistence/audits/ — extract resolution status (all resolved / N unresolved)
-   - Read latest audit_2 report from persistence/audits/ (if exists) — extract resolution status
-8. Check `convention_lock_status` via research-conventions MCP if physics domain
+1. Read `persistence/research_state.md` + `<workdir>analysis.md`（gap 来源）+ `<workdir>landscape_map.md`（若存在，补充参考）
+   - 获取 Research Goal / Current Understanding / Failed Attempts / Human Directives
+   - Failed Attempts 作为 framing 约束（已知失败方法不再选为 solution path）
+   - Human Directives 作为人类增删/调整指示
 
 ### Step 2: Select Gaps & Construct Significance Argument
 
 > **Significance Argument and Priority Justification are two separate outputs**: Significance Argument is per-gap research value justification (internal reasoning within a single gap). Priority Justification is cross-gap selection decision documentation (comparison and tradeoff rationale among multiple gaps). Both are produced in this Step but at different logical levels.
 
-1. Read the gap_list from landscape_map.md (or derive gaps from research_analysis.md if landscape was skipped)
-2. Read unresolved_gaps from STATE.md Blockers (if present from audit phases) — these are hard constraints:
-   - "以下知识基础存在未验证的声明，framing 时必须为这些声明设计独立的验证路径"
-   - Each unresolved_gap must have a corresponding verification path in PLAN.md
-3. For each candidate gap, construct **Significance Argument** (cite relevant passages from ROADMAP.md / landscape_map.md, justify why this gap's research value matters):
-   - Include inline citations: `> 引用: ROADMAP.md §[section] "[relevant excerpt]"` and/or `> 引用: landscape_map.md §[section] "[relevant excerpt]"`
-4. Evaluate significance × tractability estimate → select 1-3 gaps
-5. Write **Priority Justification** to framing_reasoning.md — cross-gap selection decision documentation with significance × tractability comparison matrix:
+1. Read the gap_list from `<workdir>analysis.md` (analysis.md 是 gap 识别的权威来源)
+   若 `<workdir>landscape_map.md` 存在，读取其 open problems / controversies 作为补充参考
+   （landscape_map.md 负责文献景观，gap 本身在 analysis.md 中；landscape 可回写补充 analysis.md 的 gap）
+2. For each candidate gap, construct **Significance Argument** (cite relevant passages from analysis.md / landscape_map.md, justify why this gap's research value matters):
+   - Include inline citations: `> 引用: analysis.md §[section] "[relevant excerpt]"` and/or `> 引用: landscape_map.md §[section] "[relevant excerpt]"`
+3. Evaluate significance × tractability estimate → select 1-3 gaps
+4. Write **Priority Justification** to framing_reasoning.md — cross-gap selection decision documentation with significance × tractability comparison matrix:
 
 | Gap   | Significance      | Tractability                 | Reasoning    |
 | ----- | ----------------- | ---------------------------- | ------------ |
 | Gap 1 | [High/Medium/Low] | [HIGH/MEDIUM/LOW confidence] | [1 sentence] |
 | Gap 2 | [same]            | [same]                       | [same]       |
 
-6. Write Significance Argument sections to framing_reasoning.md §Gap → Question Mapping (per-gap reasoning)
+5. Write Significance Argument sections to framing_reasoning.md §Gap → Question Mapping (per-gap reasoning)
 
 ### Step 3: Survey Solution Paths & Construct Tractability Argument
 
 For each selected gap:
 
-1. **Survey solution paths**: Extract all possible solution paths from landscape_map.md §Schools of Thought (if landscape skipped, from ROADMAP.md §Analysis). For each path:
+1. **Survey solution paths**: Extract all possible solution paths from landscape_map.md §Schools of Thought (if landscape skipped, from analysis.md). **排除 Failed Attempts 中的已失败方法**——已验证为错的方法直接排除，不出现在备选 solution paths 中。 For each remaining path:
    - Path label (Path A: School [name]'s method [method], etc.)
-   - Citation: `> 引用: landscape_map.md §Schools of Thought "[relevant excerpt]"` (or ROADMAP.md §Analysis if landscape skipped)
-   - Citation for key paper: `> 引用: [key paper arXiv ID / DOI] "[relevant excerpt]"`
+   - Citation: `> 引用: landscape_map.md §Schools of Thought "[relevant excerpt]"` (or analysis.md if landscape skipped)
+   - Citation for key paper: `> 引用: [src:id] "[relevant excerpt]"`
    - Evidence strength: STRONG / MODERATE / WEAK
    - Partial success evidence: yes/no + specific evidence
 
-   > **Data source rule**: When landscape_map.md exists, Solution Paths Survey's primary source is landscape_map.md §Schools of Thought. When landscape is skipped (landscape_map.md doesn't exist), extract method/school information from ROADMAP.md §Analysis as substitute source, and annotate Source Knowledge Base with landscape_map.md as skipped.
+   > **Data source rule**: When landscape_map.md exists, Solution Paths Survey's primary source is landscape_map.md §Schools of Thought. When landscape is skipped (landscape_map.md doesn't exist), extract method/school information from analysis.md as substitute source.
 
 2. **Select most feasible path** → construct **Tractability Argument** (why this path has credibility, cite specific literature evidence):
    - Selected path: [Path A/B/C]
@@ -94,15 +76,7 @@ For each selected gap:
    - Tractability confidence: HIGH / MEDIUM / LOW — following §Tractability Confidence Classification rules
    - Confidence justification: [specific evidence supporting this confidence level]
    - LOW type: foundation_insufficient / frontier_problem / null (null when not LOW)
-     - foundation_insufficient: default assumption — all path evidence ≤ WEAK or no available path or critical resource gap
-     - frontier_problem: after landscape supplement still LOW — foundation_insufficient falsification failed, method-level innovation truly needed
-     - null: not LOW confidence
    - LOW handling status: pending_supplement / supplement_in_progress / supplement_failed → frontier / resolved / null
-     - pending_supplement: LOW discovered, waiting for coordinator decision on landscape supplement
-     - supplement_in_progress: landscape supplement ongoing
-     - supplement_failed → frontier: supplement still LOW, upgraded to frontier_problem, needs PoC question
-     - resolved: supplement upgraded confidence, no longer LOW
-     - null: not LOW confidence
    - PoC question(s): if frontier_problem, list PoC questions / null
 
 3. **Tractability Confidence Classification** — confidence is a judgment of evidence conditions, not a subjective estimate. Minimum necessary conditions:
@@ -119,16 +93,21 @@ For each selected gap:
 
    **LOW** — triggered by ANY of these:
    1. All path evidence strength = WEAK (only conceptual/review discussion, no concrete method or data)
-   2. No available path (no relevant method found in landscape/ROADMAP)
+   2. No available path (no relevant method found in landscape/analysis)
    3. Critical resource gap (critical resource unavailable and no alternative)
 
-4. **List Assumptions Introduced** (new assumptions not covered by ROADMAP/landscape, with source and verifiability):
+   > Step3 Tractability Classification 只对备选 solution paths（排除已失败的）做可行性预判（HIGH/MEDIUM/LOW），不在 Tractability 中重复标记 infeasible。
+
+4. **List Assumptions Introduced** (new assumptions not covered by analysis/landscape, with source and verifiability):
    - Assumption 1: [description]
      - Source: [推理需要 / 方法前提 / 简化假设]
      - Verifiability: [can verify in execution / cannot verify → label as limit]
-     - ROADMAP/landscape coverage: [yes / no — if no, label as "unverified assumption"]
+     - analysis/landscape coverage: [yes / no — if no, label as "unverified assumption"]
 
 5. Write to framing_reasoning.md §Gap → Question Mapping: Solution Paths Survey + Tractability Argument + Assumptions Introduced sections
+
+> Failed Attempts 中的失败条件可帮助定义 question 的 falsification criterion（Step 5）：
+> 例如"解析延拓在 m→0 发散"是已知失败条件，则对应 question 的 falsification criterion 可引用此条件
 
 ### Step 4: Derive Question from Tractability Argument
 
@@ -168,7 +147,7 @@ For each question's Inter-Question Dependencies:
   - Fallback path: [if critical=false: "if Q1 conclusion doesn't hold, can use alternative assumption [Z]"; if critical=true: no fallback]
 - Required by: [Q3 / none]
 
-Dependency Graph (from all questions' Inter-Question Dependencies):
+Dependency Graph:
 
 ```
 Q1 ──→ Q2 (Q2's assumption depends on Q1's conclusion [claim X])
@@ -189,7 +168,7 @@ Execution Order (topological sort from Dependency Graph):
 
 Write two files:
 
-1. `.aether/research/notepads/<slug>/research_questions.md` — each question's structured definition + Depends_on/Required_by reference-type fields:
+1. `<workdir>research_questions.md` — each question's structured definition + Depends_on/Required_by reference-type fields:
 
 ```markdown
 ## Question 1: [Title]
@@ -211,89 +190,47 @@ Write two files:
   - Quick reference: [Q3 / none]
 ```
 
-2. `.aether/research/notepads/<slug>/framing_reasoning.md` — complete reasoning chain:
+2. `<workdir>framing_reasoning.md` — complete reasoning chain:
 
 ```markdown
 # Framing Reasoning Chain
 
 ## Source Knowledge Base
 
-- ROADMAP.md: [commit SHA — framing worker's latest commit SHA at execution time]
+- analysis.md: [commit SHA — framing worker's latest commit SHA at execution time]
 - landscape_map.md: [commit SHA / skipped (no file)]
-- research_analysis.md: [commit SHA]
-- AUDIT_1.md resolution status: [all resolved / N unresolved]
-- AUDIT_2.md resolution status: [all resolved / N unresolved]
 
 ## Gap → Question Mapping
 
-### Gap 1: [gap description from landscape_map.md]
+### Gap 1: [gap description from analysis.md]
 
 #### Significance Argument
 
-[Why this gap is important — cite relevant ROADMAP.md / landscape_map.md passages]
+[Why this gap is important — cite relevant analysis.md / landscape_map.md passages]
 
-> 引用: ROADMAP.md §[section] "[relevant excerpt]"
+> 引用: analysis.md §[section] "[relevant excerpt]"
 > 引用: landscape_map.md §[section] "[relevant excerpt]"
 
 #### Solution Paths Survey
 
-[Paths that could close this gap]
-
-- Path A: School [name]'s method [method]
-  - 引用: landscape_map.md §Schools of Thought "[excerpt]" (or ROADMAP.md §Analysis if landscape skipped)
-  - 引用: [key paper arXiv ID / DOI] "[excerpt]"
-  - Evidence strength: [STRONG / MODERATE / WEAK]
-  - Partial success: [yes/no + evidence]
-
-- Path B: [same structure]
+[Paths that could close this gap — excluding Failed Attempts]
 
 #### Tractability Argument
 
 [Most feasible path and its justification]
 
-- Selected path: [Path A/B/C]
-- Selection reason: [partial success + available method + computational feasibility + resource match]
-- Tractability confidence: [HIGH / MEDIUM / LOW]
-- Confidence justification: [specific evidence]
-- LOW type: [foundation_insufficient / frontier_problem / null]
-- LOW handling status: [pending_supplement / ... / null]
-- PoC question(s): [list / null]
-
 #### Assumptions Introduced
-
-- Assumption 1: [description]
-  - Source: [推理需要 / 方法前提 / 简化假设]
-  - Verifiability: [verifiable in execution / limit]
-  - ROADMAP/landscape coverage: [yes / no → "unverified assumption"]
 
 #### Inter-Question Dependencies
 
-- Depends on: [Q1 / none]
-  - Dependency description: [Q1's conclusion [claim X] is prerequisite for this question's method [Y]]
-  - Critical dependency: [true / false]
-  - Fallback path: [description / none]
-- Required by: [Q3 / none]
-
 #### Derived Question
 
-- Question: [SMED/PICO/General framed question]
-- Framework used: [SMED / PICO / General]
-- Framework element 溯源:
-  - System/Population ← framing_reasoning.md §Solution Paths Survey, Path [N]: [research object]
-  - Model/Intervention ← framing_reasoning.md §Solution Paths Survey, Path [N]: [method]
-  - Expectation/Comparison ← framing_reasoning.md §Tractability Argument: [expected conclusion vs existing results]
-  - Deviation/Outcome ← framing_reasoning.md §Significance Argument: [deviation to test]
-- Falsification criterion: [from tractability confidence justification negation]
-  - Falsification 溯源: ← framing_reasoning.md §Tractability Argument confidence justification: [supporting evidence → negation situation]
-- Measurement method: [from selected path's available methods]
-- Evidence kind: [from selected path's evidence types]
-- How question maps to PLAN.md Claims: [claim 1 → question 1 gap 1]
+[Framework element 溯源 mapping + Falsification criterion 溯源]
 
 ## Priority Justification
 
-| Gap   | Significance      | Tractability      | Reasoning    |
-| ----- | ----------------- | ----------------- | ------------ |
-| Gap 1 | [High/Medium/Low] | [HIGH/MEDIUM/LOW] | [1 sentence] |
+| Gap | Significance | Tractability | Reasoning |
+| --- | ------------ | ------------ | --------- |
 
 ## Dependency Graph
 
@@ -306,17 +243,13 @@ Q3 (independent)
 | ---- | --------- | -------------------------- |
 | 1    | Q1, Q3    | No prerequisite dependency |
 | 2    | Q2        | Depends on Q1              |
-
-## Unresolved Knowledge Gaps (from audit_1/2)
-
-- Unresolved gap 1: [description from AUDIT_1/2]
-  - Impact on reasoning: [which reasoning steps affected]
-  - Mitigation in question design: [how question design accommodates uncertainty]
 ```
 
 ### Step 8: Map to PLAN.md Contract
 
-Write to `.aether/research/persistence/PLAN.md` (整文件写). Claims section includes derived_from/tractability/question fields (extracted from framing_reasoning.md §Derived Question). Execution Plan is multi-Wave structure based on framing_reasoning.md §Execution Order. Dependencies are **self-contained** — each dependency includes: dependency description, critical=true/false with reasoning, fallback path (if non-critical). No reference-only pointers without the full description.
+Write to `<workdir>PLAN.md`. Claims section includes derived_from/tractability/question fields (extracted from framing_reasoning.md §Derived Question). Execution Plan is multi-Wave structure based on framing_reasoning.md §Execution Order. Dependencies are **self-contained**.
+
+**Acceptance Tests**: 须为每个 question 给出明确的、符合研究要求的 **Acceptance Tests**，防止 execution 过程中刻意简化测试轻易宣称达成目标。
 
 ```markdown
 # Research Plan — [Project Name]
@@ -329,25 +262,18 @@ Write to `.aether/research/persistence/PLAN.md` (整文件写). Claims section i
   - derived_from: "framing_reasoning.md §Gap 1, Path A"
   - tractability: [HIGH / MEDIUM / LOW]
   - question: [Q1]
-- [Claim 2]: [assertion]
-  - derived_from: "framing_reasoning.md §Gap 2, Path B"
-  - tractability: [MEDIUM]
-  - question: [Q2]
 
 ### Deliverables
 
 - [Deliverable 1]: [Expected output]
-- [Deliverable 2]: [Expected output]
 
 ### Acceptance Tests
 
-- [Test 1]: [How to verify claim 1 — derived from falsification criterion]
-- [Test 2]: [How to verify claim 2]
+- [Test 1]: [How to verify claim 1 — derived from falsification criterion. Must be specific and rigorous, not simplifiable]
 
 ### Forbidden Proxies
 
 - [Proxy 1]: [What shortcuts MUST NOT be used as evidence]
-- [Proxy 2]: [What sources MUST NOT be sole evidence]
 
 ### Execution Plan (per-Wave, based on framing_reasoning.md §Execution Order)
 
@@ -361,14 +287,6 @@ Write to `.aether/research/persistence/PLAN.md` (整文件写). Claims section i
 - Dependencies: none (knowledge-base only)
 - Output file: execution/Q1_EXECUTION.md
 
-**Q3: [question title]**
-
-- Method: [method]
-- Tools: [packages]
-- Falsification test: [from acceptance test]
-- Dependencies: none (independent)
-- Output file: execution/Q3_EXECUTION.md
-
 #### Wave 2: Q2
 
 **Q2: [question title]**
@@ -377,15 +295,10 @@ Write to `.aether/research/persistence/PLAN.md` (整文件写). Claims section i
 - Tools: [packages]
 - Falsification test: [from acceptance test]
 - Dependencies:
-  - Q1 (critical): Q1's conclusion [claim X] provides initial parameter [specific parameter name] for this question's method [method Y]. Q1 failure means this question cannot execute.
-    - Fallback: none (critical dependency, Q1 failure → Q2 blocked)
-  - [OR: Q1 (non-critical): Q1's conclusion [claim X] provides initial parameter [parameter name] for this question's method [method Y].]
-    - Fallback: if Q1 conclusion doesn't hold, can use alternative assumption [Z] to attempt this question (source: framing_reasoning.md §Gap [N] → Inter-Question Dependencies fallback path)
+  - Q1 (critical): [description]. Fallback: none
 - Output file: execution/Q2_EXECUTION.md
 
 ### Environment Requirements
-
-> Each requirement MUST include the `critical` field and enough detail for the execution phase to classify the isolation strategy.
 
 - requirement_1:
   software: "[e.g., Python 3.11]"
@@ -397,88 +310,39 @@ Write to `.aether/research/persistence/PLAN.md` (整文件写). Claims section i
 
 ### Step 9: Check Conventions
 
-Before finalizing for physics domains:
+读 `persistence/research_state.md` 的 `## Conventions` 节获取当前约定值。
+若需设置约定（physics domain: metric_signature, natural_units, fourier_convention 等），写入 research_state.md 的 ## Conventions 节。
+跑 `check_conventions.py <research_state.md> <workdir>PLAN.md <workdir>framing_reasoning.md` 验证一致性与完整性。
 
-1. Call `convention_lock_status` via research-conventions MCP
-2. Verify metric_signature, natural_units, fourier_convention consistency
-3. If conventions are unlocked, set them before proceeding
+注：任何 phase 发现需要约定时均可写入 research_state.md ## Conventions 节，framing Step 9 是主要设置+验证点但非唯一。
 
-### Step 10: Update State
+### Step 10: Update persistence/research_state.md
 
-1. Update `.aether/research/persistence/STATE.md`:
-   - phase: phase_framing completed
-   - key decisions: [research questions chosen, framework selected, tractability confidence levels]
-   - blockers: [any, including LOW confidence questions needing landscape supplement]
-   - next_action: enter phase_audit_3 (reasoning chain audit)
-2. Call `advance_plan` via research-state MCP
-3. Output a PhaseResultDigest as your final message (see Step 11). The coordinator will enter phase_audit_3 based on the digest.
+- 推荐更新: Questions / Claims（写入各 question: status=open / method / dependencies / notes）
+  / Dependency Graph（写入 Q1→Q2→Q3）/ Phase History 追加 framing✓
+  （agent 据发现可灵活更新其他节，不限于以上推荐）
 
-### Step 11: Output PhaseResultDigest
+### Step 11: 质量门（与 newlayer-7 §1 对齐）
 
-Output a YAML code block as your **FINAL message** with this schema:
+1. worker 跑 scripts（bash，确定性）:
+   - `check_artifacts.py <research_state.md> <workdir>PLAN.md <workdir>research_questions.md <workdir>framing_reasoning.md` → 验证 3 个文件存在非空
+   - `check_sources.py <workdir>framing_reasoning.md` → 验证 [src:id] 引用都有下载文件
+   - `check_conventions.py <research_state.md> <workdir>PLAN.md <workdir>framing_reasoning.md` → 验证 ASSERT_CONVENTION 一致性
+   - 不过 → worker 自补，重跑 scripts
+2. worker dispatch research-audit agent（fresh context，避免 self-review bias）:
+   - sub-subagent 读 framing_reasoning.md + PLAN.md，按 newlayer-7 §2 审计方向审:
+     推理链是否完整(无跳步) / 问题是否可证伪 / 方法是否适用 / 依赖图是否无环 / 验收标准是否充分
+   - 输出 FATAL/CONCERN/PASS 报告
+3. worker 读报告:
+   - PASS → 通过
+   - CONCERN/FATAL → 自修（推荐 2 次），修后重新 dispatch 审计 sub-subagent
+   - 严重问题（无法自修）→ 须写明原因，写入 Last Phase Result issues
 
-```yaml
-phase_result_digest:
-  phase: phase_framing
-  sub_phase: null
-  cycle: null
-  status: completed
-  research_questions:
-    - question: "[full formulated question text]"
-      framework: [SMED | PICO | General]
-      falsification_criterion: "[1 sentence]"
-  claims:
-    - claim: "[1 sentence assertion]"
-      derived_from: "framing_reasoning.md §Gap [N], Path [A/B/C]"
-      tractability: [HIGH | MEDIUM | LOW]
-      question: [Q1]
-      acceptance_test: "[1 sentence verification method]"
-  forbidden_proxies:
-    - "[proxy 1 description]"
-    - "[proxy 2 description]"
-  execution_method: "[Python | C++ | Mathematica | mixed]"
-  reasoning_chain_paths:
-    - gap: "[gap description]"
-      tractability_confidence: [HIGH/MEDIUM/LOW]
-      selected_path: "[path description]"
-      assumptions_introduced: [N]
-      unresolved_assumptions: [N]
-      inter_question_dependencies:
-        depends_on: [Q1 / none]
-        critical: [true / false]
-        required_by: [Q3 / none]
-  dependency_graph:
-    edges:
-      - from: [Q1]
-        to: [Q2]
-        type: [critical / non-critical-with-fallback]
-        description: "[dependency description]"
-    independent_questions: [Q3]
-  execution_order:
-    - wave: 1
-      questions: [Q1, Q3]
-    - wave: 2
-      questions: [Q2]
-  environment_requirements:
-    - software: "[Python 3.11]"
-      packages: ["numpy", "scipy"]
-      purpose: "[numerical simulation]"
-      isolation_hint: "[uv_venv]"
-      critical: true
-    - software: "[Mathematica 13+]"
-      purpose: "[symbolic verification]"
-      isolation_hint: "[local]"
-      critical: true
-  domain_mode: [physics | general]
-  output_paths:
-    plan: persistence/PLAN.md
-    research_questions: notepads/[slug]/research_questions.md
-    framing_reasoning: notepads/[slug]/framing_reasoning.md
-  next_phase: phase_audit_3
-```
+### Step 12: 回传 status 信号
 
-MUST NOT output any other text after this YAML block.
+更新 research_state.md 的 Last Phase Result 节 (phase=framing / status / summary / issues)，
+回传 status 信号 (completed | needs_attention)
 
 ## Integrity
 
-Never frame a question that cannot be falsified. Every question must have a concrete falsification criterion and measurable evidence kind. Every reasoning step must have explicit citations from ROADMAP.md / landscape_map.md. Every assumption not covered by the knowledge base must be labeled as "unverified assumption". Tractability confidence must not violate the minimum necessary conditions defined in §Tractability Confidence Classification.
+Never frame a question that cannot be falsified. Every question must have a concrete falsification criterion and measurable evidence kind. Every reasoning step must have explicit citations from analysis.md / landscape_map.md. Every assumption not covered by the knowledge base must be labeled as "unverified assumption". Tractability confidence must not violate the minimum necessary conditions defined in §Tractability Confidence Classification.

@@ -20,7 +20,7 @@ import shutil
 import tarfile
 import tempfile
 import time
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -28,6 +28,36 @@ import requests
 
 SESSION = requests.Session()
 SESSION.headers.update({"User-Agent": "Aether-PaperDownloader/2.0"})
+
+
+def update_registry(
+    literatures_dir, paper_id, paper_type, title, authors, year, filename
+):
+    """Append entry to literatures/registry.json (anti-fabrication closed loop).
+
+    Enables check_sources.py to verify: citation [src:id] → registry has id → file exists.
+    """
+    registry_path = Path(literatures_dir) / "registry.json"
+    try:
+        registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError):
+        registry = {"entries": []}
+    if any(e.get("id") == paper_id for e in registry.get("entries", [])):
+        return
+    registry.setdefault("entries", []).append(
+        {
+            "id": paper_id,
+            "type": paper_type,
+            "title": title,
+            "authors": authors,
+            "year": year,
+            "file": filename,
+            "downloaded_at": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+    registry_path.write_text(
+        json.dumps(registry, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
 
 
 def sanitize_filename(name: str) -> str:
@@ -280,6 +310,15 @@ def download_by_arxiv_id(
     index = load_index(output_dir)
     index.append(entry)
     save_index(index, output_dir)
+    update_registry(
+        output_dir,
+        arxiv_id,
+        "arxiv",
+        paper.get("title", ""),
+        paper.get("authors", ""),
+        paper.get("year", ""),
+        paper_dir.name,
+    )
     print(f"  [ok] {arxiv_id} → {paper_dir.name}")
     return paper_dir.name
 
@@ -410,6 +449,15 @@ def download_by_doi(
     index = load_index(output_dir)
     index.append(entry)
     save_index(index, output_dir)
+    update_registry(
+        output_dir,
+        doi,
+        "doi",
+        paper.get("title", ""),
+        paper.get("authors", ""),
+        paper.get("year", ""),
+        paper_dir.name,
+    )
     print(f"  [ok] DOI {doi} → {paper_dir.name}")
     return paper_dir.name
 

@@ -5,38 +5,22 @@ description: |
   Multi-database paper search, download (source-first), citation extraction,
   and citation discovery (strictly limited). Four modes: (1) Multi-Database
   Search, (2) Paper Download, (3) Citation Extraction, (4) Citation Discovery.
-  Default download directory varies by Path (1/2/3).
+  Downloads write to literatures/registry.json for anti-fabrication closed loop.
 ---
 
 # paper-search Skill
 
-> **Sole entry point**: Other skills/agents must delegate to paper-search
-> rather than directly calling alphaxiv, INSPIRE-HEP, Semantic Scholar, or
-> PubMed APIs. paper-search decides which database(s) to use based on the
-> search intent and domain described by the caller.
->
-> **Invocation protocol (D7)**: paper-search skill is loaded and invoked by
-> the research-explorer subagent. Primary agent/coordinator dispatches
-> research-explorer with a search intent description; research-explorer
-> loads paper-search skill and executes the appropriate mode. Direct
-> invocation by primary agent via skill tool is NOT the intended usage
-> pattern — it only applies in Path 1 (Quick Lookup) where the primary
-> agent is the research agent itself and uses paper-search for a single
-> factual lookup.
+paper-search 是文献检索与下载的 skill。标准调用方式：经 research-explorer
+subagent 调用（research-explorer 管理搜索策略 + 跨库去重）。搜索与下载脚本在
+.aether/skills/paper-search/ 下，经 `uv run` 执行。
+
+（research-explorer 仍是标准搜索接口，但不再用禁止性语言限制其他调用方式。）
 
 ## Invocation Protocol
 
 External skills/agents describe **search intent + domain** only (e.g. "search
 hep-ph dark matter", "find papers on cancer immunotherapy"). paper-search
-internally selects the appropriate database(s) and modes. Do NOT specify
-Mode 1b/1c/1d from outside — paper-search routes automatically.
-
-**Path 1 (Quick Lookup)**: Primary research agent directly invokes paper-search
-skill for a single factual question. No subagent dispatch.
-
-**Path 2/3 (Literature review / Research project)**: Coordinator dispatches
-research-explorer subagent. research-explorer loads paper-search skill and
-executes searches. Coordinator does NOT directly invoke paper-search.
+internally selects the appropriate database(s) and modes.
 
 ## Mode 1: Multi-Database Search
 
@@ -148,7 +132,22 @@ uv run .aether/skills/paper-search/download_paper.py [options]
   meta.json           # Paper metadata
 ```
 
-**index.json** (in output root) tracks all downloads with fields:
+**registry.json** (in output root) tracks all downloads for anti-fabrication closed loop.
+Each successful download appends an entry with fields:
+
+- `id` — arXiv ID or DOI
+- `type` — "arxiv" | "doi"
+- `title` — Paper title
+- `authors` — Authors
+- `year` — Publication year
+- `file` — Downloaded filename/subdirectory
+- `downloaded_at` — ISO 8601 timestamp
+
+Dedup: by `id` — if already registered, skip.
+
+This enables check_sources.py to verify: citation `[src:2305.12345]` → registry.json has `id=2305.12345` → `literatures/2305.12345.pdf` exists. No download file = fabrication risk.
+
+**index.json** (in output root) also tracks downloads with fields:
 
 - `has_source` — Whether source tarball was extracted
 - `source_files` — List of .tex/.bib files found
@@ -231,12 +230,10 @@ Use webfetch to retrieve overview pages. alphaxiv overview provides: Key Finding
 
 If alphaxiv overview is unavailable, fallback to arXiv abstract from search results.
 
-> External skills/agents should delegate to paper-search rather than calling alphaxiv directly.
-
 ## Usage Decision Flow
 
 1. **Search** → Use Mode 1 (select database by domain)
-2. **Download** → Use Mode 2 (source-first by default)
+2. **Download** → Use Mode 2 (source-first by default, writes registry.json)
 3. **Understand** → Use alphaxiv web overview (internal) for structured summary
 4. **Extract** → Use Mode 3 (requires .bib from Mode 2 download)
 5. **Discover** → Use Mode 4 (strictly limited, depth ≤1)
@@ -244,11 +241,7 @@ If alphaxiv overview is unavailable, fallback to arXiv abstract from search resu
 
 ## Default Download Directory
 
-| Path | Directory                                    |
-| ---- | -------------------------------------------- |
-| 1    | .aether/literatures                          |
-| 2    | .aether/research/notepads/<slug>/literatures |
-| 3    | .aether/research/literatures                 |
+`.aether/research/literatures` — shared across all phases (path unchanged).
 
 ## Dependencies
 

@@ -22,15 +22,13 @@ permission:
   skill: allow
   external_directory: ask
 fallback_models: []
-mcp:
-  research-state: true
 ---
 
 <system-reminder>
 
 # HARD CONSTRAINTS
 
-PERMITTED: read/glob/grep any file; edit/write within .aether/research (enforced by permission rules); websearch/webfetch; codesearch; question; skill; bash (full access); MCP (research-state).
+PERMITTED: read/glob/grep any file; edit/write within .aether/research (enforced by permission rules); websearch/webfetch; codesearch; question; skill; bash (full access).
 
 FORBIDDEN: edit/write outside .aether/research (enforced by permission rules — permission system blocks these operations). HARD CONSTRAINT: MUST NOT use bash commands to write files outside .aether/research. The permission rules only restrict write/edit tools — bash is not restricted. You MUST self-enforce this constraint and only write files within .aether/research.
 
