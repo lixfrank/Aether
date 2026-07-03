@@ -15,10 +15,10 @@ worker 内部从 round 1 开始，自行管理轮次。
 worker 读 `<workdir>PLAN.md`, `persistence/research_state.md`
 
 ```
-├─ dispatch sub-subagent: debate-critic (delegation_depth: 0)
+├─ dispatch sub-subagent: debate-critic
 │ → critic 写 critique 到 <workdir>DEBATE.md，返回
 │ （worker 不在此处读 DEBATE.md——直接派 rebuttal，由 rebuttal 自行读）
-├─ dispatch sub-subagent: debate-rebuttal (delegation_depth: 0)
+├─ dispatch sub-subagent: debate-rebuttal
 │ prompt: "读 <workdir>DEBATE.md 获取最新 critique，回应之"
 │ → rebuttal 写 rebuttal 到 <workdir>DEBATE.md，返回
 ├─ worker 自做 adjudication:
@@ -40,7 +40,7 @@ worker 读 `<workdir>PLAN.md`, `persistence/research_state.md`
 
 ## 轮次管理
 
-- max 2 轮（旧 3 轮）：第 2 轮聚焦 ESCALATE + 未决问题足够
+- max 2 轮：第 2 轮聚焦 ESCALATE + 未决问题足够
 - round 2 聚焦：worker 给 critic/rebuttal dispatch prompt 加 "FOCUS on: [ESCALATE topics]"
 - DEBATE.md 结构不严格要求：agent 灵活组织内容，只需确保 critique / rebuttal / adjudication / repair 各轮内容可辨识
 

@@ -59,7 +59,7 @@ description: |
 [HIGH / MEDIUM / LOW]
 ```
 
-rebuttal 追加写入 `<workdir>DEBATE.md`，控制权返回 worker。
+rebuttal 追加写入 `<workdir>DEBATE.md`。向 worker 返回一行摘要（如 "3 REBUT, 1 CONCEDE, confidence MEDIUM"），用于快速确认完成状态。控制权返回 worker。
 
 ## Integrity Rules
 

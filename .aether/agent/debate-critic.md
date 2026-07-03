@@ -97,7 +97,7 @@ description: |
 [SOUND / NEEDS_REVISION / NEEDS_MAJOR_REVISION]
 ```
 
-无回传 digest。critique 追加写入 `<workdir>DEBATE.md`，控制权返回 worker。
+critique 追加写入 `<workdir>DEBATE.md`。向 worker 返回一行摘要（如 "2 CONCERN, 1 CRITICAL, overall NEEDS_REVISION"），用于快速确认完成状态。控制权返回 worker。
 
 ## Integrity Rules
 

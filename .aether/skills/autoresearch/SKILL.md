@@ -69,7 +69,7 @@ agent 按 Wave 顺序逐问题处理，每个 question 的处理方式由 agent 
     （无论 Qd 的结果来自原定计划还是 fallback，conclusion 都在 VERIFICATION.md 中）
     若 Qd failed + critical → Qn 不执行（在确定处理列表时已排除为 blocked）
   - 处理 Qn 前（首次或 re-examine）调 `check_time_budget.py <research_state.md_path> Qn reset`（开始/重置计时，见 §时间预算机制）
-  - dispatch local-executor (delegation_depth: 0)，产出 `<workdir>execution/Qn_REASONING.md` + `Qn_EXECUTION.md`
+  - dispatch local-executor，产出 `<workdir>execution/Qn_REASONING.md` + `Qn_EXECUTION.md`
 
 ## 文件验证
 
@@ -80,7 +80,7 @@ agent 按 Wave 顺序逐问题处理，每个 question 的处理方式由 agent 
 
 ## 验证
 
-- dispatch research-verifier (delegation_depth: 0)，产出 `<workdir>execution/Qn_VERIFICATION.md`（含 verdict + evidence + 4 子项判定）
+- dispatch research-verifier，产出 `<workdir>execution/Qn_VERIFICATION.md`（含 verdict + evidence + 4 子项判定）
 
 ## 时间预算机制
 

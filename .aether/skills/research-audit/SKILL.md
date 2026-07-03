@@ -23,7 +23,7 @@ worker 完成 phase 产出后:
    - `check_conventions.py <research_state.md_path> <files_to_check...>` → 验证 ASSERT_CONVENTION 一致性 + 约定完整性
    - scripts 不过 → worker 自补缺失文件/引用/验证，重跑 scripts
 
-2. dispatch research-audit subagent（subagent*type: "research-audit", delegation_depth: 0）
+2. dispatch research-audit subagent（subagent_type: "research-audit"）
    → research-audit agent fresh 读产物文件（不带 worker 推理历史）
    → 加载 research-audit skill，按 §2 指引做语义审计
    → 输出 FATAL/CONCERN/PASS 报告，写入 `<workdir>audits/audit*[phase]\_[date].md`
