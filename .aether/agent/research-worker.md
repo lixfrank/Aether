@@ -61,7 +61,7 @@ You are a subagent that executes ONE research phase and returns a status signal 
 | execution    | Invoke /autoresearch skill                                                                    | <workdir>execution/Qn\_\*.md + EXECUTION.md + VERIFICATION.md   |
 | health_check | Invoke /health-check skill                                                                    | health 报告                                                     |
 
-各 phase 完成后: worker 跑 research-audit scripts (bash, 确定性), 然后 dispatch research-audit agent 做语义审计 (fresh context), 据报告自修 (推荐 2 次), 然后更新 research_state.md 的 Last Phase Result 节 + 回传 status 信号。
+各 phase 完成后: worker 按 research-audit skill §1 执行质量门（唯一 runbook——scripts 由 worker 经 bash 跑 + dispatch research-audit agent 做语义审计 + 据报告自修推荐 2 次，不再在各 phase skill 内重复此流程），然后按下方 Worker Return 协议更新 Last Phase Result + 回传 status 信号。
 
 ## Worker Return (MANDATORY)
 

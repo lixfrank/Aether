@@ -121,25 +121,12 @@ Classify papers into a structured landscape:
   （agent 据发现可灵活更新其他节，不限于以上推荐）
 - 若回写了 analysis.md，在 Phase History 注明 "analysis.md updated by landscape"
 
-### Step 8: 质量门
+### Step 8: 质量门与回传（worker 协议）
 
-1. worker 跑 scripts（bash，确定性）:
-   - `check_artifacts.py <research_state.md> <workdir>landscape_map.md` → 验证文件存在非空
-   - `check_sources.py <workdir>landscape_map.md` → 验证 landscape_map.md 中 [src:id] 引用都有下载文件
-   - 不过 → worker 自补，重跑 scripts
-2. worker dispatch research-audit agent（fresh context，避免 self-review bias）:
-   - sub-subagent 读 `<workdir>landscape_map.md`，按以下方向审:
-     学派分类是否准确 / 时间线是否完整 / 争议标注是否有据 / 覆盖度是否充分
-   - 输出 FATAL/CONCERN/PASS 报告
-3. worker 读报告:
-   - PASS → 通过
-   - CONCERN/FATAL → 自修（推荐 2 次），修后重新 dispatch 审计 sub-subagent
-   - 严重问题（无法自修）→ 须写明原因，写入 Last Phase Result issues
+完成 Step 1-7 后，质量门与回传由 worker 统一执行，不在本 skill 重复：
 
-### Step 9: 回传 status 信号
-
-更新 research_state.md 的 Last Phase Result 节 (phase=landscape / status / summary / issues)，
-回传 status 信号 (completed | needs_attention)
+- 质量门按 `research-audit` skill §1 runbook（worker 跑 scripts + dispatch research-audit agent 审 `landscape_map.md`，方向见该 skill §2 对应行 + 自修）
+- 回传按 `research-worker` Worker Return 协议写入 Last Phase Result（phase=landscape / status / summary / issues）+ 回传 status 信号 (completed | needs_attention)
 
 ## Subagent Dispatch
 

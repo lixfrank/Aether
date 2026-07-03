@@ -27,6 +27,7 @@ analysis 是研究起点。澄清研究目标、收集信息、综合分析、�
 
 1. Read `persistence/research_state.md`
    - 存在 → 恢复上下文（Research Goal / Current Understanding / Phase History / Human Directives）
+     - Human Directives：agent 理解意图后自然融入分析，处理后将其标记从 `[pending]` 改为 `[processed×]`（保留可追溯）
    - 不存在 → 新项目，使用 dispatch prompt 中的用户研究 prompt
 
 ### Step 1b: Create slug & workdir (新项目时)
@@ -166,25 +167,12 @@ Q1 → Q2
 [当前要做的事/刚收到的人类指示待办]
 ```
 
-### Step 7: 质量门
+### Step 7: 质量门与回传（worker 协议）
 
-1. worker 跑 scripts（bash，确定性）:
-   - `check_artifacts.py <research_state.md> <workdir>analysis.md` → 验证文件存在非空 + research_state.md 存在
-   - `check_sources.py <workdir>analysis.md` → 验证 analysis.md 中 [src:id] 引用都有下载文件
-   - 不过 → worker 自补，重跑 scripts
-2. worker dispatch research-audit agent（fresh context，避免 self-review bias）:
-   - sub-subagent 读 `<workdir>analysis.md`，按以下方向审:
-     引用是否真支持论断 / 事实是否准确 / gap 识别是否合理 / 领域覆盖是否充分
-   - 输出 FATAL/CONCERN/PASS 报告
-3. worker 读报告:
-   - PASS → 通过
-   - CONCERN/FATAL → 自修（推荐 2 次），修后重新 dispatch 审计 sub-subagent
-   - 严重问题（无法自修）→ 须写明原因，写入 Last Phase Result issues
+完成 Step 1-6 后，质量门与回传由 worker 统一执行，不在本 skill 重复：
 
-### Step 8: 回传 status 信号
-
-更新 research_state.md 的 Last Phase Result 节 (phase=analysis / status / summary / issues)，
-回传 status 信号 (completed | needs_attention)
+- 质量门按 `research-audit` skill §1 runbook（worker 跑 scripts + dispatch research-audit agent 审 `analysis.md`，方向见该 skill §2 对应行 + 自修）
+- 回传按 `research-worker` Worker Return 协议写入 Last Phase Result（phase=analysis / status / summary / issues）+ 回传 status 信号 (completed | needs_attention)
 
 ## Subagent Dispatch
 

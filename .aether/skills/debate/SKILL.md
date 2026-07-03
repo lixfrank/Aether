@@ -33,8 +33,9 @@ worker 读 `<workdir>PLAN.md`, `persistence/research_state.md`
 │ 写 repair 到 <workdir>DEBATE.md
 ├─ worker 判断是否需下一轮:
 │ 有 ESCALATE 且 round < 2 → worker 内部继续下一轮
-│ round 2 仍有 ESCALATE → 写 Last Phase Result (phase=debate / status=needs_attention / summary / issues=[ESCALATE topics]), 回传 needs_attention
-│ 无 ESCALATE → 写 Last Phase Result (phase=debate / status=completed / summary / issues=[]), 回传 completed
+│ round 2 仍有 ESCALATE → 判定 status=needs_attention, issues=[ESCALATE topics]
+│ 无 ESCALATE → 判定 status=completed, issues=[]
+│ （此为编排逻辑的初判；最终 Last Phase Result 由 worker 在质量门后写入，见下方"质量门与回传"节）
 ```
 
 ## 轮次管理
@@ -47,23 +48,10 @@ worker 读 `<workdir>PLAN.md`, `persistence/research_state.md`
 
 debate 完成（needs_attention 或 completed）后在 pause 点呈现裁决摘要，人类可询问 / 讨论 / 指示
 
-## 质量门
+## 质量门与回传（worker 协议）
 
-1. worker 跑 scripts（bash，确定性）:
-   - `check_artifacts.py <research_state.md> <workdir>DEBATE.md` → 验证 DEBATE.md 存在非空
-   - 若修订了 PLAN.md → check_artifacts.py 验证 PLAN.md 存在非空
-   - 不过 → worker 自补，重跑 scripts
-2. worker dispatch research-audit agent（fresh context，避免 self-review bias）:
-   - sub-subagent 读 `<workdir>DEBATE.md` + 修订后的 PLAN.md，按以下方向审:
-     critique 是否覆盖关键 debate topics / rebuttal 是否回应所有 critique points /
-     adjudication 裁决是否合理 / repair 修订是否正确
-   - 输出 FATAL/CONCERN/PASS 报告
-3. worker 读报告:
-   - PASS → 通过
-   - CONCERN/FATAL → 自修（推荐 2 次），修后重新 dispatch 审计 sub-subagent
-   - 严重问题（无法自修）→ 须写明原因，写入 Last Phase Result issues
+编排完成后，质量门与回传由 worker 统一执行，不在本 skill 重复：
 
-## 回传
-
-更新 research_state.md 的 Last Phase Result 节 (phase=debate / status / summary / issues)，
-回传 status 信号 (completed | needs_attention)
+- 质量门按 `research-audit` skill §1 runbook（worker 跑 scripts + dispatch research-audit agent 审 `DEBATE.md` + 修订后的 `PLAN.md`，方向见该 skill §2 对应行 + 自修）
+- 上方编排逻辑判定的 status（ESCALATE → needs_attention / 无 ESCALATE → completed）作为初判；质量门若发现严重问题可上调为 needs_attention
+- 回传按 `research-worker` Worker Return 协议写入 Last Phase Result（phase=debate / status / summary / issues）+ 回传 status 信号 (completed | needs_attention)

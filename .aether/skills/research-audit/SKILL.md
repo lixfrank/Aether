@@ -3,13 +3,16 @@ name: research-audit
 owner: research
 description: |
   质量保证 skill（结构 checker 脚本 + 语义审计指引）。
-  scripts/ 为确定性检查（worker 经 bash 调用）。
-  SKILL.md 为语义审计指引（research-audit agent 加载，fresh context 避免 self-review bias）。
+  §1 调用流程为 worker runbook（worker 经 bash 跑 scripts + dispatch audit agent）。
+  §2 语义审计方向为 research-audit agent 加载（fresh context 避免 self-review bias）。
+  scripts/ 为确定性检查。
 ---
 
 # Research Audit — 结构 checker + 语义审计
 
 ## §1 调用流程
+
+> 本节是质量门的唯一 runbook。各 phase skill 不再重复此流程——worker 完成 phase 产出后直接按本节执行（scripts 由 worker 经 bash 跑，语义审计 dispatch research-audit agent）。
 
 worker 完成 phase 产出后:
 
@@ -48,6 +51,7 @@ worker 完成 phase 产出后:
 | analysis.md                    | 引用是否真支持论断; 事实是否准确; gap 识别是否合理; 领域覆盖是否充分                                                         |
 | landscape_map.md               | 学派分类是否准确; 时间线是否完整; 争议标注是否有据; 覆盖度是否充分                                                           |
 | framing_reasoning.md + PLAN.md | 推理链是否完整(无跳步); 问题是否可证伪; 方法是否适用; 依赖图是否无环; 验收标准是否充分; tractability confidence 是否符合规则 |
+| DEBATE.md + 修订后的 PLAN.md   | critique 是否覆盖关键 debate topics; rebuttal 是否回应所有 critique points; adjudication 裁决是否合理; repair 修订是否正确   |
 | execution 汇总                 | 结论是否由验证支持; 验证质量是否充分; 跨问题一致性; Failed Attempts 是否诚实记录                                             |
 
 注：此表为方向性指引，非 rigid checklist。sub-subagent 应据产物具体内容自主判断需重点审计什么。
@@ -71,6 +75,12 @@ worker 完成 phase 产出后:
 ```
 
 ## §3 scripts 规格
+
+> **路径参数约定**（避免歧义）：
+>
+> - `check_artifacts.py`：expected_files 传**相对 workdir 的文件名**（如 `PLAN.md`）。脚本自行解析 research_state.md 的 Active Workdir 并拼接，不要传带 workdir 前缀的路径（否则路径翻倍）。
+> - `check_sources.py` / `check_conventions.py`：输入文件传**从 research root 可解析的路径**（即 `<workdir>/<file>`，如 `notepads/slug/framing_reasoning.md`）。这两个脚本直接 `Path(f).read_text()`，不自动解析 workdir。
+> - worker 从各 phase skill 的 Output 节获知文件名，结合 research_state.md 的 Active Workdir 拼出上述路径。
 
 ### check_artifacts.py
 

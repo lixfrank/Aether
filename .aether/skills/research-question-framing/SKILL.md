@@ -36,7 +36,7 @@ framing_reasoning.md 可被后续 phase 追加修正（append 修正说明，不
 1. Read `persistence/research_state.md` + `<workdir>analysis.md`（gap 来源）+ `<workdir>landscape_map.md`（若存在，补充参考）
    - 获取 Research Goal / Current Understanding / Failed Attempts / Human Directives
    - Failed Attempts 作为 framing 约束（已知失败方法不再选为 solution path）
-   - Human Directives 作为人类增删/调整指示
+   - Human Directives 作为人类增删/调整指示——agent 理解意图后自然融入 framing 推理，处理后将其标记从 `[pending]` 改为 `[processed×]`（保留可追溯）
 
 ### Step 2: Select Gaps & Construct Significance Argument
 
@@ -322,26 +322,12 @@ Write to `<workdir>PLAN.md`. Claims section includes derived_from/tractability/q
   / Dependency Graph（写入 Q1→Q2→Q3）/ Phase History 追加 framing✓
   （agent 据发现可灵活更新其他节，不限于以上推荐）
 
-### Step 11: 质量门
+### Step 11: 质量门与回传（worker 协议）
 
-1. worker 跑 scripts（bash，确定性）:
-   - `check_artifacts.py <research_state.md> <workdir>PLAN.md <workdir>research_questions.md <workdir>framing_reasoning.md` → 验证 3 个文件存在非空
-   - `check_sources.py <workdir>framing_reasoning.md` → 验证 [src:id] 引用都有下载文件
-   - `check_conventions.py <research_state.md> <workdir>PLAN.md <workdir>framing_reasoning.md` → 验证 ASSERT_CONVENTION 一致性
-   - 不过 → worker 自补，重跑 scripts
-2. worker dispatch research-audit agent（fresh context，避免 self-review bias）:
-   - sub-subagent 读 framing_reasoning.md + PLAN.md，按以下方向审:
-     推理链是否完整(无跳步) / 问题是否可证伪 / 方法是否适用 / 依赖图是否无环 / 验收标准是否充分
-   - 输出 FATAL/CONCERN/PASS 报告
-3. worker 读报告:
-   - PASS → 通过
-   - CONCERN/FATAL → 自修（推荐 2 次），修后重新 dispatch 审计 sub-subagent
-   - 严重问题（无法自修）→ 须写明原因，写入 Last Phase Result issues
+完成 Step 1-10 后，质量门与回传由 worker 统一执行，不在本 skill 重复：
 
-### Step 12: 回传 status 信号
-
-更新 research_state.md 的 Last Phase Result 节 (phase=framing / status / summary / issues)，
-回传 status 信号 (completed | needs_attention)
+- 质量门按 `research-audit` skill §1 runbook（worker 跑 scripts + dispatch research-audit agent 审 `framing_reasoning.md` + `PLAN.md`，方向见该 skill §2 对应行 + 自修）
+- 回传按 `research-worker` Worker Return 协议写入 Last Phase Result（phase=framing / status / summary / issues）+ 回传 status 信号 (completed | needs_attention)
 
 ## Integrity
 
