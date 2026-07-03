@@ -4,6 +4,8 @@
 > → skill name 保留 `autoresearch`（不改名），精简
 > 对应设计文档 §6（执行：结构化但可灵活调度）
 
+> **后续增强**：per-question 固定轮数终止（cycle max 3 + 文件验证 max 2）已被时间预算机制替换，见 [newlayer-6.1](newlayer-6.1-time-budget.md)（min/max 工作时间 + check_time_budget.py reset/check + 三档 zone 决策）。本文档中涉及 cycle / max 2 的描述以 newlayer-6.1 为准。
+
 ---
 
 ## 修改原因与设计依据
