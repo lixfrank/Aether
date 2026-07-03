@@ -33,7 +33,7 @@ SESSION.headers.update({"User-Agent": "Aether-PaperDownloader/2.0"})
 def update_registry(
     literatures_dir, paper_id, paper_type, title, authors, year, filename
 ):
-    """Append entry to literatures/registry.json (anti-fabrication closed loop).
+    """Append entry to literatures/registry.json for source verification.
 
     Enables check_sources.py to verify: citation [src:id] → registry has id → file exists.
     """
@@ -44,6 +44,14 @@ def update_registry(
         registry = {"entries": []}
     if any(e.get("id") == paper_id for e in registry.get("entries", [])):
         return
+    if isinstance(authors, str):
+        authors = [authors] if authors else []
+    elif not isinstance(authors, list):
+        authors = list(authors) if authors else []
+    try:
+        year = int(year)
+    except (ValueError, TypeError):
+        pass
     registry.setdefault("entries", []).append(
         {
             "id": paper_id,
@@ -310,6 +318,7 @@ def download_by_arxiv_id(
     index = load_index(output_dir)
     index.append(entry)
     save_index(index, output_dir)
+    file_path = f"{paper_dir.name}/{pdf_name}" if pdf_name else paper_dir.name
     update_registry(
         output_dir,
         arxiv_id,
@@ -317,7 +326,7 @@ def download_by_arxiv_id(
         paper.get("title", ""),
         paper.get("authors", ""),
         paper.get("year", ""),
-        paper_dir.name,
+        file_path,
     )
     print(f"  [ok] {arxiv_id} → {paper_dir.name}")
     return paper_dir.name
@@ -456,7 +465,7 @@ def download_by_doi(
         paper.get("title", ""),
         paper.get("authors", ""),
         paper.get("year", ""),
-        paper_dir.name,
+        f"{paper_dir.name}/paper.pdf",
     )
     print(f"  [ok] DOI {doi} → {paper_dir.name}")
     return paper_dir.name

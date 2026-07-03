@@ -5,7 +5,7 @@ description: |
   Multi-database paper search, download (source-first), citation extraction,
   and citation discovery (strictly limited). Four modes: (1) Multi-Database
   Search, (2) Paper Download, (3) Citation Extraction, (4) Citation Discovery.
-  Downloads write to literatures/registry.json for anti-fabrication closed loop.
+  Downloads write to literatures/registry.json for source verification.
 ---
 
 # paper-search Skill
@@ -13,8 +13,6 @@ description: |
 paper-search 是文献检索与下载的 skill。标准调用方式：经 research-explorer
 subagent 调用（research-explorer 管理搜索策略 + 跨库去重）。搜索与下载脚本在
 .aether/skills/paper-search/ 下，经 `uv run` 执行。
-
-（research-explorer 仍是标准搜索接口，但不再用禁止性语言限制其他调用方式。）
 
 ## Invocation Protocol
 
@@ -132,7 +130,7 @@ uv run .aether/skills/paper-search/download_paper.py [options]
   meta.json           # Paper metadata
 ```
 
-**registry.json** (in output root) tracks all downloads for anti-fabrication closed loop.
+**registry.json** (in output root) tracks all downloads for source verification.
 Each successful download appends an entry with fields:
 
 - `id` — arXiv ID or DOI
@@ -140,12 +138,12 @@ Each successful download appends an entry with fields:
 - `title` — Paper title
 - `authors` — Authors
 - `year` — Publication year
-- `file` — Downloaded filename/subdirectory
+- `file` — Relative path from literatures/ to downloaded file (e.g. `2305.12345/paper.pdf`)
 - `downloaded_at` — ISO 8601 timestamp
 
 Dedup: by `id` — if already registered, skip.
 
-This enables check_sources.py to verify: citation `[src:2305.12345]` → registry.json has `id=2305.12345` → `literatures/2305.12345.pdf` exists. No download file = fabrication risk.
+This enables check_sources.py to verify: citation `[src:2305.12345]` → registry.json has `id=2305.12345` → `literatures/2305.12345/` exists.
 
 **index.json** (in output root) also tracks downloads with fields:
 
@@ -241,7 +239,7 @@ If alphaxiv overview is unavailable, fallback to arXiv abstract from search resu
 
 ## Default Download Directory
 
-`.aether/research/literatures` — shared across all phases (path unchanged).
+`.aether/research/literatures` — shared across all phases.
 
 ## Dependencies
 
