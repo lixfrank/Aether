@@ -4,10 +4,10 @@
 #!/usr/bin/env python3
 """check_time_budget.py — per-question time budget for autoresearch.
 
-Single control for "how long to keep trying on a question". Replaces fixed
-retry caps (cycle max 3, file-verification max 2). autoresearch calls `reset`
-when beginning work on a question (or re-examining a resolved one), and `check`
-after every subagent output verification (file verification or verdict).
+Tracks elapsed time per question. autoresearch calls `reset` when beginning
+work on a question, and `check` after every subagent output verification.
+The agent reads the time facts and decides what to do — this script does
+not make decisions.
 
 Usage:
   uv run check_time_budget.py <research_state.md_path> <qid> reset [--min M] [--max M]
@@ -17,10 +17,8 @@ Usage:
 
 Output (JSON):
   reset: {"qid","started_at","action":"reset","min_minutes","max_minutes"}
-  check: {"qid","started_at","elapsed_minutes","zone","action",
-          "remaining_to_min_minutes","remaining_to_max_minutes","min_minutes","max_minutes"}
-    zone:   below_min | between | above_max | not_started
-    action: must_continue | self_judge | hard_stop | error
+  check: {"qid","started_at","elapsed_minutes","min_minutes","max_minutes"}
+    (started_at/elapsed_minutes null if not reset yet)
 
 Config: --min/--max passed at `reset` are stored per-question in .timing.json.
 `check` reads them from there; falls back to script defaults if absent.
@@ -52,11 +50,8 @@ def parse_active_workdir(content):
 def timing_path(state_path):
     content = state_path.read_text()
     workdir_rel = parse_active_workdir(content)
-    if not workdir_rel:
-        return None
     research_root = state_path.parent.parent
-    workdir = research_root / workdir_rel
-    return workdir, workdir / "execution" / TIMING_FILENAME
+    return (research_root / workdir_rel) / "execution" / TIMING_FILENAME
 
 
 def load_timing(tfile):
@@ -84,21 +79,16 @@ def resolve_budget(entry):
 
 
 def do_reset(state_path, qid, min_minutes, max_minutes):
-    workdir, tfile = timing_path(state_path)
-    if not tfile:
-        print(json.dumps({"qid": qid, "action": "error", "error": "no Active Workdir"}))
-        return
-    if (
-        min_minutes is not None
-        and max_minutes is not None
-        and min_minutes > max_minutes
-    ):
+    tfile = timing_path(state_path)
+    eff_min = min_minutes if min_minutes is not None else DEFAULT_MIN_MINUTES
+    eff_max = max_minutes if max_minutes is not None else DEFAULT_MAX_MINUTES
+    if eff_min > eff_max:
         print(
             json.dumps(
                 {
                     "qid": qid,
                     "action": "error",
-                    "error": f"min({min_minutes}) > max({max_minutes})",
+                    "error": f"min({eff_min}) > max({eff_max})",
                 }
             )
         )
@@ -112,25 +102,21 @@ def do_reset(state_path, qid, min_minutes, max_minutes):
         entry["max_minutes"] = max_minutes
     questions[qid] = entry
     save_timing(tfile, data)
-    final_min, final_max = resolve_budget(entry)
     print(
         json.dumps(
             {
                 "qid": qid,
                 "started_at": entry["started_at"],
                 "action": "reset",
-                "min_minutes": final_min,
-                "max_minutes": final_max,
+                "min_minutes": eff_min,
+                "max_minutes": eff_max,
             }
         )
     )
 
 
 def do_check(state_path, qid):
-    workdir, tfile = timing_path(state_path)
-    if not tfile:
-        print(json.dumps({"qid": qid, "action": "error", "error": "no Active Workdir"}))
-        return
+    tfile = timing_path(state_path)
     data = load_timing(tfile)
     questions = data.get("questions", {})
     entry = questions.get(qid)
@@ -139,53 +125,40 @@ def do_check(state_path, qid):
             json.dumps(
                 {
                     "qid": qid,
-                    "zone": "not_started",
-                    "action": "error",
-                    "error": "no timing record, call reset first",
+                    "started_at": None,
+                    "elapsed_minutes": None,
+                    "min_minutes": DEFAULT_MIN_MINUTES,
+                    "max_minutes": DEFAULT_MAX_MINUTES,
                 }
             )
         )
         return
 
     min_m, max_m = resolve_budget(entry)
-    if min_m > max_m:
-        print(
-            json.dumps(
-                {"qid": qid, "action": "error", "error": f"min({min_m}) > max({max_m})"}
-            )
-        )
-        return
-
     started = entry["started_at"]
     try:
         start_dt = datetime.fromisoformat(started)
     except ValueError:
-        print(json.dumps({"qid": qid, "action": "error", "error": "bad started_at"}))
+        print(
+            json.dumps(
+                {
+                    "qid": qid,
+                    "started_at": started,
+                    "elapsed_minutes": None,
+                    "min_minutes": min_m,
+                    "max_minutes": max_m,
+                }
+            )
+        )
         return
+
     elapsed_sec = (datetime.now(timezone.utc) - start_dt).total_seconds()
-    min_sec = min_m * 60
-    max_sec = max_m * 60
-
-    if elapsed_sec < min_sec:
-        zone, action = "below_min", "must_continue"
-    elif elapsed_sec < max_sec:
-        zone, action = "between", "self_judge"
-    else:
-        zone, action = "above_max", "hard_stop"
-
-    rem_min = round((min_sec - elapsed_sec) / 60, 1)
-    rem_max = round((max_sec - elapsed_sec) / 60, 1)
-
     print(
         json.dumps(
             {
                 "qid": qid,
                 "started_at": started,
                 "elapsed_minutes": round(elapsed_sec / 60, 1),
-                "zone": zone,
-                "action": action,
-                "remaining_to_min_minutes": rem_min,
-                "remaining_to_max_minutes": rem_max,
                 "min_minutes": min_m,
                 "max_minutes": max_m,
             }

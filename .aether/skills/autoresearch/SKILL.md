@@ -29,8 +29,6 @@ description: |
 ## Terminology
 
 - **Wave** = topologically sorted dependency batch (from PLAN.md §Execution Plan)
-- **time budget** = per-question min/max 工作时间预算（默认 min=60min, max=1440min，可经 reset --min/--max 覆盖）
-- **zone** = check_time_budget.py 判定的时间状态：`below_min` / `between` / `above_max`
 - **Qn** = question identifier from PLAN.md
 
 ## Procedure
@@ -41,9 +39,8 @@ description: |
 2. Read `<workdir>PLAN.md` — extract §Execution Plan（per-Wave, method, tools, falsification test, Dependencies）
 3. Determine Waves from PLAN.md §Execution Plan
 4. Sort within Wave by tractability confidence (HIGH > MEDIUM > LOW)
-5. 若 Human Directives 有调度类指示（优先做/暂缓/完成后暂停）: 调整 Wave 调度（见 §调度类 Human Directives）
-6. 跳过 resolved/failed/blocked 的 question，只处理 open 的
-7. 执行状态记录在 research_state.md 的 Questions/Claims status 字段
+5. 若 Human Directives 有调度类指示（优先做/暂缓/完成后暂停）: 据指示调整 Wave 调度。若指示与依赖冲突（如"优先做 Q3"但 Q3 依赖未满足），拒绝并解释
+6. 读每个 question 的 status，判断哪些需要处理。已 resolved 的跳过；其他据 status 和上下文判断是否需要执行
 
 ### Step 2: ENVIRONMENT.md 责任
 
@@ -55,7 +52,7 @@ execution worker 负责 `persistence/ENVIRONMENT.md`：
 4. 增量更新 ENVIRONMENT.md（不覆盖已有信息，追加新发现）
 5. 每个 question 执行前可重读 ENVIRONMENT.md（前一 question 可能更新了环境）
 
-### Step 3: 执行原则（取代固定 workflow）
+### Step 3: 执行原则
 
 以下不是固定施工步骤，而是 agent 必须遵守的原则与必须做的事。
 agent 按 Wave 顺序逐问题处理，每个 question 的处理方式由 agent 据情况灵活决定，
@@ -63,80 +60,79 @@ agent 按 Wave 顺序逐问题处理，每个 question 的处理方式由 agent 
 
 ## 执行
 
-- 对每个 open question Qn（按 Wave 顺序）:
-  - 读 PLAN.md §Execution Plan 获取 Qn 的 method, tools, falsification test
-  - 依赖处理: 对每个 dependency Qd，读 `<workdir>execution/Qd_VERIFICATION.md` 获取完整 conclusion
-    （无论 Qd 的结果来自原定计划还是 fallback，conclusion 都在 VERIFICATION.md 中）
-    若 Qd failed + critical → Qn 不执行（在确定处理列表时已排除为 blocked）
-  - 处理 Qn 前（首次或 re-examine）调 `check_time_budget.py <research_state.md_path> Qn reset`（开始/重置计时，见 §时间预算机制）
-  - dispatch local-executor，产出 `<workdir>execution/Qn_REASONING.md` + `Qn_EXECUTION.md`
+对每个需要处理的 question Qn（按 Wave 顺序）:
+
+- 读 PLAN.md §Execution Plan 获取 Qn 的 method, tools, falsification test
+- 依赖处理: 对每个 dependency Qd，读 `<workdir>execution/Qd_VERIFICATION.md` 获取 conclusion。
+  据 conclusion 内容和 Qd 的状态判断当前 question 能否继续——Qd 有可用 conclusion 则用作前提；
+  Qd 未解决且是关键依赖则判断是否有替代路径，没有则暂停说明情况
+- 处理 Qn 前调 `uv run check_time_budget.py <research_state.md_path> Qn reset`（开始计时，可选 `--min M --max M` 覆盖默认 60/1440 分钟）
+- dispatch local-executor，产出 `<workdir>execution/Qn_REASONING.md` + `Qn_EXECUTION.md`
 
 ## 文件验证
 
 - 任何 subagent 产出后，验证输出文件存在且非空后再继续
-  （check_artifacts 验证 Qn_REASONING.md + Qn_EXECUTION.md；check_verification 验证 Qn_VERIFICATION.md 非空 + 含 verdict）
-  产出文件不合格 → 调 check_time_budget.py check 据 zone 决策（见 §时间预算决策）；
-  重跑对应 subagent 时须调整 dispatch prompt（指出上次产出问题、要求实质内容），不得机械重复
+  （check_artifacts 验证 Qn_REASONING.md + Qn_EXECUTION.md + Qn_VERIFICATION.md 存在非空；
+  check_verification 在标记 resolved 后验证 ver 路径指向的验证文件有效）
+  产出文件不合格 → 重跑对应 subagent（调整 dispatch prompt 指出上次产出问题，不得机械重复）
 
 ## 验证
 
 - dispatch research-verifier，产出 `<workdir>execution/Qn_VERIFICATION.md`（含 verdict + evidence + 4 子项判定）
+- 每次 subagent 产出后调 `uv run check_time_budget.py <research_state.md_path> Qn check` 获取已用时间
 
-## 时间预算机制
+## 时间预算
 
-每个 question 有独立的 min/max 工作时间预算，是"该 question 上还能试多久"的单一控制。check_time_budget.py 位于 `autoresearch/scripts/`，由 worker 经 bash 在执行期间直接调用（reset/check），不经 research-audit 流程（research-audit 是 post-phase 质量门 + 语义审计，不含时间检查）。
+每个 question 有 min/max 工作时间预算（默认 min=60min, max=1440min，可经 reset --min/--max 覆盖）。
+check_time_budget.py 位于 `autoresearch/scripts/`，由 worker 经 bash 在执行期间直接调用（reset/check），不经 research-audit 流程。
 
-- **处理 Qn 前（首次或 re-examine）**：`uv run check_time_budget.py <research_state.md_path> Qn reset [--min M --max M]`（归零计时；M 为分钟，默认 60/1440；--min/--max 由脚本内部持久化供 check 读取）
-- **每次 subagent 产出验证后（文件验证 或 verdict 验证）**：`uv run check_time_budget.py <research_state.md_path> Qn check`（返回 zone + action + remaining 时间余量）
-- 据 zone 决策是否继续 retry（见 §时间预算决策）
+- 处理 Qn 前调 `reset` 开始计时
+- 每次 subagent 产出后调 `check` 获取已用时间
+- 在 min 时间之前，不要因为失败而停止——你还没有充分探索
+- 接近 max 时间时，如果仍然没有进展，暂停并告诉人类你尝试了什么
+- 之间则据你对问题和失败原因的理解自行判断是否继续
 
-## 时间预算决策
+## 据 verdict 决策
 
-适用于**任何失败点**（文件验证不合格 / verdict FAIL/PARTIAL）——失败后调 check_time_budget.py check，据 zone 决策：
+- PASS → Qn 标 resolved，更新 `ver` 字段指向 `<workdir>execution/Qn_VERIFICATION.md`，写 conclusion 到 research_state.md
+- 不是 PASS → 读 verdict 的失败原因和 evidence，判断：
+  - 有未试的方向或可调整的方法 → 重跑 local-executor（调整 prompt 指出问题）
+  - 根本性问题（方法不适用 / claim 与已知定律矛盾）→ 暂停（见 §暂停）
+  - 依赖结论不可用 → 判断是否影响当前 question，决定继续/跳过/暂停
+- 当你停止处理某个 question 且未将其标为 resolved 时，将已试方法和失败原因记入 research_state.md 的 Failed Attempts
 
-- **PASS**（仅 verdict 场景）→ Qn status 改 resolved, 更新 `ver` 字段指向 `<workdir>execution/Qn_VERIFICATION.md`, 写 conclusion 到 research_state.md（PASS 无论 zone 即完成）
-- **失败**（文件验证不合格 / verdict FAIL/PARTIAL）→ 据 zone：
-  - **below_min (must_continue)** — 不得停止。调整方法或 dispatch prompt 后重跑对应 subagent。
-    即使 agent 自感无解，仍须探索至 min_time（最小时间控制必要探索时间）。不得机械重复相同尝试。
-  - **between (self_judge)** — agent 自主判断能否找到正确道路（见 §自判）：
-    - 有可行路径 → 重跑对应 subagent（修订方法 / 调整 prompt）
-    - 无法找到正确道路 → 停止该问题，写问题分析，回传 needs_attention
-  - **above_max (hard_stop)** — 无需自判，直接停止该问题，写问题分析，回传 needs_attention（最大时间控制工作成本）
-- 需人类决策（如 critical dep 失败无 fallback）→ 写 Last Phase Result (status=needs_attention), 回传 needs_attention
+## 暂停
 
-"重跑对应 subagent"：check_artifacts 失败→重跑 local-executor；check_verification 失败→重跑 research-verifier；verdict FAIL/PARTIAL→重跑 local-executor。
+当你无法在某个 question 上继续推进时：
 
-## 自判（between 区失败时）
+1. 已试方法和失败原因记入 Failed Attempts
+2. 写问题分析到 Last Phase Result（status=needs_attention）：失败模式 / 已试方法 / verification 关键发现 / 建议方向
+3. 回传 needs_attention
 
-agent 在 between 区失败后**自主判断**能否找到正确道路解决该问题——主动寻找是否还有未试的尝试方向（不限于 PLAN.md 预设方法，可在工作过程中自主发现新方向）。
+## Question Status
 
-以下情形倾向停止（非 rigid 规则，agent 据情况权衡）：
-
-- verification 指出根本性问题（claim 与物理/数学定律矛盾 / method 根本不适用）
-- agent 自身判断没有额外的尝试方向
-
-否则继续 retry（修订方法或尝试新方向）。
+- `resolved` = 已验证（必须有 ver 字段指向验证文件，check_verification.py 会检查）
+- 其他 status 由你自行选择准确描述问题状态的标签（如 open/partial/failed/infeasible/...）
+- 原则：不得将未验证的结果标为 resolved
 
 ## 每 Wave 后 audit
 
 - 每个 Wave 完成后，dispatch research-audit agent 检查跨问题一致性
   （同一 Wave 内 question 间的结论是否矛盾、是否基于一致的前提）
-  发现矛盾 → 自修或 pause 问用户
+  发现矛盾 → 自修或暂停问用户
 
 ## 终止
 
-- 无 open question 时自然停止（全部 resolved/blocked）
-- 时间预算超时（between 自判停止 / above_max 硬停）→ 立即暂停整阶段，写问题分析到 Last Phase Result（status=needs_attention），回传 needs_attention，不处理其他 question
+- 无需处理的 question 时自然停止
+- 时间预算超时暂停 → 回传 needs_attention
 
 ## 硬约束
 
-- MUST: 任何 subagent 产出后验证输出文件存在且非空（check_artifacts + check_verification）
+- MUST: 任何 subagent 产出后验证输出文件存在且非空（check_artifacts）；标记 resolved 后验证 ver 路径有效（check_verification）
 - MUST: resolved claim 前确保 check_sources + check_verification 通过（引用有下载文件 + 验证记录含 verdict）
-- MUST: 标记 question resolved 时更新 research_state.md Questions/Claims 的 `status` 为 resolved **并更新 `ver` 字段**指向 `<workdir>execution/Qn_VERIFICATION.md`（check_verification.py 据此验证）
-- MUST: 处理 Qn 前（首次或 re-examine）调 `check_time_budget.py ... reset`，每次 subagent 产出验证后（文件验证或 verdict）调 `check_time_budget.py ... check`，据 zone 决策
-- MUST: below_min 区任何失败时不得停止（须 retry 至 min_time，除非 PASS）；每次 retry 须调整方法或 dispatch prompt，不得机械重复
-- MUST: between 自判停止 / above_max 硬停时，记录已试方法到 research_state.md 的 Failed Attempts（method + 失败原因 + 排除方向），写问题分析到 Last Phase Result（status=needs_attention），立即回传 needs_attention
-- MUST: question failed 时记录到 research_state.md 的 Failed Attempts（method + 失败原因 + 排除方向）
+- MUST: 标记 question resolved 时更新 research_state.md 的 `status` 为 resolved **并更新 `ver` 字段**指向 `<workdir>execution/Qn_VERIFICATION.md`（check_verification.py 据此验证）
+- MUST: 处理 Qn 前调 `uv run check_time_budget.py ... reset`，每次 subagent 产出后调 `uv run check_time_budget.py ... check`
+- MUST: 停止处理某个 question 且未标 resolved 时，记录已试方法到 research_state.md 的 Failed Attempts（method + 失败原因 + 排除方向）
 - MUST: 每 Wave 完成后 dispatch research-audit agent 检查跨问题一致性
 - MUST: execution 完成后做最终 audit + 写 EXECUTION.md + VERIFICATION.md 汇总
 - MUST: 按 PLAN.md 中的 Acceptance Tests 验证，不得简化或降级测试标准（framing 在 PLAN.md 中为每个 question 给出明确的、符合研究要求的 Acceptance Tests，execution 须严格按此验证）
@@ -155,11 +151,11 @@ Read research_state.md 的 Human Directives 中调度类指示:
 
 ## Final Output
 
-1. Write `<workdir>EXECUTION.md` — phase 汇总（per-question 结果: resolved/failed/blocked, conclusion 摘要）
+1. Write `<workdir>EXECUTION.md` — phase 汇总（per-question 结果 + conclusion 摘要）
 2. Write `<workdir>VERIFICATION.md` — phase 汇总（per-question 验证 verdict + evidence 摘要）
-3. Update research_state.md: 推荐更新各 Qn status + Phase History 追加 execution ✓ + Failed Attempts 追加失败方法
-   （agent 据发现可灵活更新其他节，不限于以上推荐；标记 resolved 时必须更新 `ver` 字段）
+3. Update research_state.md: 更新各 Qn status + Phase History 追加 execution ✓ + Failed Attempts 追加失败方法
+   （标记 resolved 时必须更新 `ver` 字段）
 4. dispatch research-audit agent 做最终质量门（审汇总质量、跨问题一致性）
 5. 更新 research_state.md 的 Last Phase Result 节 (phase=execution / status / summary / issues), 回传 status 信号 (completed | needs_attention)
 
-**时间预算暂停（非正常完成）**：between 自判停止 / above_max 硬停时，跳过上述 1-4，直接写问题分析到 Last Phase Result（含：失败模式 / 已试方法 / verification 关键发现 / 建议方向），回传 needs_attention。已 resolved 的 question 结论仍保留在 research_state.md。
+**时间预算暂停（非正常完成）**：跳过上述 1-4，直接写问题分析到 Last Phase Result（含：失败模式 / 已试方法 / verification 关键发现 / 建议方向），回传 needs_attention。已 resolved 的 question 结论仍保留在 research_state.md。

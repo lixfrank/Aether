@@ -4,7 +4,7 @@
 > → skill name 保留 `autoresearch`（不改名），精简
 > 对应设计文档 §6（执行：结构化但可灵活调度）
 
-> **后续增强**：per-question 固定轮数终止（cycle max 3 + 文件验证 max 2）已被时间预算机制替换，见 [newlayer-6.1](newlayer-6.1-time-budget.md)（min/max 工作时间 + check_time_budget.py reset/check + 三档 zone 决策）。本文档中涉及 cycle / max 2 的描述以 newlayer-6.1 为准。
+> **后续增强**：per-question 固定轮数终止（cycle max 3 + 文件验证 max 2）已被时间预算机制替换，见 [newlayer-6.1](newlayer-6.1-time-budget.md)（min/max 工作时间 + check_time_budget.py reset/check + agent 据时间事实自行决策）。本文档中涉及 cycle / max 2 的描述以 newlayer-6.1 为准。
 
 ---
 
@@ -52,7 +52,6 @@
 
 - Wave 拓扑排序（从 PLAN.md 依赖图）
 - 逐问题执行→验证→决策循环
-- executor cycle 计数（max 3）
 - 暂停问用户（critical dep 失败 / 需假设）
 - 输出文件: Qn_REASONING.md / Qn_EXECUTION.md / Qn_VERIFICATION.md / EXECUTION.md / VERIFICATION.md — 路径改为 `<workdir>execution/` 和 `<workdir>`
 
@@ -150,31 +149,29 @@ agent 按 Wave 顺序逐问题处理，每个 question 的处理方式由 agent 
 
 - 对每个 open question Qn（按 Wave 顺序）:
   - 读 PLAN.md §Execution Plan 获取 Qn 的 method, tools, falsification test
-  - 依赖处理: 对每个 dependency Qd，读 <workdir>execution/Qd_VERIFICATION.md 获取完整 conclusion
-    （无论 Qd 的结果来自原定计划还是 fallback，conclusion 都在 VERIFICATION.md 中）
-    若 Qd failed + critical → Qn 不执行（在确定处理列表时已排除为 blocked）
-  - dispatch local-executor (delegation_depth: 0)，产出 <workdir>execution/Qn_REASONING.md + Qn_EXECUTION.md
+  - 依赖处理: 对每个 dependency Qd，读 <workdir>execution/Qd_VERIFICATION.md 获取 conclusion。
+    据 conclusion 内容和 Qd 的状态判断当前 question 能否继续——Qd 有可用 conclusion 则用作前提；
+    Qd 未解决且是关键依赖则判断是否有替代路径，没有则暂停说明情况
+  - dispatch local-executor，产出 <workdir>execution/Qn_REASONING.md + Qn_EXECUTION.md
 
 ## 文件验证
 
 - 任何 subagent 产出后，验证输出文件存在且非空后再继续
   （check_artifacts 验证 Qn_REASONING.md + Qn_EXECUTION.md；check_verification 验证 Qn_VERIFICATION.md 非空 + 含 verdict）
-  产出文件不合格 → 重跑对应 subagent（max 2）
+  产出文件不合格 → 重跑对应 subagent（调整 dispatch prompt 指出上次产出问题，不得机械重复）
 
 ## 验证
 
-- dispatch research-verifier (delegation_depth: 0)，产出 <workdir>execution/Qn_VERIFICATION.md（含 verdict + evidence + 4 子项判定）
+- dispatch research-verifier，产出 <workdir>execution/Qn_VERIFICATION.md（含 verdict + evidence + 4 子项判定）
 
 ## 据 verdict 决策
 
-- PASS → Qn status 改 resolved, 更新 `ver` 字段指向 `<workdir>execution/Qn_VERIFICATION.md`, 写 conclusion 到 research_state.md
-- FAIL/PARTIAL → 重跑 local-executor (cycle+1)
-  - cycle < 3 → 重试
-  - cycle = 3 → Qn status 改 failed, 记录到 research_state.md Failed Attempts
-    （连续 3 次执行+验证仍未通过，表明当前方法可能存在 agent 自身难以发现和解决的
-    深层问题——如方法本身的根本性缺陷、依赖结论的隐含矛盾等——需外部介入：
-    人类调整方法或回退到 framing 重新框定问题）
-- 需人类决策（如 critical dep 失败无 fallback）→ 写 Last Phase Result (status=needs_attention), 回传 needs_attention
+- PASS → Qn 标 resolved, 更新 `ver` 字段指向 `<workdir>execution/Qn_VERIFICATION.md`, 写 conclusion 到 research_state.md
+- 不是 PASS → 读 verdict 的失败原因和 evidence，判断：
+  - 有未试的方向或可调整的方法 → 重跑 local-executor（调整 prompt 指出问题）
+  - 根本性问题（方法不适用 / claim 与已知定律矛盾）→ 暂停，回传 needs_attention
+  - 依赖结论不可用 → 判断是否影响当前 question，决定继续/跳过/暂停
+- 当你停止处理某个 question 且未将其标为 resolved 时，将已试方法和失败原因记入 research_state.md 的 Failed Attempts
 
 ## 每 Wave 后 audit
 
@@ -184,7 +181,7 @@ agent 按 Wave 顺序逐问题处理，每个 question 的处理方式由 agent 
 
 ## 终止
 
-- 无 open question 时自然停止（全部 resolved/failed/blocked）
+- 无需处理的 question 时自然停止
 ```
 
 ### M5 约束（explicit）
@@ -195,7 +192,7 @@ agent 按 Wave 顺序逐问题处理，每个 question 的处理方式由 agent 
 - MUST: 任何 subagent 产出后验证输出文件存在且非空（check_artifacts + check_verification）
 - MUST: resolved claim 前确保 check_sources + check_verification 通过（引用有下载文件 + 验证记录含 verdict）
 - MUST: 标记 question resolved 时更新 research_state.md Questions/Claims 的 `status` 为 resolved **并更新 `ver` 字段**指向 `<workdir>execution/Qn_VERIFICATION.md`（check_verification.py 据此验证）
-- MUST: question failed 时记录到 research_state.md 的 Failed Attempts（method + 失败原因 + 排除方向）
+- MUST: 停止处理某个 question 且未标 resolved 时，记录已试方法到 research_state.md 的 Failed Attempts（method + 失败原因 + 排除方向）
 - MUST: 每 Wave 完成后 dispatch research-audit agent 检查跨问题一致性
 - MUST: execution 完成后做最终 audit + 写 EXECUTION.md + VERIFICATION.md 汇总
 - MUST: 按 PLAN.md 中的 Acceptance Tests 验证，不得简化或降级测试标准（framing 在 PLAN.md 中为每个 question 给出明确的、符合研究要求的 Acceptance Tests，execution 须严格按此验证）
@@ -250,14 +247,14 @@ Read research_state.md 的 Human Directives 中调度类指示:
 - [ ] skill name 保留 `autoresearch`（不改名）
 - [ ] 3 个 ref 文件全部删除：digest-schemas.md / edge-cases.md / worker-prompts.md
 - [ ] 删 shallow-retry 双层机制 / judgment-worker dispatch / 多类型计数器 / failure-synthesis / domain_mode
-- [ ] 保留 Wave 拓扑排序（从 PLAN.md 依赖图）+ 逐问题执行→验证→决策循环 + executor cycle 计数（max 3）+ 暂停问用户
+- [ ] 保留 Wave 拓扑排序（从 PLAN.md 依赖图）+ 逐问题执行→验证→决策循环 + 暂停问用户
 - [ ] M5 从固定 workflow 改为原则+必须做的事：agent 按 Wave 顺序逐问题处理，每个 question 的处理方式由 agent 灵活决定但满足约束
 - [ ] ENVIRONMENT.md 由 execution worker 负责：启动时读取、探测缺失信息、自行安装（venv 内）、增量更新
 - [ ] 每 Wave 后 dispatch research-audit agent 检查跨问题一致性
 - [ ] execution worker 标记 question resolved 时，必须同时更新 research_state.md 的 Questions/Claims 中该 question 的 `status` 字段为 resolved **并更新 `ver` 字段**指向 `<workdir>execution/Qn_VERIFICATION.md`，否则 check_verification.py 会报 unverified_claims
 - [ ] 执行产出文件路径：`<workdir>execution/Qn_REASONING.md` + `Qn_EXECUTION.md` + `Qn_VERIFICATION.md`（per-question，在 execution/ 子目录内）；`<workdir>EXECUTION.md` + `<workdir>VERIFICATION.md`（phase 汇总，在 workdir 根目录，**与 newlayer-1 §6 一致**）
 - [ ] 调度类 Human Directives 处理：优先做/暂缓/完成后暂停（方法修改类指示由 primary agent 在 dispatch 前处理）
-- [ ] 据 verdict 决策：PASS→resolved / FAIL/PARTIAL→retry(cycle+1) / cycle=3→failed（记 Failed Attempts）/ 需人类决策→pause
+- [ ] 据 verdict 决策：PASS→resolved / 不是 PASS→agent 据 verdict + 上下文判断（retry/pause）；停止处理且未 resolved 时记 Failed Attempts
 - [ ] **Acceptance Tests 约束**：execution 须按 PLAN.md 中的 Acceptance Tests 严格验证，不得简化或降级测试标准；FORBIDDEN 修改 PLAN.md（含 Acceptance Tests）
 - [ ] 回传格式：Last Phase Result 节写入 `phase=execution / status / summary / issues`
 
