@@ -31,7 +31,7 @@ landscape 是可选 phase。analysis 后 framing 前按需调用，非强制执�
 ### Step 2: Define Scope and Search Terms
 
 1. Extract key concepts from analysis.md's gap identification
-2. Identify 3-6 key search terms (primary concepts + synonyms from Phase 1 findings)
+2. Identify 3-6 key search terms (primary concepts + synonyms from analysis.md findings)
 3. Define time range based on field activity level
 4. Determine domain-specific databases:
    - Physics: paper-search skill (arXiv + INSPIRE-HEP + alphaxiv overview)
