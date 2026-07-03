@@ -124,7 +124,7 @@ notepads/<slug>/
 
 [已确认正确(带证据) + 已验证为错(带失败原因) + 不确定性]
 
-## Questions / Claims
+## Questions/Claims
 
 - Q1: [问题] — status: open
   method: [方法] dependencies: [] notes: [关键发现]
@@ -166,14 +166,14 @@ Q1 → Q2
 [当前要做的事/刚收到的人类指示待办]
 ```
 
-### Step 7: 质量门（与 newlayer-7 §1 对齐）
+### Step 7: 质量门
 
 1. worker 跑 scripts（bash，确定性）:
    - `check_artifacts.py <research_state.md> <workdir>analysis.md` → 验证文件存在非空 + research_state.md 存在
    - `check_sources.py <workdir>analysis.md` → 验证 analysis.md 中 [src:id] 引用都有下载文件
    - 不过 → worker 自补，重跑 scripts
 2. worker dispatch research-audit agent（fresh context，避免 self-review bias）:
-   - sub-subagent 读 `<workdir>analysis.md`，按 newlayer-7 §2 审计方向审:
+   - sub-subagent 读 `<workdir>analysis.md`，按以下方向审:
      引用是否真支持论断 / 事实是否准确 / gap 识别是否合理 / 领域覆盖是否充分
    - 输出 FATAL/CONCERN/PASS 报告
 3. worker 读报告:

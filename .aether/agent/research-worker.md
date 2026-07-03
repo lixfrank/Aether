@@ -81,7 +81,7 @@ worker 可 dispatch 同 owner (research) 的 subagent（task: allow + own/owner 
 无需在 system-reminder 中维护 allowed 列表——新增 research owner 的 agent 自动可被 dispatch。
 各 phase skill 指定实际 dispatch 哪些 subagent（如 debate skill dispatch debate-critic/rebuttal，
 autoresearch skill dispatch local-executor/research-verifier/research-audit）。
-research-audit 为 agent 定义（agent/research-audit.md，见 newlayer-7），含 owner: research，
+research-audit 为 agent 定义（agent/research-audit.md），含 owner: research，
 自动可被 dispatch；agent 加载 research-audit skill 获取审计指引。
 
 ## Integrity

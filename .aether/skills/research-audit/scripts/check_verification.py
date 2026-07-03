@@ -13,8 +13,6 @@ import re
 import sys
 from pathlib import Path
 
-RESEARCH_ROOT = Path(".aether/research")
-
 
 def parse_questions_claims(content):
     m = re.search(
@@ -50,6 +48,7 @@ def main():
         sys.exit(1)
 
     state_path = Path(args[0])
+    research_root = state_path.resolve().parent.parent
     if not state_path.exists():
         print(
             json.dumps(
@@ -68,7 +67,7 @@ def main():
         if not c["ver"]:
             unverified.append(f"{c['id']}: no ver path")
             continue
-        ver_path = RESEARCH_ROOT / c["ver"]
+        ver_path = research_root / c["ver"]
         if not ver_path.exists():
             unverified.append(f"{c['id']}: verification file not found ({c['ver']})")
             continue

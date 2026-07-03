@@ -121,14 +121,14 @@ Classify papers into a structured landscape:
   （agent 据发现可灵活更新其他节，不限于以上推荐）
 - 若回写了 analysis.md，在 Phase History 注明 "analysis.md updated by landscape"
 
-### Step 8: 质量门（与 newlayer-7 §1 对齐）
+### Step 8: 质量门
 
 1. worker 跑 scripts（bash，确定性）:
    - `check_artifacts.py <research_state.md> <workdir>landscape_map.md` → 验证文件存在非空
    - `check_sources.py <workdir>landscape_map.md` → 验证 landscape_map.md 中 [src:id] 引用都有下载文件
    - 不过 → worker 自补，重跑 scripts
 2. worker dispatch research-audit agent（fresh context，避免 self-review bias）:
-   - sub-subagent 读 `<workdir>landscape_map.md`，按 newlayer-7 §2 审计方向审:
+   - sub-subagent 读 `<workdir>landscape_map.md`，按以下方向审:
      学派分类是否准确 / 时间线是否完整 / 争议标注是否有据 / 覆盖度是否充分
    - 输出 FATAL/CONCERN/PASS 报告
 3. worker 读报告:

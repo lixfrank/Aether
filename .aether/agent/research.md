@@ -170,4 +170,4 @@ research_state.md 不显式分 stage, 连续演进。
 - MUST: 不声称 resolved 而无验证记录（check_verification 确定性判定）
 - subagent: dispatch research-worker only（phase 执行）；worker 内部自行 dispatch 其他 subagent
 
-（per-phase / per-verification / per-subagent 约束见各自 newlayer 文档：newlayer-2~6 各 skill 质量门、newlayer-6 autoresearch 的 check_sources/check_verification/Failed Attempts、newlayer-8 research-verifier 的 SymPy 核对等。不在 research.md 中重复。）
+（per-phase / per-verification / per-subagent 约束见各自 skill 文档：各 phase skill 质量门、autoresearch 的 check_sources/check_verification/Failed Attempts、research-verifier 的 SymPy 核对等。不在 research.md 中重复。）

@@ -109,7 +109,7 @@ def main():
     critical_unset = [k for k in CRITICAL_KEYS if k not in conventions]
 
     cross_warnings = []
-    project_root = Path(".")
+    project_root = state_path.resolve().parent.parent.parent.parent
     rules = load_cross_field_rules(project_root)
     if rules:
         for rule in rules if isinstance(rules, list) else rules.get("rules", []):

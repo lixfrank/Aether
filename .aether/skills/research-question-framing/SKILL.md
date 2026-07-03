@@ -322,7 +322,7 @@ Write to `<workdir>PLAN.md`. Claims section includes derived_from/tractability/q
   / Dependency Graph（写入 Q1→Q2→Q3）/ Phase History 追加 framing✓
   （agent 据发现可灵活更新其他节，不限于以上推荐）
 
-### Step 11: 质量门（与 newlayer-7 §1 对齐）
+### Step 11: 质量门
 
 1. worker 跑 scripts（bash，确定性）:
    - `check_artifacts.py <research_state.md> <workdir>PLAN.md <workdir>research_questions.md <workdir>framing_reasoning.md` → 验证 3 个文件存在非空
@@ -330,7 +330,7 @@ Write to `<workdir>PLAN.md`. Claims section includes derived_from/tractability/q
    - `check_conventions.py <research_state.md> <workdir>PLAN.md <workdir>framing_reasoning.md` → 验证 ASSERT_CONVENTION 一致性
    - 不过 → worker 自补，重跑 scripts
 2. worker dispatch research-audit agent（fresh context，避免 self-review bias）:
-   - sub-subagent 读 framing_reasoning.md + PLAN.md，按 newlayer-7 §2 审计方向审:
+   - sub-subagent 读 framing_reasoning.md + PLAN.md，按以下方向审:
      推理链是否完整(无跳步) / 问题是否可证伪 / 方法是否适用 / 依赖图是否无环 / 验收标准是否充分
    - 输出 FATAL/CONCERN/PASS 报告
 3. worker 读报告:

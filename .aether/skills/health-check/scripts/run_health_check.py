@@ -4,8 +4,8 @@
 #!/usr/bin/env python3
 """Standalone health check — 4-layer progressive detection.
 
-Migrated from research-state MCP (server.py deleted in newlayer-1).
-Self-contained: no MCP dependency. Run with: uv run run_health_check.py [project_dir] [layers...]
+Self-contained health check — no MCP dependency.
+Run with: uv run run_health_check.py [project_dir] [layers...]
 
 Layers:
   infrastructure — uv, git, network reachability
@@ -257,6 +257,7 @@ def _check_skill_chain(pd):
         "check_verification.py",
         "check_artifacts.py",
         "check_conventions.py",
+        "check_time_budget.py",
     ]
     scripts_dir = pd / ".aether" / "skills" / "research-audit" / "scripts"
     found_scripts = []

@@ -47,14 +47,14 @@ worker 读 `<workdir>PLAN.md`, `persistence/research_state.md`
 
 debate 完成（needs_attention 或 completed）后在 pause 点呈现裁决摘要，人类可询问 / 讨论 / 指示
 
-## 质量门（与 newlayer-7 §1 对齐）
+## 质量门
 
 1. worker 跑 scripts（bash，确定性）:
    - `check_artifacts.py <research_state.md> <workdir>DEBATE.md` → 验证 DEBATE.md 存在非空
    - 若修订了 PLAN.md → check_artifacts.py 验证 PLAN.md 存在非空
    - 不过 → worker 自补，重跑 scripts
 2. worker dispatch research-audit agent（fresh context，避免 self-review bias）:
-   - sub-subagent 读 `<workdir>DEBATE.md` + 修订后的 PLAN.md，按 newlayer-7 §2 审计方向审:
+   - sub-subagent 读 `<workdir>DEBATE.md` + 修订后的 PLAN.md，按以下方向审:
      critique 是否覆盖关键 debate topics / rebuttal 是否回应所有 critique points /
      adjudication 裁决是否合理 / repair 修订是否正确
    - 输出 FATAL/CONCERN/PASS 报告
