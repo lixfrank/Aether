@@ -20,15 +20,15 @@
 
 ## 删除
 
-| 段落                                                 | 理由                                                                                                                                                     |
-| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| front matter 中 "Phase 1 / Entry Gate / Path 3" 标识 | 不再有 Entry Gate FSM                                                                                                                                    |
-| Step1 中 state.json / get_state 读取                 | 状态源改为 research_state.md                                                                                                                             |
-| Step1 中 convention_lock_status 检查                 | convention 由 agent 灵活管理（任何 phase 发现需要约定时均可写入 research_state.md ## Conventions 节），不限定特定 phase；check_conventions.py 验证一致性 |
-| Step3.5 中 literatures/index.json 引用               | 下载委托给 research-explorer，analysis 不关注下载细节                                                                                                    |
-| Step5（Write ROADMAP.md）整节                        | ROADMAP.md 已删，gap / 方向并入 analysis.md                                                                                                              |
-| Step7 中 advance_plan 调用                           | advance_plan 已删                                                                                                                                        |
-| Step8 中复杂 PhaseResultDigest                       | 改为 Last Phase Result 节 + status 信号                                                                                                                  |
+| 段落                                                 | 理由                                                                                                                                                                                |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| front matter 中 "Phase 1 / Entry Gate / Path 3" 标识 | 不再有 Entry Gate FSM                                                                                                                                                               |
+| Step1 中 state.json / get_state 读取                 | 状态源改为 research_state.md                                                                                                                                                        |
+| Step1 中 convention_lock_status 检查                 | convention 由 agent 灵活管理（任何 phase 发现需要约定时均可写入 research_state.md ## Conventions 节），不限定特定 phase；一致性由 research-audit agent 语义审计（见 newlayer-7 §2） |
+| Step3.5 中 literatures/index.json 引用               | 下载委托给 research-explorer，analysis 不关注下载细节                                                                                                                               |
+| Step5（Write ROADMAP.md）整节                        | ROADMAP.md 已删，gap / 方向并入 analysis.md                                                                                                                                         |
+| Step7 中 advance_plan 调用                           | advance_plan 已删                                                                                                                                                                   |
+| Step8 中复杂 PhaseResultDigest                       | 改为 Last Phase Result 节 + status 信号                                                                                                                                             |
 
 ## 保留
 

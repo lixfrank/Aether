@@ -42,7 +42,7 @@
 - Step6（Inter-Question Dependencies）
 - Step7（Write Research Questions + Framing Reasoning）
 - Step8（Map to PLAN.md — 须为每个 question 给出明确的、符合研究要求的 **Acceptance Tests**，防止 execution 过程中刻意简化测试轻易宣称达成目标）
-- Step9（Conventions — 读 research_state.md ## Conventions 节 + 若需设置则写入 + 跑 check_conventions.py 验证。注：任何 phase 发现需要约定时均可写入 ## Conventions 节，framing Step 9 是主要设置点但非唯一）
+- Step9（Conventions — 读 research_state.md ## Conventions 节 + 若需设置则写入。一致性/完整性验证由 research-audit agent 在质量门语义执行，framing 不跑脚本。注：任何 phase 发现需要约定时均可写入 ## Conventions 节，framing Step 9 是主要设置点但非唯一）
 - Integrity 节
 
 > 以上是 framing 的核心能力，原样保留。
@@ -218,7 +218,7 @@ Step N: 质量门
 
 - [ ] skill name 保留 `research-question-framing`（不改名），front matter description 删 "Phase 6 / two modes" 标识
 - [ ] 核心 Step 2-9 不动：Select Gaps → Solution Paths → Derive Question → Derive Falsification → Inter-Question Dependencies → Write Research Questions + Framing Reasoning → Map to PLAN.md → Check Conventions
-- [ ] Step 9 是 conventions 的主要设置+验证点，但任何 phase 发现需要约定时均可写入 research_state.md ## Conventions 节（不限定 framing）。Step 9 读+设置+验证约定（跑 check_conventions.py）
+- [ ] Step 9 是 conventions 的主要设置点，但任何 phase 发现需要约定时均可写入 research_state.md ## Conventions 节（不限定 framing）。Step 9 读+设置约定；一致性/完整性验证由 research-audit agent 在质量门语义执行（见 newlayer-7 §2 Convention 审计），framing 不跑脚本
 - [ ] **Acceptance Tests**：Step 8 Map to PLAN.md 时，须为每个 question 给出明确的、符合研究要求的 Acceptance Tests，防止 execution 过程中刻意简化测试轻易宣称达成目标
 - [ ] 删 re_derive_gap.md（L3 回滚 splice 机制）：回退用 git log + checkout 或重入 framing
 - [ ] 权威源规则：framing_reasoning.md 是推理记录（供 audit 审推理链）；PLAN.md 是后续工作读取的信息文件；debate 修订 PLAN.md 后 PLAN.md 为权威源；framing_reasoning.md 可被后续 phase 追加修正（不删原文）
@@ -241,4 +241,4 @@ Step N: 质量门
 - [ ] `不得存在` SKILL.md 中的 `convention_lock_status` MCP 调用（改为直接读 research_state.md ## Conventions 节）
 - [ ] `check_artifacts.py` 验证 `<workdir>PLAN.md` + `<workdir>research_questions.md` + `<workdir>framing_reasoning.md` 存在非空
 - [ ] `check_sources.py` 验证 framing_reasoning.md 中所有 `[src:id]` 引用都有下载文件
-- [ ] `check_conventions.py` 验证 ASSERT_CONVENTION 行与 research_state.md ## Conventions 节一致 + critical 约定已设 + 跨字段一致性
+- [ ] convention 一致性/完整性由 research-audit agent 语义审计（grep ASSERT_CONVENTION + read domain reference + 语义匹配 + web 核查，见 newlayer-7 §2），不由脚本硬匹配

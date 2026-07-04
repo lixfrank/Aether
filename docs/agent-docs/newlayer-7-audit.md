@@ -16,7 +16,7 @@
 - checker 只判存在性不判内容：checker 无法判推理是否成立/引用是否支持——这些是语义判断，必须由 LLM audit 承担（design doc §7.2）
 - scripts 由 worker 跑、语义审计由 worker dispatch 独立 sub-subagent：scripts 是确定性 Python 无 bias；语义审计需要独立判断，同一 context 自审 bias 严重（worker 刚完成产出，context 充满自己的推理，倾向于认为自己写的合理）。sub-subagent fresh 读产物文件提供独立判断。调用写入 research-worker.md（见 newlayer-10 M4 Subagent Dispatch Rules）
 - 通用 audit 不绑定 phase：一套 research-audit（agent + skill），research-audit agent 据产物类型自选审计方向，取代旧按 phase 拆三套（design doc §7.4）
-- 不照搬旧 audit 知识：旧 Cross-Verification/severity 表/推理链 checklist 过于 rigid，改为灵活原则，仅参考旧知识的思路（见 §5）
+- 不照搬旧 audit 知识：旧 Cross-Verification/severity 表/推理链 checklist 过于 rigid，改为灵活原则，仅参考旧知识的思路（见 §4 审计原则）
 
 ## 删除
 
@@ -43,7 +43,6 @@
     check_sources.py                     — 引用→下载文件映射
     check_verification.py                — resolved claim→验证记录
     check_artifacts.py                   — 必备文件存在非空 + workdir 路径校验
-    check_conventions.py                 — ASSERT_CONVENTION 验证 + 约定完整性 + 跨字段一致性
 ```
 
 **分工**：
@@ -71,9 +70,12 @@ permission:
   glob: allow
   list: allow
   read: allow
+  bash: allow
+  webfetch: allow
+  websearch: allow
   edit:
     "*": deny
-    ".aether/research/**": allow
+    ".aether/research/**/audits/**": allow
 description: |
   质量保证审计 subagent。fresh context 读产物文件做语义审计，避免 self-review bias。
   加载 research-audit skill 获取审计方向指引。
@@ -87,11 +89,15 @@ description: |
 ```markdown
 你是 research-audit 审计 subagent。你的职责是独立审视研究产物的质量。
 
+你只读研究产物，不修改任何研究文件；bash 仅用于只读核查（如 rg/git/wc），不得用 sed/tee/echo/cat 等写文件；仅写 audit 报告到 <workdir>audits/。
+
 加载 research-audit skill（/research-audit），按其 §2 语义审计方向指引，
 根据产物具体内容自主判断需重点审计什么。
 
 你 fresh 读产物文件（不带 worker 推理历史），独立判断。
-输出 FATAL/CONCERN/PASS 报告，写入 <workdir>audits/audit*[phase]*[date].md。
+Convention 审计：用 grep 收集各文件 ASSERT_CONVENTION 声明，读 research_state.md ## Conventions 与 domain reference（如 gpd-conventions/references/），语义匹配 state/ASSERT 约定键与 reference 键（agent 据理解写、可能与 canonical 词汇偏离，必须语义比对、不可硬匹配），核对值一致性/适用性；未匹配项用 webfetch/websearch 核查。
+
+输出 FATAL/CONCERN/PASS 报告，写入 <workdir>audits/audit\*[phase]\_[date].md。
 ```
 
 ---
@@ -122,10 +128,10 @@ worker 完成 phase 产出后:
    - check_verification.py <research_state.md> → 验证 resolved claims 有验证记录
    - scripts 不过 → worker 自补缺失文件/引用/验证，重跑 scripts
 
-2. dispatch research-audit subagent（subagent_type: "research-audit", delegation_depth: 0）
+2. dispatch research-audit subagent（subagent*type: "research-audit", delegation_depth: 0）
    → research-audit agent fresh 读产物文件（不带 worker 推理历史）
-   → 加载 research-audit skill，按 §2 指引做语义审计
-   → 输出 FATAL/CONCERN/PASS 报告，写入 <workdir>audits/audit\*[phase]\_[date].md
+   → 加载 research-audit skill，按 §2 指引做语义审计（含 convention 审计，见 §2 Convention 审计段）
+   → 输出 FATAL/CONCERN/PASS 报告，写入 <workdir>audits/audit\*[phase]*[date].md
    → 返回报告给 worker
 
 3. worker 读审计报告:
@@ -152,10 +158,14 @@ worker 完成 phase 产出后:
 | analysis.md                    | 引用是否真支持论断; 事实是否准确; gap 识别是否合理; 领域覆盖是否充分                                                         |
 | landscape_map.md               | 学派分类是否准确; 时间线是否完整; 争议标注是否有据; 覆盖度是否充分                                                           |
 | framing_reasoning.md + PLAN.md | 推理链是否完整(无跳步); 问题是否可证伪; 方法是否适用; 依赖图是否无环; 验收标准是否充分; tractability confidence 是否符合规则 |
+| DEBATE.md + 修订后的 PLAN.md   | critique 是否覆盖关键 debate topics; rebuttal 是否回应所有 critique points; adjudication 裁决是否合理; repair 修订是否正确   |
 | execution 汇总                 | 结论是否由验证支持; 验证质量是否充分; 跨问题一致性; Failed Attempts 是否诚实记录                                             |
 ```
 
-注：此表为方向性指引，非 rigid checklist。sub-subagent 应据产物具体内容自主判断需重点审计什么。
+**Convention 审计**（当 research_state.md 含 `## Conventions` 节时，跨产物额外执行）：
+用 grep 收集各文件 `<!-- ASSERT_CONVENTION: ... -->` 声明，读 research_state.md `## Conventions` 与 domain reference（如 `gpd-conventions/references/convention_defaults.json` + `cross_field_rules.json`）。约定键由 agent 据理解写入、可能与 canonical 词汇偏离——**必须语义匹配** state/ASSERT 键与 reference 键，不可硬匹配。核对声明值是否一致、是否适用本研究；未能在 reference 匹配的约定用 webfetch/websearch 核查。
+
+注：此表为方向性指引。sub-subagent 应据产物具体内容自主判断需重点审计什么。
 
 审计输出格式:
 
@@ -217,49 +227,18 @@ worker 完成 phase 产出后:
 
 **check_artifacts 与 check_verification 的区分**：check_artifacts 检查 phase 是否产出了预期文件（phase 级结构检查）；check_verification 检查 research_state.md 中所有 resolved claims 是否有验证记录（state 级约束检查，跨 phase）。
 
-#### check_conventions.py
+> convention 一致性/完整性验证不由脚本承担。约定键由 agent 据理解写入、与 canonical 词汇常态偏离，硬匹配不可靠——convention 审计由 research-audit agent 语义执行（见 §2 Convention 审计段：grep + read reference + 语义匹配 + web 核查）。
 
-```
-用法: uv run check_conventions.py <research_state.md_path> <files_to_check...>
-逻辑:
-  1. 解析 research_state.md 的 ## Conventions 节，获取当前约定值
-  2. 对每个 files_to_check: 扫描 <!-- ASSERT_CONVENTION: key=value --> 行，验证与当前约定一致
-  3. 检查完整性: critical 约定（如 metric_signature / fourier_convention / natural_units）是否已设
-  4. 跨字段一致性: 从 domain 约定 skill 的 reference 文件加载跨字段规则（如 gpd-conventions/references/cross_field_rules.json），检查是否有矛盾
-  5. 若 ## Conventions 节为空或无 ASSERT_CONVENTION 行 → 跳过（非物理 domain 可能无约定）
-输出 JSON:
-  {"ok": bool, "mismatches": [<file:key:expected:actual>...], "critical_unset": [<key>...], "cross_field_warnings": [...]}
-```
-
-注：check_conventions.py 从 domain 约定 skill（如 gpd-conventions）的 reference 文件加载约定选项和跨字段规则，不硬编码 domain 知识。非物理 domain 若无约定 skill，脚本自动跳过约定检查。
-
-### §4 与旧 audit 的映射
+### §4 审计原则
 
 ```markdown
-| 旧 audit 检查项         | 新机制                   | 位置        |
-| ----------------------- | ------------------------ | ----------- |
-| citation support        | check_sources.py         | scripts/    |
-| factual accuracy        | 语义审计(analysis 类型)  | SKILL.md §2 |
-| method applicability    | 语义审计(framing 类型)   | SKILL.md §2 |
-| reasoning chain quality | 语义审计(framing 类型)   | SKILL.md §2 |
-| domain coverage         | 语义审计(landscape 类型) | SKILL.md §2 |
-| resolved claim 有验证   | check_verification.py    | scripts/    |
-| 文件存在非空            | check_artifacts.py       | scripts/    |
-```
-
-### §5 审计原则（替代 rigid checklist）
-
-**不照搬旧 audit 的 rigid checklist**（Cross-Verification 2+来源硬规则、severity 查找表、推理链检查项列表），仅参考其思路。新设计采用灵活原则，让审计 sub-subagent 自主判断：
-
-```markdown
-- **独立性**：审计 sub-subagent fresh 读产物文件，不带 worker 推理历史，独立判断
+- **独立性**：审计 subagent fresh 读产物文件，不带 worker 推理历史，独立判断
 - **科学严谨性**：评估推理是否成立、证据是否支持论断、方法是否适用——据产物具体内容自主决定重点审计什么
-- **严重度判断**（sub-subagent 自主，非查表）：
+- **严重度判断**（subagent 自主，非查表）：
   - FATAL = 会导致结论无效的问题
   - CONCERN = 应修正但不导致结论无效
   - PASS = 无重大问题
-- **多角度验证**：对关键发现，从不同角度交叉验证（非机械"2+来源"规则，而是据判断需要时自然采用）
-- **参考旧知识但不照搬**：旧 audit 的 Cross-Verification 思路（多来源验证）、severity 分级思路（按影响判严重度）、推理链检查思路（跳步/遗漏/不一致）可作参考，但不作为 rigid checklist 强制执行
+- **多角度验证**：对关键发现，从不同角度交叉验证（据判断需要时自然采用）
 ```
 
 ---
@@ -272,10 +251,11 @@ research-worker.md 的 Subagent Dispatch Rules 使用 own/owner 机制（无 all
 
 ## 预期结果
 
-- 旧 4 个 audit skill (834行) → 1 个 research-audit agent (~30行 agent 定义) + 1 个 research-audit skill (~120行 SKILL.md + ~250行 scripts) = ~400行
+- 旧 4 个 audit skill (834行) → 1 个 research-audit agent (~35行 agent 定义) + 1 个 research-audit skill (~150行 SKILL.md + ~270行 scripts[3 个 checker]) = ~455行
 - scripts 是确定性 Python，可靠且零 token
-- 语义审计由独立 research-audit agent 跑（fresh context），避免 self-review bias
-- agent 定义提供身份/权限（owner: research，只读研究产物，仅写 audit 报告），skill 提供审计指引（agent 加载）
+- 语义审计由独立 research-audit agent 跑（fresh context，复刻 plan 模式软只读：bash/webfetch/websearch 放开 + edit 硬封），避免 self-review bias
+- convention 审计由 agent 语义执行（grep+read reference+web），不由脚本硬匹配——约定键由 agent 据理解写入、与 canonical 词汇常态偏离
+- agent 定义提供身份/权限（owner: research，复刻 plan 模式软只读，仅写 audit 报告到 audits/），skill 提供审计指引（agent 加载）
 
 ---
 
@@ -285,29 +265,28 @@ research-worker.md 的 Subagent Dispatch Rules 使用 own/owner 机制（无 all
 
 - [ ] 旧 4 个 audit skill 合并为单一 research-audit agent + skill：research-audit-reasoning / research-audit-repair / research-audit-repair-reasoning 删除，research-audit 整体重写
 - [ ] 新建 `agent/research-audit.md`（薄 agent 定义：front matter + system prompt）+ 保留 `skills/research-audit/`（SKILL.md 审计指引 + scripts/ 确定性脚本）
-- [ ] research-audit agent front matter 含 `owner: research` + `owns: - research` + `mode: subagent` + 权限只读研究产物（`edit: deny all` 或仅 allow `.aether/research/**` 用于写 audit 报告，不修改研究产物）
-- [ ] research-audit agent system prompt 指示加载 research-audit skill 并按 §2 审计方向做语义审计
-- [ ] research-audit skill 结构：`SKILL.md`（语义审计指引，agent 加载）+ `scripts/` 目录含 4 个 checker 脚本
-- [ ] 4 个 checker 脚本：`check_sources.py` / `check_verification.py` / `check_artifacts.py` / `check_conventions.py`
-- [ ] 调用流程：worker 跑 scripts（bash，确定性）→ scripts 不过则 worker 自补重跑 → dispatch research-audit agent（fresh context）做语义审计 → 据报告自修（推荐 2 次）→ 严重问题写入 Last Phase Result issues
-- [ ] 语义审计方向按产物类型：analysis.md / landscape_map.md / framing_reasoning.md+PLAN.md / execution 汇总，各有审计方向
+- [ ] research-audit agent front matter 含 `owner: research` + `owns: - research` + `mode: subagent` + `bash/webfetch/websearch: allow`（复刻 plan 模式软只读）+ `edit` 仅 allow `.aether/research/**/audits/**`（不修改研究产物）
+- [ ] research-audit agent system prompt 指示加载 research-audit skill 并按 §2 审计方向做语义审计；含软只读 bash 约束（不得用 sed/tee/echo/cat 写文件）+ convention 语义审计流程
+- [ ] research-audit skill 结构：`SKILL.md`（语义审计指引，agent 加载）+ `scripts/` 目录含 3 个 checker 脚本
+- [ ] 3 个 checker 脚本：`check_sources.py` / `check_verification.py` / `check_artifacts.py`
+- [ ] 调用流程：worker 跑 3 个 scripts（bash，确定性）→ scripts 不过则 worker 自补重跑 → dispatch research-audit agent（fresh context, delegation_depth: 0）做语义审计（含 convention）→ 据报告自修（推荐 2 次）→ 严重问题写入 Last Phase Result issues
+- [ ] 语义审计方向按产物类型：analysis.md / landscape_map.md / framing_reasoning.md+PLAN.md / DEBATE.md+修订PLAN.md / execution 汇总，各有审计方向
+- [ ] Convention 审计为语义方向（非脚本）：agent grep ASSERT_CONVENTION + read domain reference + 语义匹配（不硬匹配）+ web 核查未匹配项
 - [ ] 审计输出格式：FATAL / CONCERN / PASS 三级，写入 `<workdir>audits/audit*[phase]_[date].md`
-- [ ] 审计原则（替代 rigid checklist）：独立性 / 科学严谨性 / 严重度判断（FATAL/CONCERN/PASS，非查表）/ 多角度验证 / 参考旧知识但不照搬
-- [ ] check_conventions.py 从 domain 约定 skill 的 reference 文件加载规则，不硬编码 domain 知识；非物理 domain 若无约定 skill 则自动跳过
+- [ ] 审计原则：独立性 / 科学严谨性 / 严重度判断（FATAL/CONCERN/PASS，非查表）/ 多角度验证
 
 ### 脚本强制验收
 
 - [ ] `不得存在` `skills/research-audit-reasoning/` 目录（已合并删除）
 - [ ] `不得存在` `skills/research-audit-repair/` 目录（已合并删除）
 - [ ] `不得存在` `skills/research-audit-repair-reasoning/` 目录（已合并删除）
+- [ ] `不得存在` `skills/research-audit/scripts/check_conventions.py`（convention 审计改为 agent 语义，脚本已删）
 - [ ] `不得存在` research-audit SKILL.md 中的 `backup_repair.sh` 引用（旧备份脚本已删）
 - [ ] `不得存在` research-audit SKILL.md 中的 `max-3 循环` / `3-audit-3-repair` 引用（旧循环已删）
-- [ ] `不得存在` research-audit SKILL.md 中的 `severity 查找表` / `rigid checklist`（改为灵活原则）
+- [ ] `不得存在` research-audit SKILL.md 中的 `severity 查找表` / `rigid checklist` / `Cross-Verification` / `与旧 audit 的映射`（改为灵活原则）
 - [ ] `check_artifacts.py` 输出 JSON 含 `ok` / `missing` / `empty` / `outside_workdir` / `persistence_violations`
 - [ ] `check_sources.py` 输出 JSON 含 `ok` / `cited_without_source` / `missing_files`
 - [ ] `check_verification.py` 输出 JSON 含 `ok` / `unverified_claims`
-- [ ] `check_conventions.py` 输出 JSON 含 `ok` / `mismatches` / `critical_unset` / `cross_field_warnings`
 - [ ] `check_artifacts.py` 验证 persistence/ 白名单：只允许 `research_state.md` + `ENVIRONMENT.md`
 - [ ] `check_sources.py` 路径指向 `.aether/research/literatures/registry.json` + `literatures/<id>.*`（非旧 `persistence/sources/`）
 - [ ] `check_verification.py` 验证 resolved claim 的验证文件非空（≥30行）+ 含 verdict（PASS/FAIL/PARTIAL）
-- [ ] `check_conventions.py` 从 `gpd-conventions/references/cross_field_rules.json` 加载跨字段规则（非硬编码）

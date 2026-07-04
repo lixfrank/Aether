@@ -211,17 +211,17 @@ coordinator skill（SKILL.md 541行 + 3 refs 1110行 + backup_repair.sh 68行 = 
 
 ### 从 coordinator SKILL.md 迁移
 
-| coordinator SKILL.md 段落                  | 迁移到                        | 迁移内容                                                                                                                            |
-| ------------------------------------------ | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| §Phase Routing（phase 依赖序说明）         | research.md §2 phase 选择器   | 默认序 analysis→landscape→framing→debate→execution + 可回退/重入                                                                    |
-| §Dispatch Protocol（dispatch prompt 模板） | research.md §3 Worker 派遣    | 简化为：prompt = phase名 + Active Workdir + 指示上下文                                                                              |
-| §Checkpoint（呈现内容优先级）              | research.md §4 pause 点       | 简化为"简短摘要"（目标进展/关键发现/待决事项）                                                                                      |
-| §Git Commit 流程                           | research.md §3 step 5         | git add + commit -m "research: phase_X"                                                                                             |
-| §Integrity 约束                            | research.md §7 硬约束（分层） | 拆分为 primary 约束 + per-skill 约束                                                                                                |
-| §Convention awareness                      | 各 phase skill                | 读 research_state.md ## Conventions + check_conventions.py（任何 phase 发现需要时可写入，framing Step 9 是主要设置+验证点但非唯一） |
-| §Notice Templates（4 类模板）              | 删除                          | 不再有固定模板，agent 自然输出                                                                                                      |
-| §Terminal Action 规则                      | 删除                          | Terminal Action 概念删除                                                                                                            |
-| §Entry Gate Path 分类                      | 删除                          | 不再有 Path 0/1/2/3                                                                                                                 |
+| coordinator SKILL.md 段落                  | 迁移到                        | 迁移内容                                                                                                                                                                   |
+| ------------------------------------------ | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| §Phase Routing（phase 依赖序说明）         | research.md §2 phase 选择器   | 默认序 analysis→landscape→framing→debate→execution + 可回退/重入                                                                                                           |
+| §Dispatch Protocol（dispatch prompt 模板） | research.md §3 Worker 派遣    | 简化为：prompt = phase名 + Active Workdir + 指示上下文                                                                                                                     |
+| §Checkpoint（呈现内容优先级）              | research.md §4 pause 点       | 简化为"简短摘要"（目标进展/关键发现/待决事项）                                                                                                                             |
+| §Git Commit 流程                           | research.md §3 step 5         | git add + commit -m "research: phase_X"                                                                                                                                    |
+| §Integrity 约束                            | research.md §7 硬约束（分层） | 拆分为 primary 约束 + per-skill 约束                                                                                                                                       |
+| §Convention awareness                      | 各 phase skill                | 读 research_state.md ## Conventions（任何 phase 发现需要时可写入，framing Step 9 是主要设置点但非唯一）；一致性/完整性由 research-audit agent 语义审计（见 newlayer-7 §2） |
+| §Notice Templates（4 类模板）              | 删除                          | 不再有固定模板，agent 自然输出                                                                                                                                             |
+| §Terminal Action 规则                      | 删除                          | Terminal Action 概念删除                                                                                                                                                   |
+| §Entry Gate Path 分类                      | 删除                          | 不再有 Path 0/1/2/3                                                                                                                                                        |
 
 ### 从 coordinator references 迁移
 

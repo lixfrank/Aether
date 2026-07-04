@@ -256,7 +256,6 @@ def _check_skill_chain(pd):
         "check_sources.py",
         "check_verification.py",
         "check_artifacts.py",
-        "check_conventions.py",
     ]
     scripts_dir = pd / ".aether" / "skills" / "research-audit" / "scripts"
     found_scripts = []

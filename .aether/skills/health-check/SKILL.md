@@ -126,7 +126,7 @@ Return a one-line summary to the caller. The caller reads the temp files for det
 - Phase skills: analysis, literature-landscape-scan, research-question-framing, autoresearch, debate, research-audit
 - Support skills: paper-search, health-check, literature-review, gpd-\* (4 skills)
 - Agent definitions: research, research-worker, research-verifier, local-executor, research-explorer, research-audit, debate-critic, debate-rebuttal
-- Checker scripts: research-audit/scripts/ (check_sources, check_verification, check_artifacts, check_conventions)
+- Checker scripts: research-audit/scripts/ (check_sources, check_verification, check_artifacts)
 - gpd-verification scripts (9 SymPy checkers)
 - paper-search scripts (6 scripts)
 

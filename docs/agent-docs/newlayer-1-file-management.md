@@ -95,28 +95,28 @@ research.md 和 research-worker.md 等 agent 的 front matter 中 `mcp: research
 
 ### 7 个 tools 的替代方案
 
-| tool                         | 替代方案                                                               |
-| ---------------------------- | ---------------------------------------------------------------------- |
-| `convention_lock_status`     | agent 直接读 research_state.md 的 ## Conventions 节                    |
-| `convention_set`             | agent 直接写 research_state.md 的 ## Conventions 节                    |
-| `convention_check`           | research-audit skill 的 check_conventions.py 脚本（确定性 regex 检查） |
-| `convention_validate`        | check_conventions.py 脚本（完整性 + 跨字段一致性检查）                 |
-| `assert_convention_validate` | check_conventions.py 脚本（ASSERT_CONVENTION 行验证）                  |
-| `subfield_defaults`          | agent 直接读 gpd-conventions/references/convention_defaults.json       |
-| `skill_resolve_path`         | 删除（agent 用 glob/read 找 skill）                                    |
+| tool                         | 替代方案                                                                 |
+| ---------------------------- | ------------------------------------------------------------------------ |
+| `convention_lock_status`     | agent 直接读 research_state.md 的 ## Conventions 节                      |
+| `convention_set`             | agent 直接写 research_state.md 的 ## Conventions 节                      |
+| `convention_check`           | research-audit agent 语义审计（grep ASSERT + read reference + 语义匹配） |
+| `convention_validate`        | research-audit agent 语义审计（完整性 + 跨字段一致性，非硬匹配）         |
+| `assert_convention_validate` | research-audit agent 语义审计（ASSERT_CONVENTION 行语义比对）            |
+| `subfield_defaults`          | agent 直接读 gpd-conventions/references/convention_defaults.json         |
+| `skill_resolve_path`         | 删除（agent 用 glob/read 找 skill）                                      |
 
 ### 迁移方案
 
 **convention 值存储** → research_state.md 新增 `## Conventions` 节。convention 是通用概念（不限于物理），存储在通用状态文件中。agent 直接读写。
 
-**ASSERT_CONVENTION 检查 + 完整性验证 + 跨字段一致性** → research-audit skill 的 `scripts/check_conventions.py`。确定性脚本，与 check_sources/check_verification/check_artifacts 同类。check_conventions.py 逻辑：
+**ASSERT_CONVENTION 检查 + 完整性验证 + 跨字段一致性** → research-audit agent 语义审计（非脚本）。约定键由 agent 据理解写入、与 canonical 词汇常态偏离，硬匹配不可靠——改由 research-audit agent 在质量门语义执行（见 newlayer-7 §2 Convention 审计）：
 
-- 读 research_state.md 的 ## Conventions 节获取当前约定值
-- 扫描产物文件中的 `<!-- ASSERT_CONVENTION: key=value -->` 行，验证与当前约定一致
-- 检查完整性（critical 约定是否已设）
-- 跨字段一致性检查（从 gpd-conventions skill 的 reference 文件加载规则）
+- 用 grep 收集各文件 `<!-- ASSERT_CONVENTION: key=value -->` 声明
+- 读 research_state.md ## Conventions + domain reference（convention_defaults.json / cross_field_rules.json）
+- 语义匹配 state/ASSERT 键与 reference 键（不硬匹配）
+- 核对值一致性/适用性；未匹配项 web 核查
 
-**CONVENTION_OPTIONS + CROSS_FIELD_WARNINGS** → gpd-conventions skill 的 reference JSON 文件（如 `convention_options.json` + `cross_field_rules.json`）。check_conventions.py 从 skill reference 加载，不硬编码。其他 domain 可新增自己的约定 skill + reference 文件。
+**CONVENTION_OPTIONS + CROSS_FIELD_WARNINGS** → gpd-conventions skill 的 reference JSON 文件（如 `convention_options.json` + `cross_field_rules.json`）。由 research-audit agent 在语义审计时 read 加载，不硬编码。其他 domain 可新增自己的约定 skill + reference 文件。
 
 **convention_defaults** → 已在 gpd-conventions/references/convention_defaults.json（保留不变）。
 
@@ -199,7 +199,7 @@ Q1 → Q2 → Q3
 [研究约定值（如物理: natural_units=natural, metric_signature=mostly-minus, ...）。
 非物理 domain 可为空或填该 domain 的约定。
 由 agent 在工作过程中灵活写入（任何 phase 发现需要约定时均可设置），agent 直接读写。
-check_conventions.py 验证一致性与完整性，但不限定哪个 phase 可以写。]
+convention 一致性/完整性由 research-audit agent 在质量门语义审计（见 newlayer-7 §2），但不限定哪个 phase 可以写。]
 
 ## Next To Handle
 

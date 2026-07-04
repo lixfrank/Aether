@@ -15,7 +15,7 @@
 - 删复杂 digest schema（176行）：旧 6 种 PhaseResultDigest schema 是 FSM 路由的产物，新改为 status 信号 + Last Phase Result 节（design doc §4.4, newlayer-1 §5）
 - 新增 debate 编排 skill：critique+rebuttal 作为隔离 sub-subagent（agent 定义），adjudication+repair 由 debate skill 指引 worker 自做（design doc §7.5, §13 决策 1, newlayer-5）
 - 删 judgment-worker dispatch：verifier 即 judge 取代（design doc §6.2, §13 决策 9）
-- MCP 调用简化：research-state + research-conventions 两个 MCP 整体删除，状态管理改为 worker 直接读写 research_state.md，约定管理改为读写 ## Conventions 节 + check_conventions.py，确定性检查改为 research-audit skill scripts（design doc §3.1, newlayer-1 §2/§2b）
+- MCP 调用简化：research-state + research-conventions 两个 MCP 整体删除，状态管理改为 worker 直接读写 research_state.md，约定管理改为读写 ## Conventions 节 + research-audit agent 语义审计（非脚本，见 newlayer-7 §2），确定性检查改为 research-audit skill scripts（design doc §3.1, newlayer-1 §2/§2b）
 - research-verifier 强化 verdict：verifier 即 judge，须输出 verdict 供 execution worker 决策（design doc §6.2, newlayer-8）
 - local-executor 路径改为 <workdir>：配合 slug 机制（design doc §3.6）
 
@@ -128,7 +128,7 @@ research-audit 为 agent 定义（agent/research-audit.md，见 newlayer-7），
 - research-state MCP: 已整体删除, 不存在
 - research-conventions MCP: 已整体删除, 不存在
 - 状态管理: worker 直接读写 persistence/research_state.md (经 edit/write tool), 不经 MCP
-- 约定管理: worker 直接读写 research_state.md 的 ## Conventions 节; 约定检查用 research-audit skill 的 check_conventions.py (经 bash)
+- 约定管理: worker 直接读写 research_state.md 的 ## Conventions 节; 约定一致性/完整性由 research-audit agent 语义审计（grep+read reference+web，见 newlayer-7 §2），不由脚本硬匹配
 - 确定性检查: worker 跑 research-audit skill 的 scripts/ (经 bash), 不经 MCP
 - health check: worker 或 primary 调用 health-check skill (自带 scripts/run_health_check.py), 不经 MCP
 ```
@@ -259,7 +259,7 @@ gpd-\* skill 本身保留不变。
 
 ### gpd-reviewer.md → 删除
 
-gpd-reviewer agent 定义整体删除。其功能（convention 检查 / 物理错误筛查 / domain review）被 research-audit agent（加载 `gpd-*` skill）+ check_conventions.py 覆盖。
+gpd-reviewer agent 定义整体删除。其功能（convention 检查 / 物理错误筛查 / domain review）被 research-audit agent（加载 `gpd-*` skill）覆盖——convention 审计由 agent 语义执行（见 newlayer-7 §2），无 check_conventions.py 脚本。
 `gpd-*` skill（gpd-verification / gpd-errors / gpd-conventions / gpd-domain-check）保留不变，research-audit / research-verifier 按需加载。
 
 ## 预期结果
@@ -287,7 +287,7 @@ gpd-reviewer agent 定义整体删除。其功能（convention 检查 / 物理�
 - [ ] local-executor 可自行安装所需软件（限 .aether/research/.venv 内，如 uv pip install）
 - [ ] local-executor 可增量更新 ENVIRONMENT.md（追加新发现的环境信息）
 - [ ] gpd-verifier agent 整体删除，research-verifier 是唯一 verifier agent
-- [ ] gpd-reviewer agent 整体删除，功能被 research-audit agent（加载 gpd-\* skill）+ check_conventions.py 覆盖
+- [ ] gpd-reviewer agent 整体删除，功能被 research-audit agent（加载 gpd-\* skill）覆盖（convention 审计由 agent 语义执行，无脚本）
 - [ ] research-explorer.md 删 mcp 引用（mcp: research-state + mcp: research-conventions）
 
 ### 脚本强制验收

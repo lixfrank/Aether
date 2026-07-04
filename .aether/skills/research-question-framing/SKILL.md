@@ -312,9 +312,8 @@ Write to `<workdir>PLAN.md`. Claims section includes derived_from/tractability/q
 
 读 `persistence/research_state.md` 的 `## Conventions` 节获取当前约定值。
 若需设置约定（physics domain: metric_signature, natural_units, fourier_convention 等），写入 research_state.md 的 ## Conventions 节。
-跑 `check_conventions.py <research_state.md> <workdir>PLAN.md <workdir>framing_reasoning.md` 验证一致性与完整性。
-
-注：任何 phase 发现需要约定时均可写入 research_state.md ## Conventions 节，framing Step 9 是主要设置+验证点但非唯一。
+convention 一致性/完整性验证不由脚本承担（约定键未必与 reference 词汇一致，硬匹配不可靠）——改由 research-audit agent 在质量门语义执行（见 research-audit skill §2 Convention 审计段）。framing Step 9 只负责读+设置约定，不跑脚本。
+注：任何 phase 发现需要约定时均可写入 research_state.md ## Conventions 节，framing Step 9 是主要设置点但非唯一。
 
 ### Step 10: Update persistence/research_state.md
 

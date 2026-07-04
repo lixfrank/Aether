@@ -467,11 +467,11 @@ _分工原因_：checker 只判存在性/结构，**不判内容合理性**—�
 
 ### 7.3 结构 checker（Python，两个 MCP 整体删除）
 
-实现语言：Python（与 gpd/paper-search 生态一致）。check_sources.py / check_verification.py / check_artifacts.py / check_conventions.py，位于 research-audit skill scripts/。
+实现语言：Python（与 gpd/paper-search 生态一致）。check_sources.py / check_verification.py / check_artifacts.py，位于 research-audit skill scripts/。（convention 审计不由脚本承担——约定键由 agent 据理解写入、与 canonical 词汇常态偏离、硬匹配不可靠，改由 research-audit agent 语义执行，见 newlayer-7 §2）
 
 research-state MCP 整体删除：旧 server.py（1833行）含 5 个 mutating tools + 8 个 read-only tools。mutating tools 随 FSM 删除；read-only tools 逐个分析后发现全部有更好替代方案——get_state/validate_state/get_progress/get_phase_info/validate_file_locations 由 agent 直接读 research_state.md + check_artifacts.py 覆盖；check_file_updated 由 worker 直接读文件覆盖；get_config 新流程不需要；run_health_check 迁移到 health-check skill scripts/。
 
-research-conventions MCP 整体删除：旧 server.py（484行）含 7 个 tools，硬编码了物理 domain 知识（19 个约定键、合法值、跨字段规则）。convention 值存储迁移到 research_state.md 的 ## Conventions 节；ASSERT_CONVENTION 检查 + 完整性 + 跨字段一致性迁移到 research-audit skill 的 check_conventions.py（从 domain 约定 skill 的 reference 文件加载规则，不硬编码）；CONVENTION_OPTIONS + CROSS_FIELD_WARNINGS 迁移到 gpd-conventions skill reference 文件；skill_resolve_path 删除。两个 MCP 均不保留瘦身版本。
+research-conventions MCP 整体删除：旧 server.py（484行）含 7 个 tools，硬编码了物理 domain 知识（19 个约定键、合法值、跨字段规则）。convention 值存储迁移到 research_state.md 的 ## Conventions 节；ASSERT_CONVENTION 检查 + 完整性 + 跨字段一致性改由 research-audit agent 语义审计（约定键由 agent 据理解写入、与 canonical 词汇常态偏离，硬匹配不可靠；agent grep ASSERT + read domain reference + 语义匹配 + web 核查，见 newlayer-7 §2）；CONVENTION_OPTIONS + CROSS_FIELD_WARNINGS 迁移到 gpd-conventions skill reference 文件；skill_resolve_path 删除。两个 MCP 均不保留瘦身版本。
 
 ### 7.4 语义审计（通用，worker dispatch research-audit agent）
 
@@ -550,7 +550,7 @@ debate-critic + debate-rebuttal（agent 定义，从旧 skill 迁移/新建）+ 
 
 ### 删除
 
-research-coordinator / research-audit-reasoning / research-audit-repair / research-audit-repair-reasoning / debate-advocate / debate-adjudicator / debate-repair / debate-critic(skill,迁为agent) / judgment-worker / gpd-verifier(agent,合并入research-verifier) / gpd-reviewer(agent,功能被research-audit+gpd-\*skill覆盖) / research-verification(skill,合并入research-verifier agent) / session-recovery决策树 / PhaseResultDigest复杂schema / ROADMAP.md / domain_mode / fallback_applicability / research-state MCP(整体删除) / research-conventions MCP(整体删除,convention迁移到research_state.md+check_conventions.py)
+research-coordinator / research-audit-reasoning / research-audit-repair / research-audit-repair-reasoning / debate-advocate / debate-adjudicator / debate-repair / debate-critic(skill,迁为agent) / judgment-worker / gpd-verifier(agent,合并入research-verifier) / gpd-reviewer(agent,功能被research-audit+gpd-\*skill覆盖) / research-verification(skill,合并入research-verifier agent) / session-recovery决策树 / PhaseResultDigest复杂schema / ROADMAP.md / domain_mode / fallback_applicability / research-state MCP(整体删除) / research-conventions MCP(整体删除,convention迁移到research_state.md+research-audit agent语义审计)
 
 ### 修改
 
@@ -593,7 +593,7 @@ research.md（重写：删 Entry Gate/Terminal Action，加 phase 选择器/对�
 
 1. **辩论结构**：保留 rebuttal。debate skill 指引 worker 编排 critique（agent 定义, 隔离 sub-subagent）→ rebuttal（agent 定义, 隔离 sub-subagent, 自读 DEBATE.md 获取 critique）→ worker 自做 adjudication + repair。critique/rebuttal 从 skill 改为 agent 定义（需独立 context）。删 advocate 与独立 adjudicator/repair skill。max 2 轮，最多 5 次 dispatch。DEBATE.md 结构不严格要求。（见 §7.5）
 2. **audit 触发**：自动跑。scripts 由 worker 直接跑（bash）；语义审计由 worker dispatch 独立 sub-subagent（fresh context 避免 self-review bias）。通用 audit，sub-subagent 据产物类型自判审计方向，发现问题 worker 自修（推荐 2 次）。人类指示时亦执行。（见 §7.4）
-3. **checker 实现**：Python。两个 MCP（research-state + research-conventions）整体删除——全部 tools 有替代方案（agent 直接读 research_state.md + check_artifacts/check_conventions.py 覆盖验证；run_health_check 迁移到 health-check skill scripts/；convention 值存 research_state.md ## Conventions 节）。checker 脚本入 research-audit skill scripts/。（见 §7.3）
+3. **checker 实现**：Python。两个 MCP（research-state + research-conventions）整体删除——全部 tools 有替代方案（agent 直接读 research_state.md + check_artifacts/check_sources/check_verification.py 覆盖存在性验证；convention 审计由 research-audit agent 语义执行，无脚本；run_health_check 迁移到 health-check skill scripts/；convention 值存 research_state.md ## Conventions 节）。checker 脚本入 research-audit skill scripts/。（见 §7.3）
 4. **Path 1 研究上下文问答**：无显式命令。research agent 用询问关键词匹配 research_state.md，自行判断相关性，相关则加载项目上下文回答。（见 §5.2）
 5. **多阶段 research_state.md 结构**：不显式分 stage。已解决/已讨论内容保留原位标记，新内容直接在原文件增加/修改，待办在文件末尾"Next To Handle"节。（见 §8）
 6. **execution 灵活调度依赖安全**：agent 拒绝并解释。人类指示优先做某问题但其依赖未满足时，agent 不强行，而是说明依赖关系并给出选项。（见 §6.4）
