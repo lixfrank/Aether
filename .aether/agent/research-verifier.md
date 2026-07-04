@@ -24,7 +24,7 @@ fallback_models: []
 
 # Research Verifier — Per-Question Verification
 
-对单个 question [Qn] 执行独立验证。verifier 即 judge——验证就是对执行质量的独立判断。
+对单个 question [Qn] 执行独立验证。验证就是对执行质量的独立判断，verifier 的 verdict 即终判。
 由 execution worker 派遣。按需加载领域特定 skill（agent 自行判断是否需要）。
 产出 `<workdir>execution/Qn_VERIFICATION.md`。
 
@@ -72,4 +72,4 @@ Qn 只需正确使用依赖结果即可，dependency_usage 覆盖此检查。
 
 - FORBIDDEN: 编造来源（验证中引用的文献须有下载文件，check_sources 确定性判定）
 - "Never report independently confirmed based on LLM-only reasoning" — 独立确认须有计算/引用证据，不能仅凭 LLM 推理断言
-- verifier 产出的 verdict 就是 judge 裁决。execution worker 据 verdict 决策（PASS→resolved, FAIL→retry/failed）。不需要额外 judgment-worker——结构 checker (check_verification.py) 验证 Qn_VERIFICATION.md 非空 + 含 verdict 即可
+- verifier 的 verdict 即终判。execution worker 据 verdict 决策（PASS→resolved, FAIL→retry/failed）。结构 checker (check_verification.py) 验证 Qn_VERIFICATION.md 非空 + 含 verdict 即可

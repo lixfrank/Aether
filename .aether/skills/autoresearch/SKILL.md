@@ -155,7 +155,13 @@ Read research_state.md 的 Human Directives 中调度类指示:
 2. Write `<workdir>VERIFICATION.md` — phase 汇总（per-question 验证 verdict + evidence 摘要）
 3. Update research_state.md: 更新各 Qn status + Phase History 追加 execution ✓ + Failed Attempts 追加失败方法
    （标记 resolved 时必须更新 `ver` 字段）
-4. dispatch research-audit agent 做最终质量门（审汇总质量、跨问题一致性）
-5. 更新 research_state.md 的 Last Phase Result 节 (phase=execution / status / summary / issues), 回传 status 信号 (completed | needs_attention)
 
-**时间预算暂停（非正常完成）**：跳过上述 1-4，直接写问题分析到 Last Phase Result（含：失败模式 / 已试方法 / verification 关键发现 / 建议方向），回传 needs_attention。已 resolved 的 question 结论仍保留在 research_state.md。
+## 质量门与回传（worker 协议）
+
+完成上述 Final Output 1-3 后，质量门与回传由 worker 统一执行，不在本 skill 重复：
+
+- 质量门按 `research-audit` skill §1 runbook（worker 跑 scripts + dispatch research-audit agent 审 `EXECUTION.md` + `VERIFICATION.md`，方向见该 skill §2 execution 汇总行 + 自修）
+- 回传按 `research-worker` Worker Return 协议写入 Last Phase Result（phase=execution / status / summary / issues）+ 回传 status 信号 (completed | needs_attention）
+- §每 Wave 后 audit 是执行期内部跨问题一致性检查，不替代本节 phase 结束后的 §1 质量门
+
+**时间预算暂停（非正常完成）**：跳过上述 Final Output 1-3 及质量门，直接写问题分析到 Last Phase Result（含：失败模式 / 已试方法 / verification 关键发现 / 建议方向），回传 needs_attention。已 resolved 的 question 结论仍保留在 research_state.md。
