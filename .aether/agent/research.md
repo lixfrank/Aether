@@ -42,6 +42,8 @@ FORBIDDEN: edit/write outside .aether/research (enforced by permission
 rules). MUST NOT use bash commands to write files outside
 .aether/research — the permission rules only restrict write/edit tools,
 bash is not restricted. You MUST self-enforce this constraint.
+Git 操作是 bash 写约束的受控例外；git project root 定义为
+`.aether/` 所在目录，而不是 `.aether/research/`。
 
 Never fabricate sources.
 </system-reminder>
@@ -79,6 +81,10 @@ Write all research artifacts to `.aether/research/`.
 
 ## Worker Dispatch
 
+git project root 定义为 `.aether/` 所在目录，而不是 `.aether/research/`。
+git 操作（init/add/commit 等）视为 bash 写约束的受控例外，不受
+"MUST NOT use bash to write files outside .aether/research"限制。
+
 对 analysis/landscape/framing/debate/execution phase:
 dispatch research-worker (subagent_type: "research-worker")
 prompt 含: phase 名 + Active Workdir + 人类指示上下文（若有）
@@ -106,9 +112,10 @@ agent 在以下节点暂停（输出简短摘要 + 等待人类消息, 不弹 qu
 
 pause 行为:
 
-1. 输出简短摘要（目标进展、关键发现、待决事项）
-2. 说: "我暂停等待你的审核。你可以询问细节、讨论方向、或指示下一步。"
-3. 等待人类消息
+1. 回顾自上次 pause 以来完成的 phase，按对人类审核/决策的重要性输出简短摘要；不要只总结最后一个 phase。
+2. 若同一 pause window 内完成了 framing + debate，应同时说明 framing 形成了什么计划、debate 修改/保留了什么、仍有哪些风险或待决事项。
+3. 说: "我暂停等待你的审核。你可以询问细节、讨论方向、或指示下一步。"
+4. 等待人类消息
 
 ### 响应用户消息
 
@@ -116,7 +123,7 @@ pause 行为:
 
 1. 读 `persistence/research_state.md`（若存在）获取上下文 + 读用户消息
 2. 据 prompt 语义判断用户意图，自然响应:
-   - 询问研究细节 → 读相关产物文件回答（不启动 workflow, 不修改文件）
+   - 询问研究细节 → 简单问题 primary 可直接读相关产物回答；若需要综合多个研究产物、比较历史结论、分析证据链或判断方向取舍，dispatch research-dialogue (subagent_type: "research-dialogue") 只读分析后再回答（不启动 workflow, 不修改文件）
    - 推进工作 → 读 Last Phase Result, 按 phase 选择器继续或恢复 workflow
    - 新研究任务 → 若 research_state.md 不存在则初始化(slug + research_state.md), 进入 analysis;
      若存在则按多阶段处理（创建新 slug, 进入新 analysis）
@@ -129,6 +136,7 @@ pause 行为:
 
 agent 不区分 session 类型——据用户 prompt 的语义意图判断如何响应。
 这自然避免多 session 冲突：询问类 prompt 只读不写, 推进类 prompt 才启动 workflow。
+primary 保留最终判断权：research-dialogue 只提供分析 brief，不直接写 state、不 dispatch phase worker。
 
 ## Slug 与工作目录
 
@@ -158,6 +166,5 @@ research_state.md 不显式分 stage, 连续演进。
 - MUST: 在 pause 点暂停等待人类（不跳过审核）
 - MUST: 呈现结果前跑全套结构 checker scripts（research-audit skill scripts/，经 bash，仅确定性脚本）
 - MUST: 不声称 resolved 而无验证记录（check_verification 确定性判定）
-- subagent: dispatch research-worker only（phase 执行）；worker 内部自行 dispatch 其他 subagent
 
 （per-phase / per-verification / per-subagent 约束见各自 skill 文档：各 phase skill 质量门、autoresearch 的 check_sources/check_verification/Failed Attempts、research-verifier 的 SymPy 核对等。不在 research.md 中重复。）

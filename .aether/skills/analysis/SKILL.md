@@ -69,33 +69,47 @@ analysis.md 是 analysis phase 的详细工作产物，兼具输出与推理记�
 下游消费者（landscape/framing/debate/audit）读取 analysis.md 获取详细论证依据。
 
 ```markdown
+# Analysis: [topic]
+
 ## Executive Summary
 
-[2-3 sentence overview]
+[当前结论]
 
 ## Key Findings
 
-- **[Finding 1]**: [Brief explanation] [src:id]
-- **[Finding 2]**: [Brief explanation] [src:id]
+- **[Finding 1]**: [当前成立的发现、证据强度、来源] [src:id]
+- **[Finding 2]**: [当前成立的发现、证据强度、来源] [src:id]
 
 ## Detailed Analysis
 
 ### [Subtopic 1]
 
-[In-depth analysis with citations [src:id]]
+[支持当前结论的推理链，含 citations [src:id]]
 
 ### [Subtopic 2]
 
-[In-depth analysis with citations [src:id]]
+[支持当前结论的推理链，含 citations [src:id]]
+
+## Rejected Directions / Failed Attempts
+
+- [当前已排除的方法及证伪原因]
 
 ## Gaps Identified
 
-- [Gap 1]: [description] — significance: [H/M/L]
-- [Gap 2]: [description] — significance: [H/M/L]
+- [Gap 1]: [供 framing 消费的当前 gap] — significance: [H/M/L]
+- [Gap 2]: [供 framing 消费的当前 gap] — significance: [H/M/L]
 
-## Sources
+## Downstream Implications
 
-[src:id] [Full citation]
+[对 framing / debate / execution 的影响]
+
+## Revision History / Supersession Notes
+
+[历史版本如何被替代、重启原因、旧结论为何降级或剔除；可引用历史副本，不重复全文]
+
+## Sources / Reproduction
+
+[src:id] [Full citation / script / sample / environment]
 ```
 
 ### Step 6: Initialize or Update persistence/research_state.md

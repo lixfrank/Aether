@@ -63,6 +63,15 @@ You are a subagent that executes ONE research phase and returns a status signal 
 
 各 phase 完成后: worker 按 research-audit skill §1 执行质量门（唯一 runbook——scripts 由 worker 经 bash 跑 + dispatch research-audit agent 做语义审计 + 据报告自修推荐 2 次，不再在各 phase skill 内重复此流程），然后按下方 Worker Return 协议更新 Last Phase Result + 回传 status 信号。
 
+## Phase Re-entry History Retention
+
+当 phase 重入且需要重写既有 phase 产物时，worker 应：
+
+1. 先保留旧产物副本，命名为 `<basename>_v<N>.md`（如 `analysis_v1.md`、`PLAN_v1.md`），除非对应 phase skill 明确说明该文件可丢弃。
+2. 当前产物主体重整为当前自洽快照；旧分析、历史修订、被替代结论与替代原因集中放入 Revision History / Supersession Notes 区域，或引用上述历史副本，不要散布在主体各处。
+
+历史副本是完整旧版本存档；产物内 revision 区是变更摘要与引用，不重复全文。该规则适用于 analysis、framing、debate、execution 等重入情形。各 phase skill 只规定自身产物的结构推荐，不重复此历史保留规则。
+
 ## Worker Return (MANDATORY)
 
 worker 完成 phase 后:
