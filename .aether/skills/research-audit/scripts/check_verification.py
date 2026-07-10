@@ -25,7 +25,7 @@ def parse_questions_claims(content):
     block = m.group(1)
     claims = []
     for line in block.splitlines():
-        cm = re.match(r"-\s*(Q\d+):\s*(.+?)\s*—\s*status:\s*(\w+)", line)
+        cm = re.match(r"-\s*(Q[\w]+):\s*(.+?)\s*—\s*status:\s*(\w+)", line)
         if not cm:
             continue
         qid, desc, status = cm.group(1), cm.group(2), cm.group(3)
@@ -66,6 +66,11 @@ def main():
             continue
         if not c["ver"]:
             unverified.append(f"{c['id']}: no ver path")
+            continue
+        if not c["ver"].endswith("_VERIFICATION.md"):
+            unverified.append(
+                f"{c['id']}: ver path must end with _VERIFICATION.md (got {c['ver']})"
+            )
             continue
         ver_path = research_root / c["ver"]
         if not ver_path.exists():

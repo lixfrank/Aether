@@ -16,7 +16,7 @@ framing 将 gap 转化为可证伪的研究问题 + 依赖图 + 验收标准。�
 
 **Output** (MUST write all):
 
-1. `<workdir>PLAN.md` — Contract with claims, deliverables, acceptance_tests, forbidden_proxies, environment_requirements. Execution Plan is multi-Wave structure.
+1. `<workdir>PLAN.md` — Contract with claims, deliverables, forbidden_proxies, environment_requirements. Execution Plan is multi-Wave structure with per-question verification fields.
 2. `<workdir>research_questions.md` — Structured question framing with Depends_on/Required_by reference-type fields
 3. `<workdir>framing_reasoning.md` — Reasoning chain from knowledge base to questions
 
@@ -249,8 +249,6 @@ Q3 (independent)
 
 Write to `<workdir>PLAN.md`. Claims section includes derived_from/tractability/question fields (extracted from framing_reasoning.md §Derived Question). Execution Plan is multi-Wave structure based on framing_reasoning.md §Execution Order. Dependencies are **self-contained**.
 
-**Acceptance Tests**: 须为每个 question 给出明确的、符合研究要求的 **Acceptance Tests**，防止 execution 过程中刻意简化测试轻易宣称达成目标。
-
 ```markdown
 # Research Plan — [Project Name]
 
@@ -267,10 +265,6 @@ Write to `<workdir>PLAN.md`. Claims section includes derived_from/tractability/q
 
 - [Deliverable 1]: [Expected output]
 
-### Acceptance Tests
-
-- [Test 1]: [How to verify claim 1 — derived from falsification criterion. Must be specific and rigorous, not simplifiable]
-
 ### Forbidden Proxies
 
 - [Proxy 1]: [What shortcuts MUST NOT be used as evidence]
@@ -283,7 +277,9 @@ Write to `<workdir>PLAN.md`. Claims section includes derived_from/tractability/q
 
 - Method: [method]
 - Tools: [packages]
-- Falsification test: [from acceptance test]
+- Verification Intent: [要验证什么类型的问题，以及为什么这些验证能支持或证伪 claim]
+- Baseline Concrete Checks: [framing 给出的最低具体检验方式和通过标准——从 falsification criterion 派生]
+- Enhanced Concrete Checks: [初始为空，供 verifier 在 execution 中追加]
 - Dependencies: none (knowledge-base only)
 - Output file: execution/Q1_EXECUTION.md
 
@@ -293,7 +289,9 @@ Write to `<workdir>PLAN.md`. Claims section includes derived_from/tractability/q
 
 - Method: [method]
 - Tools: [packages]
-- Falsification test: [from acceptance test]
+- Verification Intent: [要验证什么类型的问题，以及为什么这些验证能支持或证伪 claim]
+- Baseline Concrete Checks: [framing 给出的最低具体检验方式和通过标准——从 falsification criterion 派生]
+- Enhanced Concrete Checks: [初始为空，供 verifier 在 execution 中追加]
 - Dependencies:
   - Q1 (critical): [description]. Fallback: none
 - Output file: execution/Q2_EXECUTION.md

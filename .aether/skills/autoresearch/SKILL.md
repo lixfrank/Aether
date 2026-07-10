@@ -23,8 +23,7 @@ description: |
 4. `<workdir>EXECUTION.md` — phase 汇总
 5. `<workdir>VERIFICATION.md` — phase 汇总
 
-**MUST NOT**: Modify PLAN.md. Skip verification for any question.
-（人类指示修改 PLAN.md method 由 primary agent 在 dispatch 前处理，execution worker 运行时 PLAN.md 已反映修改）
+（人类指示修改 PLAN.md method 由 primary agent 在 dispatch 前处理，execution worker 运行时 PLAN.md 已反映修改。）
 
 ## Terminology
 
@@ -36,7 +35,7 @@ description: |
 ### Step 1: Read Plan & Determine Waves
 
 1. Read `persistence/research_state.md` — 获取 Active Workdir、Questions/Claims（status/method/dependencies）、Human Directives（调度类指示）
-2. Read `<workdir>PLAN.md` — extract §Execution Plan（per-Wave, method, tools, falsification test, Dependencies）
+2. Read `<workdir>PLAN.md` — extract §Execution Plan（per-Wave, method, tools, Verification Intent, Baseline Concrete Checks, Dependencies）
 3. Determine Waves from PLAN.md §Execution Plan
 4. Sort within Wave by tractability confidence (HIGH > MEDIUM > LOW)
 5. 若 Human Directives 有调度类指示（优先做/暂缓/完成后暂停）: 据指示调整 Wave 调度。若指示与依赖冲突（如"优先做 Q3"但 Q3 依赖未满足），拒绝并解释
@@ -55,14 +54,16 @@ execution worker 负责 `persistence/ENVIRONMENT.md`：
 ### Step 3: 执行原则
 
 以下不是固定施工步骤，而是 agent 必须遵守的原则与必须做的事。
-agent 按 Wave 顺序逐问题处理，每个 question 的处理方式由 agent 据情况灵活决定，
-但必须满足以下约束。
+agent 按 Wave 顺序逐问题处理，每个 question 的处理方式由 agent 据情况灵活决定，但必须满足以下约束。
+
+worker 是 execution phase 的编排者，不是每个 question 的 leaf executor 或 verifier。
+每个需要处理的 Qn 都必须 dispatch local-executor 和 research-verifier，不能用 bash 直接执行 Qn 的研究任务或直接写 Qn 结论，phase 末尾 audit 也不能替代 per-question verifier。
 
 ## 执行
 
 对每个需要处理的 question Qn（按 Wave 顺序）:
 
-- 读 PLAN.md §Execution Plan 获取 Qn 的 method, tools, falsification test
+- 读 PLAN.md §Execution Plan 获取 Qn 的 method, tools, Verification Intent, Baseline Concrete Checks
 - 依赖处理: 对每个 dependency Qd，读 `<workdir>execution/Qd_VERIFICATION.md` 获取 conclusion。
   据 conclusion 内容和 Qd 的状态判断当前 question 能否继续——Qd 有可用 conclusion 则用作前提；
   Qd 未解决且是关键依赖则判断是否有替代路径，没有则暂停说明情况
@@ -72,13 +73,13 @@ agent 按 Wave 顺序逐问题处理，每个 question 的处理方式由 agent 
 ## 文件验证
 
 - 任何 subagent 产出后，验证输出文件存在且非空后再继续
-  （check_artifacts 验证 Qn_REASONING.md + Qn_EXECUTION.md + Qn_VERIFICATION.md 存在非空；
+  （execution 用 `check_qn_artifacts.py` Qn 驱动验证 `Qn_REASONING.md` + `Qn_EXECUTION.md` + `Qn_VERIFICATION.md` 三文件存在非空；
   check_verification 在标记 resolved 后验证 ver 路径指向的验证文件有效）
   产出文件不合格 → 重跑对应 subagent（调整 dispatch prompt 指出上次产出问题，不得机械重复）
 
 ## 验证
 
-- dispatch research-verifier，产出 `<workdir>execution/Qn_VERIFICATION.md`（含 verdict + evidence + 4 子项判定）
+- dispatch research-verifier，产出 `<workdir>execution/Qn_VERIFICATION.md`（对抗式增强验证：含 Verdict + Verification Summary + Reasoning Verification (4 子项) + Conclusion Verification 容器 (Baseline/Enhanced/Challenge Log) + Evidence + Remaining Concerns。详见 research-verifier agent）
 - 每次 subagent 产出后调 `uv run check_time_budget.py <research_state.md_path> Qn check` 获取已用时间
 
 ## 时间预算
@@ -117,9 +118,8 @@ check_time_budget.py 位于 `autoresearch/scripts/`，由 worker 经 bash 在执
 
 ## 每 Wave 后 audit
 
-- 每个 Wave 完成后，dispatch research-audit agent 检查跨问题一致性
-  （同一 Wave 内 question 间的结论是否矛盾、是否基于一致的前提）
-  发现矛盾 → 自修或暂停问用户
+- 每个 Wave 完成后，dispatch research-audit agent 检查跨问题一致性，并审本 Wave 各 `Qn_VERIFICATION.md` 是否像独立对抗验证（Challenge Log 是否有最低可审计信号、是否疑似 worker 自报）。audit 报告会指明本 Wave 哪个 Qn 存在什么问题。
+- 读 audit 报告后，据问题性质判断处理：验证质量问题（Challenge Log 缺失/疑似自报）则重跑该 Qn 的 verifier（必要时先重跑 local-executor）；跨问题一致性问题则自修或暂停问用户。处理完再进入下一 Wave。
 
 ## 终止
 
@@ -128,16 +128,17 @@ check_time_budget.py 位于 `autoresearch/scripts/`，由 worker 经 bash 在执
 
 ## 硬约束
 
-- MUST: 任何 subagent 产出后验证输出文件存在且非空（check_artifacts）；标记 resolved 后验证 ver 路径有效（check_verification）
+- MUST: 每个 Qn 的执行必须通过 dispatch local-executor 完成，验证必须通过 dispatch research-verifier 完成。不得用 bash 直接执行 Qn 的研究任务或直接写 Qn 结论。
+- MUST: 任何 subagent 产出后验证输出文件存在且非空（execution 用 check_qn_artifacts）；标记 resolved 后验证 ver 路径有效（check_verification）
 - MUST: resolved claim 前确保 check_sources + check_verification 通过（引用有下载文件 + 验证记录含 verdict）
-- MUST: 标记 question resolved 时更新 research_state.md 的 `status` 为 resolved **并更新 `ver` 字段**指向 `<workdir>execution/Qn_VERIFICATION.md`（check_verification.py 据此验证）
+- MUST: 标记 question resolved 时更新 research_state.md 的 `status` 为 resolved **并更新 `ver` 字段**指向 `<workdir>execution/Qn_VERIFICATION.md`（不得指向 Qn_EXECUTION.md；check_verification.py 据此验证）
 - MUST: 处理 Qn 前调 `uv run check_time_budget.py ... reset`，每次 subagent 产出后调 `uv run check_time_budget.py ... check`
 - MUST: 停止处理某个 question 且未标 resolved 时，记录已试方法到 research_state.md 的 Failed Attempts（method + 失败原因 + 排除方向）
-- MUST: 每 Wave 完成后 dispatch research-audit agent 检查跨问题一致性
+- MUST: 每 Wave 完成后 dispatch research-audit agent 检查跨问题一致性 + per-question 对抗验证真实性
 - MUST: execution 完成后做最终 audit + 写 EXECUTION.md + VERIFICATION.md 汇总
-- MUST: 按 PLAN.md 中的 Acceptance Tests 验证，不得简化或降级测试标准（framing 在 PLAN.md 中为每个 question 给出明确的、符合研究要求的 Acceptance Tests，execution 须严格按此验证）
+- MUST: 按 per-question 的 Verification Intent + Baseline Concrete Checks 验证，不得简化或降级验证标准
 - FORBIDDEN: 跳过验证（任何 question 都必须经 research-verifier 验证后才能标 resolved）
-- FORBIDDEN: 修改 PLAN.md（含 claims / method / Acceptance Tests；method 字段修改由 primary agent 在 dispatch 前处理）
+- FORBIDDEN: 修改 PLAN.md
 
 ## 调度类 Human Directives
 
