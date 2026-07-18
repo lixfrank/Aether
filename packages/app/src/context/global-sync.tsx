@@ -9,6 +9,7 @@ import type {
 } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@opencode-ai/ui/toast"
 import { getFilename } from "@opencode-ai/util/path"
+import { retry } from "@opencode-ai/util/retry"
 import {
   createContext,
   createMemo,
@@ -25,6 +26,7 @@ import { Persist, persisted } from "@/utils/persist"
 import type { AppClient } from "@/utils/server"
 import type { InitError } from "../pages/error"
 import { useGlobalSDK } from "./global-sdk"
+import { useServer } from "./server"
 import { bootstrapDirectory, bootstrapGlobal } from "./global-sync/bootstrap"
 import { createChildStoreManager } from "./global-sync/child-store"
 import { applyDirectoryEvent, applyGlobalEvent, cleanupDroppedSessionCaches } from "./global-sync/event-reducer"
@@ -38,7 +40,14 @@ import {
 import { trimSessions } from "./global-sync/session-trim"
 import type { ProjectMeta } from "./global-sync/types"
 import { SESSION_RECENT_LIMIT } from "./global-sync/types"
-import { isRoot, normalizeDir, sanitizeProject, sanitizeRecent } from "./global-sync/utils"
+import {
+  isRoot,
+  normalizeAgentList,
+  normalizeDir,
+  normalizeProviderList,
+  sanitizeProject,
+  sanitizeRecent,
+} from "./global-sync/utils"
 import { formatServerError } from "@/utils/server-errors"
 
 type GlobalStore = {
@@ -58,6 +67,7 @@ type GlobalStore = {
 
 function createGlobalSync() {
   const globalSDK = useGlobalSDK()
+  const server = useServer()
   const language = useLanguage()
   const owner = getOwner()
   if (!owner) throw new Error("GlobalSync must be created within owner")
@@ -69,11 +79,11 @@ function createGlobalSync() {
   const deleting = new Set<string>()
 
   const [projectCache, setProjectCache, projectInit] = persisted(
-    Persist.global("globalSync.project", ["globalSync.project.v1"]),
+    Persist.global(`globalSync.project.${server.key}`),
     createStore({ value: [] as Project[] }),
   )
   const [recentCache, setRecentCache, recentInit] = persisted(
-    Persist.global("globalSync.recent", ["globalSync.recent.v1"]),
+    Persist.global(`globalSync.recent.${server.key}`),
     createStore({ value: [] as ProjectRecent[] }),
   )
 
@@ -233,6 +243,7 @@ function createGlobalSync() {
   }
 
   let recentTask: Promise<void> | undefined
+  let providerTask: Promise<void> | undefined
 
   function refreshRecent() {
     if (recentTask) return recentTask
@@ -252,6 +263,32 @@ function createGlobalSync() {
         recentTask = undefined
       })
     return recentTask
+  }
+
+  function refreshProviders() {
+    if (providerTask) return providerTask
+    providerTask = Promise.all([
+      globalSDK.client.provider.list().then((x) => {
+        if (x.data) setGlobalStore("provider", reconcile(x.data))
+      }),
+      ...Object.keys(children.children).map((directory) =>
+        sdkFor(directory)
+          .provider.list()
+          .then((x) => {
+            if (!x.data) return
+            const child = children.getChild(directory)
+            if (child) child[1]("provider", reconcile(x.data))
+          }),
+      ),
+    ])
+      .then(() => {})
+      .catch((err) => {
+        console.error("Failed to refresh providers", err)
+      })
+      .finally(() => {
+        providerTask = undefined
+      })
+    return providerTask
   }
 
   async function loadSessions(directory: string, opts?: { force?: boolean }) {
@@ -341,6 +378,21 @@ function createGlobalSync() {
     return promise
   }
 
+  async function loadActiveMetadata(directory: string) {
+    directory = normalizeDir(directory)
+    if (!directory) return
+    const [, setStore] = children.child(directory, { bootstrap: false })
+    const sdk = sdkFor(directory)
+    await Promise.allSettled([
+      retry(() => sdk.app.agents().then((x) => setStore("agent", normalizeAgentList(x.data)))),
+      retry(() => sdk.command.list().then((x) => setStore("command", x.data ?? []))),
+      retry(() => sdk.config.get().then((x) => setStore("config", x.data!))),
+      retry(() => sdk.provider.list().then((x) => setStore("provider", normalizeProviderList(x.data!)))),
+      retry(() => sdk.mcp.status().then((x) => setStore("mcp", x.data!))),
+      retry(() => sdk.lsp.status().then((x) => setStore("lsp", x.data!))),
+    ])
+  }
+
   async function bootstrapInstance(directory: string) {
     directory = normalizeDir(directory)
     if (!directory) return
@@ -390,6 +442,7 @@ function createGlobalSync() {
           if (recent) return
           queue.refresh()
         },
+        providers: refreshProviders,
         setGlobalProject: setProjects,
       })
       if (event.type === "project.updated" || event.type === "project.recent.updated") {
@@ -483,6 +536,7 @@ function createGlobalSync() {
 
   const projectApi = {
     loadSessions,
+    loadActiveMetadata,
     list: () => globalStore.project,
     recent: () => globalStore.recent.filter((item) => !isRoot(item.directory)),
     get(id?: string) {

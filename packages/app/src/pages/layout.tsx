@@ -55,13 +55,13 @@ import { setNavigate } from "@/utils/notification-click"
 import { Worktree as WorktreeState } from "@/utils/worktree"
 import { setSessionHandoff } from "@/pages/session/handoff"
 import type { E2EWindow } from "@/testing/terminal"
+import { OpenIntent } from "@/utils/open-intent"
 
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme/context"
 import { useCommand, type CommandOption } from "@/context/command"
 import { ConstrainDragXAxis, getDraggableId } from "@/utils/solid-dnd"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
-import { DialogNewProject } from "@/components/dialog-new-project"
 import { DialogEditProject } from "@/components/dialog-edit-project"
 import { SessionImportInput } from "@/components/session-import-input"
 import { DebugBar } from "@/components/debug-bar"
@@ -160,7 +160,9 @@ export default function Layout(props: ParentProps) {
   const currentDir = createMemo(() => decode64(params.dir) ?? "")
 
   createEffect(() => {
-    ActiveDirectory.set(currentDir())
+    const dir = currentDir()
+    ActiveDirectory.set(dir)
+    if (dir) void globalSync.project.loadActiveMetadata(dir)
   })
   onCleanup(() => ActiveDirectory.set(""))
 
@@ -1556,6 +1558,7 @@ export default function Layout(props: ParentProps) {
     if (!directory) return
     const root = projectRoot(directory)
     server.projects.touch(directory)
+    OpenIntent.mark(server.key, directory)
     const project = layout.projects.list().find((item) => item.worktree === root)
     let dirs = project
       ? effectiveWorkspaceOrder(root, [root, ...(project.sandboxes ?? [])], store.workspaceOrder[root])
@@ -1583,6 +1586,7 @@ export default function Layout(props: ParentProps) {
       const [data] = globalSync.child(target.directory, { bootstrap: false })
       if (data.session.some((item) => item.id === target.id)) {
         setStore("lastProjectSession", directory, { directory: target.directory, id: target.id, at: Date.now() })
+        OpenIntent.mark(server.key, target.directory)
         navigateWithSidebarReset(`/${base64Encode(target.directory)}/session/${target.id}`)
         return true
       }
@@ -1593,6 +1597,7 @@ export default function Layout(props: ParentProps) {
       if (!resolved?.directory) return false
       if (!canOpen(resolved.directory)) return false
       setStore("lastProjectSession", directory, { directory: resolved.directory, id: resolved.id, at: Date.now() })
+      OpenIntent.mark(server.key, resolved.directory)
       navigateWithSidebarReset(`/${base64Encode(resolved.directory)}/session/${resolved.id}`)
       return true
     }
@@ -1634,6 +1639,7 @@ export default function Layout(props: ParentProps) {
 
   function navigateToSession(session: Session | undefined) {
     if (!session) return
+    OpenIntent.mark(server.key, session.directory)
     navigateWithSidebarReset(`/${base64Encode(session.directory)}/session/${session.id}`)
   }
 
@@ -1819,19 +1825,6 @@ export default function Layout(props: ParentProps) {
         )
       })
     }
-  }
-
-  function newProject() {
-    dialog.show(
-      () => (
-        <DialogNewProject
-          onSelect={(result) => {
-            if (result) openProject(result)
-          }}
-        />
-      ),
-      () => {},
-    )
   }
 
   const deleteWorkspace = async (
@@ -2515,6 +2508,7 @@ export default function Layout(props: ParentProps) {
     })
 
     globalSync.child(created.directory, { bootstrap: false })
+    OpenIntent.mark(server.key, created.directory)
     navigateWithSidebarReset(`/${base64Encode(created.directory)}/session`)
   }
 
@@ -2925,9 +2919,6 @@ export default function Layout(props: ParentProps) {
       handleDragStart={handleDragStart}
       handleDragEnd={handleDragEnd}
       handleDragOver={handleDragOver}
-      newProjectLabel={language.t("command.project.new")}
-      showNewProject={platform.platform === "desktop"}
-      onNewProject={newProject}
       openProjectLabel={language.t("command.project.open")}
       openProjectKeybind={() => command.keybind("project.open")}
       onOpenProject={chooseProject}
